@@ -8,11 +8,6 @@ typedef void * (*tc_func_64)(void *, uint64_t);
 typedef void * (*tc_func_63)(uint64_t, uint64_t);
 typedef void * (*tc_func_62)(uint64_t);
 typedef struct { int32_t data[3]; } tc_array_37;
-void * malloc(uint64_t size);
-void * calloc(uint64_t count, uint64_t size);
-void * realloc(void * pointer, uint64_t size);
-void free(void * pointer);
-void exit(int32_t code);
 int32_t tc_f_21_record(int32_t tc_v_22_value);
 int32_t tc_user_main(void);
 int32_t tc_f_21_record(int32_t tc_v_22_value)

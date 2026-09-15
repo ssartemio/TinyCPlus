@@ -202,6 +202,7 @@ with nullcontext(run_folder) as folder:
         assert p.returncode==0 and 'FunctionDecl main' in p.stdout and 'Binary *' in p.stdout
         p=invoke('lowering','int main(){defer println(8);return 0;}','--emit-c')
         assert p.returncode==0 and '#line 1 ' in p.stdout and p.stdout.index('tc_print_integer')<p.stdout.index('return tc_tmp')
+        assert all(name not in p.stdout for name in ('\nvoid * malloc(', '\nvoid * calloc(', '\nvoid * realloc(', '\nvoid free(', '\nvoid exit('))
         count+=3
     except Exception as e: errors.append(('inspection',str(e)))
 
