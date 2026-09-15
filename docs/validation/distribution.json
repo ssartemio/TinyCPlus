@@ -1,0 +1,57 @@
+{
+  "archive": "tinycplus-1.0.0-rc.1-windows-x64.zip",
+  "checked_files": 301,
+  "relocated": true,
+  "tests": [
+    {
+      "test": "version",
+      "exit_code": 0,
+      "stdout": "TinyC+ 1.0.0-rc.1 (C11 frontend; libtcc backend)\n"
+    },
+    {
+      "test": "hello",
+      "exit_code": 0,
+      "stdout": "30\n"
+    },
+    {
+      "test": "async",
+      "exit_code": 0,
+      "stdout": "42\n"
+    },
+    {
+      "test": "generated grpc service/client",
+      "exit_code": 0,
+      "stdout": "Ana\ndeveloper\n"
+    },
+    {
+      "test": "C FFI",
+      "exit_code": 0,
+      "stdout": "11\n16\n1\n"
+    },
+    {
+      "test": "native @test",
+      "exit_code": 0,
+      "stdout": "PASS arithmetic\nPASS result\n2 tests executed; passed\n"
+    },
+    {
+      "test": "REPL",
+      "exit_code": 0,
+      "stdout": "TinyC+ REPL | :help :reset :quit\n>>> >>> 42\n>>> "
+    },
+    {
+      "test": "compiler rebuild",
+      "exit_code": 0,
+      "stdout": "Built C:\\Users\\Artemio\\Documents\\Codex\\2026-09-14\\files-mentioned-by-the-user-tinycplus\\outputs\\tinycplus\\build\\relocation space b54c86b764fa45098d1fe1b9539f95ff\\tinycplus\\bin\\tiny.exe\n"
+    },
+    {
+      "test": "rebuilt hello",
+      "exit_code": 0,
+      "stdout": "30\n"
+    },
+    {
+      "test": "editor replay",
+      "exit_code": 0,
+      "stdout": "TinyEdit verified: open/edit/atomic save/quit, Unicode, search, goto, cut/paste, discard confirmation\n"
+    }
+  ]
+}

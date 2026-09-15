@@ -1,0 +1,18 @@
+module std.math;
+extern C {
+    double sqrt(double value);
+    double sin(double value);
+    double cos(double value);
+    double tan(double value);
+    double floor(double value);
+    double ceil(double value);
+    double pow(double base, double exponent);
+    double log(double value);
+    double exp(double value);
+}
+class Math {
+    static double abs(double value) { if (value < 0) return -value; return value; }
+    static double min(double first, double second) { if (first < second) return first; return second; }
+    static double max(double first, double second) { if (first > second) return first; return second; }
+    static double clamp(double value, double low, double high) { if (value < low) return low; if (value > high) return high; return value; }
+}

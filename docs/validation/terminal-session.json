@@ -1,0 +1,10 @@
+{
+  "platform": "Windows x64",
+  "terminal": "ConPTY via PTY execution",
+  "executable": "bin/tinyedit.exe",
+  "input": "Hola ñ日<Enter>segunda línea<Ctrl-S><Ctrl-Q>",
+  "expected": "Hola ñ日\nsegunda línea",
+  "observed": "Hola ñ日\nsegunda línea",
+  "exit_code": 0,
+  "ansi_restore_observed": true
+}

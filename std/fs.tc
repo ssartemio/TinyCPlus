@@ -1,0 +1,26 @@
+module std.fs;
+import std.string;
+extern C {
+    string tc_file_read_all(string path, Error* error);
+    Error tc_file_write_all(string path, string contents);
+    Error tc_file_write_atomic(string path, string contents);
+    int tc_file_exists(string path);
+    Error tc_file_remove(string path);
+    void* tc_file_open(string path, string mode);
+    i64 tc_file_read(void* handle, void* data, u64 length);
+    i64 tc_file_write(void* handle, void* data, u64 length);
+    Error tc_file_close(void* handle);
+}
+class File {
+    void* handle;
+    static (File, Error) open(string path, string mode = "rb") { File file; file.handle = tc_file_open(path, mode); if (file.handle == null) return (file, 1); return (file, 0); }
+    static (OwnedString, Error) readAll(string path) { Error error; OwnedString result; result.value = tc_file_read_all(path, &error); return (result, error); }
+    static Error writeAll(string path, string contents) { return tc_file_write_all(path, contents); }
+    /// Writes a sibling temporary file, flushes it, then replaces the destination.
+    static Error writeAtomic(string path, string contents) { return tc_file_write_atomic(path, contents); }
+    static bool exists(string path) { return tc_file_exists(path) != 0; }
+    static Error remove(string path) { return tc_file_remove(path); }
+    i64 read(Slice<byte> destination) { return tc_file_read(handle, destination.data, destination.length); }
+    i64 write(Slice<byte> source) { return tc_file_write(handle, source.data, source.length); }
+    Error close() { var error = tc_file_close(handle); handle = null; return error; }
+}

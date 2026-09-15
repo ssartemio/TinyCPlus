@@ -1,0 +1,161 @@
+{
+  "platform": "win32",
+  "python": "3.12.14 (main, Aug 25 2026, 14:01:42) [MSC v.1944 64 bit (AMD64)]",
+  "interop_skipped": false,
+  "results": [
+    {
+      "test": "Language, diagnostics, lowering and deterministic fuzzing",
+      "seconds": 17.797,
+      "exit_code": 0,
+      "stdout": "Native run batch finished\nFull differential run batch finished\nNegative compilation batch finished\n1163 passed; 0 failed; 17.70s\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_modules_ffi.py",
+      "seconds": 0.125,
+      "exit_code": 0,
+      "stdout": "Modules/FFI verified: cyclic imports, qualified types/functions, duplicate function names, local lookup, C structs/enums/callback ABI\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_tools.py",
+      "seconds": 0.235,
+      "exit_code": 0,
+      "stdout": "Tooling verified: @test pass/fail, formatter preservation/idempotence, documentation, persistent REPL and function pointers\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_editor.py",
+      "seconds": 0.14,
+      "exit_code": 0,
+      "stdout": "TinyEdit verified: open/edit/atomic save/quit, Unicode, search, goto, cut/paste, discard confirmation\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_golden.py",
+      "seconds": 0.11,
+      "exit_code": 0,
+      "stdout": "2 C lowering snapshots verified\n",
+      "stderr": ""
+    },
+    {
+      "test": "Build runtime concurrent with tcc.exe",
+      "seconds": 0.015,
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "test": "Run runtime concurrent with tcc.exe",
+      "seconds": 0.016,
+      "exit_code": 0,
+      "stdout": "runtime concurrency: 20000 atomic updates, channel backpressure, future continuation and lifecycle tests passed\n",
+      "stderr": ""
+    },
+    {
+      "test": "Build runtime network with tcc.exe",
+      "seconds": 0.031,
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "test": "Run runtime network with tcc.exe",
+      "seconds": 0.125,
+      "exit_code": 0,
+      "stdout": "Network verified: TCP binary transfer, deadlines, cancellation, EOF, UDP, DNS, file errors, timer\n",
+      "stderr": ""
+    },
+    {
+      "test": "Build runtime tui with tcc.exe",
+      "seconds": 0.031,
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "test": "Run runtime tui with tcc.exe",
+      "seconds": 0.0,
+      "exit_code": 0,
+      "stdout": "TUI runtime verified: gap fuzz, UTF-8 edits, layout, cell diffs, focus, callbacks, queue bounds\n",
+      "stderr": ""
+    },
+    {
+      "test": "Build runtime concurrent with gcc.exe",
+      "seconds": 0.704,
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "test": "Run runtime concurrent with gcc.exe",
+      "seconds": 0.015,
+      "exit_code": 0,
+      "stdout": "runtime concurrency: 20000 atomic updates, channel backpressure, future continuation and lifecycle tests passed\n",
+      "stderr": ""
+    },
+    {
+      "test": "Build runtime network with gcc.exe",
+      "seconds": 0.516,
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "test": "Run runtime network with gcc.exe",
+      "seconds": 0.125,
+      "exit_code": 0,
+      "stdout": "Network verified: TCP binary transfer, deadlines, cancellation, EOF, UDP, DNS, file errors, timer\n",
+      "stderr": ""
+    },
+    {
+      "test": "Build runtime tui with gcc.exe",
+      "seconds": 0.547,
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "test": "Run runtime tui with gcc.exe",
+      "seconds": 0.015,
+      "exit_code": 0,
+      "stdout": "TUI runtime verified: gap fuzz, UTF-8 edits, layout, cell diffs, focus, callbacks, queue bounds\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_protobuf.py / default backend",
+      "seconds": 0.953,
+      "exit_code": 0,
+      "stdout": "Protobuf interop passed: all scalar encodings, enums, presence, packed/unpacked, maps, nested/recursive messages, unknown/duplicate fields, malformed input\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_grpc.py / default backend",
+      "seconds": 1.157,
+      "exit_code": 0,
+      "stdout": "gRPC interop passed: both directions, binary/empty/512 KiB payloads, multiplexing, status trailers\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_protobuf.py / gcc.exe",
+      "seconds": 1.593,
+      "exit_code": 0,
+      "stdout": "Protobuf interop passed: all scalar encodings, enums, presence, packed/unpacked, maps, nested/recursive messages, unknown/duplicate fields, malformed input\n",
+      "stderr": ""
+    },
+    {
+      "test": "test_grpc.py / gcc.exe",
+      "seconds": 7.063,
+      "exit_code": 0,
+      "stdout": "gRPC interop passed: both directions, binary/empty/512 KiB payloads, multiplexing, status trailers\n",
+      "stderr": ""
+    },
+    {
+      "test": "External compiler module and FFI ABI checks",
+      "seconds": 0.641,
+      "exit_code": 0,
+      "stdout": "Modules/FFI verified: cyclic imports, qualified types/functions, duplicate function names, local lookup, C structs/enums/callback ABI\n",
+      "stderr": ""
+    }
+  ]
+}

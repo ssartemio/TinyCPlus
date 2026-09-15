@@ -1,0 +1,12 @@
+module std.process;
+extern C { int tc_process_command(string command); string tc_environment(string name); int tc_argument_count(); string tc_argument(int index); }
+class Arguments {
+    static int count() { return tc_argument_count(); }
+    static string get(int index) { return tc_argument(index); }
+}
+class Process {
+    /// Executes a shell command explicitly; return status follows the host C runtime.
+    static int run(string command) { return tc_process_command(command); }
+    /// Borrowed environment view; no allocation.
+    static string environment(string name) { return tc_environment(name); }
+}

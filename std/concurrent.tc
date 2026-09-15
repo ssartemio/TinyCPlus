@@ -1,0 +1,165 @@
+module std.concurrent;
+import std.collections;
+
+extern C {
+    void* tc_thread_start(func<void(void*)> action, void* argument);
+    int tc_thread_join(void* thread);
+    void tc_thread_destroy(void* thread);
+    void tc_sleep_ms(u64 milliseconds);
+    u64 tc_clock_ms();
+    void* tc_mutex_create();
+    void tc_mutex_lock(void* mutex);
+    void tc_mutex_unlock(void* mutex);
+    void tc_mutex_destroy(void* mutex);
+    void* tc_condition_create();
+    void tc_condition_wait(void* condition, void* mutex);
+    void tc_condition_signal(void* condition);
+    void tc_condition_broadcast(void* condition);
+    void tc_condition_destroy(void* condition);
+    void* tc_semaphore_create(u64 count);
+    void tc_semaphore_wait(void* semaphore);
+    void tc_semaphore_post(void* semaphore);
+    void tc_semaphore_destroy(void* semaphore);
+    void* tc_event_create();
+    void tc_event_wait(void* event);
+    void tc_event_set(void* event);
+    void tc_event_reset(void* event);
+    void tc_event_destroy(void* event);
+    void* tc_atomic_create(i64 value);
+    i64 tc_atomic_load(void* atomic);
+    void tc_atomic_store(void* atomic, i64 value);
+    i64 tc_atomic_add(void* atomic, i64 value);
+    void tc_atomic_destroy(void* atomic);
+    void* tc_pool_create(int workers);
+    int tc_pool_submit(void* pool, func<void(void*)> action, void* argument);
+    void tc_pool_destroy(void* pool);
+    void* tc_future_create(u64 size);
+    void tc_future_retain(void* future);
+    void tc_future_release(void* future);
+    int tc_future_complete(void* future, void* value, int error);
+    int tc_future_ready(void* future);
+    int tc_future_get(void* future, void* destination);
+    int tc_future_then(void* future, void* pool, func<void(void*)> continuation, void* argument);
+    void* tc_channel_create(u64 capacity, u64 element_size);
+    int tc_channel_send(void* channel, void* value);
+    int tc_channel_receive(void* channel, void* destination);
+    void tc_channel_close(void* channel);
+    void tc_channel_destroy(void* channel);
+}
+
+/// An OS thread. join releases its native handle. Join before borrowed data expires.
+class Thread {
+    void* handle;
+    static Thread start(func<void(void*)> action, void* argument = null) {
+        Thread thread;
+        thread.handle = tc_thread_start(action, argument);
+        assert(thread.handle != null);
+        return thread;
+    }
+    int join() {
+        var error = tc_thread_join(handle);
+        if (error == 0) { tc_thread_destroy(handle); handle = null; }
+        return error;
+    }
+    void destroy() { tc_thread_destroy(handle); handle = null; }
+}
+
+class Mutex {
+    void* handle;
+    static Mutex create() { Mutex m; m.handle = tc_mutex_create(); assert(m.handle != null); return m; }
+    void lock() { tc_mutex_lock(handle); }
+    void unlock() { tc_mutex_unlock(handle); }
+    void destroy() { tc_mutex_destroy(handle); handle = null; }
+}
+
+class Condition {
+    void* handle;
+    static Condition create() { Condition c; c.handle = tc_condition_create(); assert(c.handle != null); return c; }
+    void wait(Mutex* mutex) { tc_condition_wait(handle, mutex.handle); }
+    void signal() { tc_condition_signal(handle); }
+    void broadcast() { tc_condition_broadcast(handle); }
+    void destroy() { tc_condition_destroy(handle); handle = null; }
+}
+
+class Semaphore {
+    void* handle;
+    static Semaphore create(u64 count = 0) { Semaphore s; s.handle = tc_semaphore_create(count); assert(s.handle != null); return s; }
+    void wait() { tc_semaphore_wait(handle); }
+    void post() { tc_semaphore_post(handle); }
+    void destroy() { tc_semaphore_destroy(handle); handle = null; }
+}
+
+class Event {
+    void* handle;
+    static Event create() { Event e; e.handle = tc_event_create(); assert(e.handle != null); return e; }
+    void wait() { tc_event_wait(handle); }
+    void set() { tc_event_set(handle); }
+    void reset() { tc_event_reset(handle); }
+    void destroy() { tc_event_destroy(handle); handle = null; }
+}
+
+/// Sequentially consistent integer operations, using a portable mutex fallback.
+class Atomic {
+    void* handle;
+    static Atomic create(i64 value = 0) { Atomic a; a.handle = tc_atomic_create(value); assert(a.handle != null); return a; }
+    i64 load() { return tc_atomic_load(handle); }
+    void store(i64 value) { tc_atomic_store(handle, value); }
+    i64 add(i64 value) { return tc_atomic_add(handle, value); }
+    void destroy() { tc_atomic_destroy(handle); handle = null; }
+}
+
+class CancellationToken {
+    Atomic state;
+    static CancellationToken create() { CancellationToken token; token.state = Atomic.create(); return token; }
+    void cancel() { state.store(1); }
+    bool cancelled() { return state.load() != 0; }
+    void destroy() { state.destroy(); }
+}
+
+class WorkerPool {
+    void* handle;
+    static WorkerPool create(int workers = 4) { WorkerPool p; p.handle = tc_pool_create(workers); assert(p.handle != null); return p; }
+    int submit(func<void(void*)> action, void* argument) { return tc_pool_submit(handle, action, argument); }
+    void destroy() { tc_pool_destroy(handle); handle = null; }
+}
+
+/// Buffered channel. Close wakes blocked operations; join users before destroy.
+class Channel<T> {
+    void* handle;
+    static Channel<T> create(u64 capacity) { Channel<T> c; c.handle = tc_channel_create(capacity, sizeof(T)); assert(c.handle != null); return c; }
+    Error send(T value) { return tc_channel_send(handle, &value); }
+    (T, Error) receive() { T value; var error = tc_channel_receive(handle, &value); return (value, error); }
+    void close() { tc_channel_close(handle); }
+    void destroy() { tc_channel_destroy(handle); handle = null; }
+}
+
+class Future<T> {
+    void* handle;
+    static Future<T> create() { Future<T> f; f.handle = tc_future_create(sizeof(T)); assert(f.handle != null); return f; }
+    bool ready() { return tc_future_ready(handle) != 0; }
+    Error complete(T value, Error error = 0) { return tc_future_complete(handle, &value, error); }
+    (T, Error) get() { T value; var error = tc_future_get(handle, &value); return (value, error); }
+    void retain() { tc_future_retain(handle); }
+    void destroy() { tc_future_release(handle); handle = null; }
+}
+
+/// Owns retained child handles. wait/destroy must run outside the child worker pool.
+/// Children may poll cancellation(); wait returns the first error in insertion order.
+class TaskGroup<T> {
+    Array<void*> children;
+    CancellationToken token;
+    static TaskGroup<T> create() { TaskGroup<T> group; group.token = CancellationToken.create(); return group; }
+    void add(Task<T> task) { task.retain(); children.push(task.handle); }
+    CancellationToken* cancellation() { return &token; }
+    void cancel() { token.cancel(); }
+    Error wait() {
+        Error first;
+        for (child in children) {
+            var error = tc_future_get(child, null);
+            if (error != 0 && first == 0) { first = error; token.cancel(); }
+            tc_future_release(child);
+        }
+        children.clear(); return first;
+    }
+    void destroy() { wait(); children.destroy(); token.destroy(); }
+}

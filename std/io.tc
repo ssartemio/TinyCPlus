@@ -1,0 +1,6 @@
+module std.io;
+import std.string;
+extern C { string tc_read_line(); }
+class Console {
+    static OwnedString readLine() { OwnedString line; line.value = tc_read_line(); return line; }
+}

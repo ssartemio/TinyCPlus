@@ -1,0 +1,12 @@
+#ifdef __TINYC__
+/* TinyCC's Windows import set has no MSVC byte-swap intrinsics. */
+static inline uint32_t tiny_nghttp2_bswap32(uint32_t n) {
+  return (n >> 24) | ((n >> 8) & 0x0000ff00u) |
+         ((n << 8) & 0x00ff0000u) | (n << 24);
+}
+static inline uint16_t tiny_nghttp2_bswap16(uint16_t n) {
+  return (uint16_t)((n >> 8) | (n << 8));
+}
+#define _byteswap_ulong tiny_nghttp2_bswap32
+#define _byteswap_ushort tiny_nghttp2_bswap16
+#endif

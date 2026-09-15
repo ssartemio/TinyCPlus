@@ -1,0 +1,7 @@
+module std.memory;
+class Memory {
+    static void* allocate(u64 bytes) { return malloc(bytes); }
+    static void* zeroed(u64 count, u64 size) { return calloc(count, size); }
+    static void* resize(void* pointer, u64 bytes) { return realloc(pointer, bytes); }
+    static void release(void* pointer) { free(pointer); }
+}

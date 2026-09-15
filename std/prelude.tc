@@ -1,0 +1,8 @@
+// Core C interoperability declarations. No implicit allocation.
+extern C {
+    void* malloc(u64 size);
+    void* calloc(u64 count, u64 size);
+    void* realloc(void* pointer, u64 size);
+    void free(void* pointer);
+    void exit(int code);
+}

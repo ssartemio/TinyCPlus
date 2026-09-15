@@ -1,0 +1,64 @@
+{
+  "platform": "Windows-10-10.0.19044-SP0",
+  "machine": "AMD64",
+  "processor": "AMD64 Family 23 Model 96 Stepping 1, AuthenticAMD",
+  "backend": "bundled libtcc",
+  "iterations": 7,
+  "method": "Wall time includes startup and shutdown; Windows peak working set includes compiler process, not external compiler children. No baseline comparison or allocation instrumentation.",
+  "results": [
+    {
+      "program": "arithmetic",
+      "source_bytes": 73,
+      "executable_bytes": 5120,
+      "compile_median_ms": 12.523,
+      "run_median_ms": 11.209,
+      "compile_peak_working_set_bytes": 4538368,
+      "run_peak_working_set_bytes": 3137536
+    },
+    {
+      "program": "fused_stream",
+      "source_bytes": 211,
+      "executable_bytes": 8192,
+      "compile_median_ms": 13.115,
+      "run_median_ms": 9.2,
+      "compile_peak_working_set_bytes": 4730880,
+      "run_peak_working_set_bytes": 4067328
+    },
+    {
+      "program": "interface",
+      "source_bytes": 197,
+      "executable_bytes": 5632,
+      "compile_median_ms": 12.0,
+      "run_median_ms": 14.444,
+      "compile_peak_working_set_bytes": 4562944,
+      "run_peak_working_set_bytes": 3137536
+    },
+    {
+      "program": "owned_closure",
+      "source_bytes": 135,
+      "executable_bytes": 5632,
+      "compile_median_ms": 12.424,
+      "run_median_ms": 14.215,
+      "compile_peak_working_set_bytes": 4546560,
+      "run_peak_working_set_bytes": 3137536
+    },
+    {
+      "program": "allocation",
+      "source_bytes": 97,
+      "executable_bytes": 5120,
+      "compile_median_ms": 12.138,
+      "run_median_ms": 12.051,
+      "compile_peak_working_set_bytes": 4550656,
+      "run_peak_working_set_bytes": 3141632
+    },
+    {
+      "program": "async_tasks",
+      "source_bytes": 145,
+      "executable_bytes": 22528,
+      "compile_median_ms": 29.676,
+      "run_median_ms": 194.639,
+      "compile_peak_working_set_bytes": 11329536,
+      "run_peak_working_set_bytes": 3182592
+    }
+  ]
+}

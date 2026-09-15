@@ -1,0 +1,18 @@
+module std.core;
+
+int minInt(int a, int b)
+{
+    if (a < b) return a;
+    return b;
+}
+
+int maxInt(int a, int b)
+{
+    if (a > b) return a;
+    return b;
+}
+
+T identity<T>(T value)
+{
+    return value;
+}

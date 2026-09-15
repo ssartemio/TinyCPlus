@@ -1,0 +1,131 @@
+module std.tui;
+import std.string;
+extern C {
+    void* tc_gap_create(string input);
+    void tc_gap_destroy(void* buffer);
+    u64 tc_gap_length(void* buffer);
+    u64 tc_gap_position(void* buffer);
+    void tc_gap_seek(void* buffer, u64 position);
+    Error tc_gap_insert(void* buffer, string input);
+    void tc_gap_left(void* buffer);
+    void tc_gap_right(void* buffer);
+    void tc_gap_backspace(void* buffer);
+    void tc_gap_delete(void* buffer);
+    void tc_gap_home(void* buffer);
+    void tc_gap_end(void* buffer);
+    int tc_gap_line(void* buffer);
+    int tc_gap_column(void* buffer);
+    void tc_gap_vertical(void* buffer, int direction);
+    void tc_gap_goto_line(void* buffer, int line);
+    int tc_gap_dirty(void* buffer);
+    void tc_gap_clean(void* buffer);
+    string tc_gap_text(void* buffer);
+    i64 tc_gap_find(void* buffer, string needle, u64 start);
+    string tc_gap_cut_line(void* buffer);
+    void* tc_ui_create(int width, int height, int headless, Error* error);
+    int tc_ui_width_value(void* window);
+    int tc_ui_height_value(void* window);
+    Error tc_ui_resize(void* window, int width, int height);
+    void tc_ui_clear(void* window, uint foreground, uint background);
+    void tc_ui_put(void* window, int x, int y, uint codepoint, uint foreground, uint background);
+    void tc_ui_text(void* window, int x, int y, string text, uint foreground, uint background);
+    string tc_ui_render(void* window);
+    int tc_ui_changed(void* window);
+    void tc_ui_refresh(void* window);
+    string tc_ui_snapshot(void* window);
+    Error tc_ui_post(void* window, int kind, int key, int x, int y, uint codepoint);
+    void tc_ui_next(void* window, int timeout, int* kind, int* key, int* x, int* y, int* width, int* height, uint* codepoint);
+    Error tc_ui_replay(void* window, string input, u64* offset);
+    void* tc_widget_create(int kind, string text, int width, int height);
+    void tc_widget_destroy(void* widget);
+    Error tc_widget_add(void* parent, void* child);
+    void tc_widget_text(void* widget, string text);
+    string tc_widget_get_text(void* widget);
+    void* tc_widget_buffer(void* widget);
+    void tc_widget_on_click(void* widget, void* closure);
+    void tc_widget_size(void* widget, int width, int height);
+    void tc_ui_focus(void* window, void* widget);
+    void tc_ui_content(void* window, void* widget);
+    void tc_ui_draw(void* window);
+    Error tc_ui_dispatch(void* window, int kind, int key, int x, int y, int width, int height, uint codepoint);
+    void tc_ui_destroy(void* window);
+}
+
+/// Byte gap buffer, with movement/deletion on UTF-8 codepoint boundaries.
+class GapBuffer {
+    void* handle;
+    static GapBuffer create(string input = "") { GapBuffer buffer(tc_gap_create(input)); assert(buffer.handle != null); return buffer; }
+    u64 length() { return tc_gap_length(handle); }
+    u64 position() { return tc_gap_position(handle); }
+    void seek(u64 position) { tc_gap_seek(handle, position); }
+    Error insert(string text) { return tc_gap_insert(handle, text); }
+    void left() { tc_gap_left(handle); }
+    void right() { tc_gap_right(handle); }
+    void backspace() { tc_gap_backspace(handle); }
+    void deleteNext() { tc_gap_delete(handle); }
+    void home() { tc_gap_home(handle); }
+    void end() { tc_gap_end(handle); }
+    int line() { return tc_gap_line(handle); }
+    int column() { return tc_gap_column(handle); }
+    void up() { tc_gap_vertical(handle, -1); }
+    void down() { tc_gap_vertical(handle, 1); }
+    void gotoLine(int line) { tc_gap_goto_line(handle, line); }
+    bool dirty() { return tc_gap_dirty(handle) != 0; }
+    void markClean() { tc_gap_clean(handle); }
+    OwnedString text() { OwnedString text(tc_gap_text(handle)); return text; }
+    i64 find(string needle, u64 start = 0) { return tc_gap_find(handle, needle, start); }
+    OwnedString cutLine() { OwnedString text(tc_gap_cut_line(handle)); return text; }
+    void destroy() { tc_gap_destroy(handle); handle = null; }
+}
+
+/// kind: 1 key, 2 resize, 3 timer, 4 mouse, 5 custom.
+/// key: ASCII/control codes; arrows 1001..1004, home/end 1005/1006,
+/// delete 1007, page-up/down 1008/1009. codepoint carries Unicode input.
+class UiEvent { int kind; int key; int x; int y; int width; int height; uint codepoint; }
+
+/// add transfers child ownership to parent. Window.setContent owns the root.
+class Widget {
+    void* handle;
+    Error add(Widget child) { return tc_widget_add(handle, child.handle); }
+    void setText(string text) { tc_widget_text(handle, text); }
+    OwnedString text() { OwnedString text(tc_widget_get_text(handle)); return text; }
+    /// Borrowed buffer owned by the TextBox: do not destroy it separately.
+    GapBuffer buffer() { GapBuffer buffer(tc_widget_buffer(handle)); assert(buffer.handle != null); return buffer; }
+    void size(int width, int height) { tc_widget_size(handle, width, height); }
+    /// An owned closure transfers to the widget. A borrowed closure must outlive it.
+    void onClick(closure<void()> action) { tc_widget_on_click(handle, &action); }
+    void destroy() { tc_widget_destroy(handle); handle = null; }
+}
+
+class Ui {
+    static Widget label(string text) { Widget widget(tc_widget_create(1, text, 0, 1)); return widget; }
+    static Widget button(string text) { Widget widget(tc_widget_create(2, text, 0, 1)); return widget; }
+    static Widget textBox(string text = "", int height = 0) { Widget widget(tc_widget_create(3, text, 0, height)); return widget; }
+    static Widget panel(string title = "") { Widget widget(tc_widget_create(4, title, 0, 0)); return widget; }
+    static Widget row(int height = 1) { Widget widget(tc_widget_create(5, "", 0, height)); return widget; }
+    static Widget column() { Widget widget(tc_widget_create(6, "", 0, 0)); return widget; }
+    static Widget stack() { Widget widget(tc_widget_create(7, "", 0, 0)); return widget; }
+}
+
+class Window {
+    void* handle;
+    static (Window, Error) create(int width = 80, int height = 24, bool headless = false) { Error error; Window window(tc_ui_create(width, height, headless, &error)); return (window, error); }
+    int width() { return tc_ui_width_value(handle); }
+    int height() { return tc_ui_height_value(handle); }
+    Error resize(int width, int height) { return tc_ui_resize(handle, width, height); }
+    void clear(uint foreground = 15134195, uint background = 1054752) { tc_ui_clear(handle, foreground, background); }
+    void put(int x, int y, uint codepoint, uint foreground = 15134195, uint background = 1054752) { tc_ui_put(handle, x, y, codepoint, foreground, background); }
+    void text(int x, int y, string text, uint foreground = 15134195, uint background = 1054752) { tc_ui_text(handle, x, y, text, foreground, background); }
+    OwnedString render() { OwnedString ansi(tc_ui_render(handle)); return ansi; }
+    int changed() { return tc_ui_changed(handle); }
+    void refresh() { tc_ui_refresh(handle); }
+    OwnedString snapshot() { OwnedString image(tc_ui_snapshot(handle)); return image; }
+    void setContent(Widget root) { tc_ui_content(handle, root.handle); }
+    void focus(Widget widget) { tc_ui_focus(handle, widget.handle); }
+    void draw() { tc_ui_draw(handle); }
+    UiEvent nextEvent(int timeout = 100) { UiEvent event; tc_ui_next(handle, timeout, &event.kind, &event.key, &event.x, &event.y, &event.width, &event.height, &event.codepoint); return event; }
+    Error post(UiEvent event) { return tc_ui_post(handle, event.kind, event.key, event.x, event.y, event.codepoint); }
+    Error replay(string input, u64* offset) { return tc_ui_replay(handle, input, offset); }
+    Error dispatch(UiEvent event) { return tc_ui_dispatch(handle, event.kind, event.key, event.x, event.y, event.width, event.height, event.codepoint); }
+    void destroy() { tc_ui_destroy(handle); handle = null; }
+}

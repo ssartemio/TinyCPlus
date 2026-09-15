@@ -1,0 +1,17 @@
+import std.collections;
+int main() {
+    int[6] values = {1, 4, 8, 12, 20, 30};
+    int threshold = 10;
+    values.stream().filter(x => x > threshold).map(x => x * 2).forEach(x => println(x));
+    var sum = values.stream().filter(x => x > 10).reduce(0, (a, x) => a + x);
+    assert(sum == 62);
+    assert(values.stream().count() == 6);
+    assert(values.stream().any(x => x == 20));
+    assert(values.stream().all(x => x > 0));
+    var first, found = values.stream().filter(x => x > 10).first(); assert(found && first == 12);
+    var absent, exists = values.stream().filter(x => x > 100).first(); assert(!exists);
+    var selected = Array<int>.create(); defer selected.destroy();
+    values.stream().filter(x => x > 10).map(x => x * 3).collect(&selected);
+    assert(selected.length == 3); assert(selected[2] == 90);
+    return 0;
+}

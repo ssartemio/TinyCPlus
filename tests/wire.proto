@@ -1,0 +1,31 @@
+syntax = "proto3";
+package interoperability;
+enum State { UNKNOWN = 0; READY = 1; ERROR = -1; }
+message Child { string name = 1; int32 count = 2; }
+message Wire {
+    double d = 1;
+    float f = 2;
+    int32 i = 3;
+    int64 l = 4;
+    uint32 u = 5;
+    uint64 ul = 6;
+    sint32 si = 7;
+    sint64 sl = 8;
+    fixed32 fx = 9;
+    fixed64 fxl = 10;
+    sfixed32 sfx = 11;
+    sfixed64 sfxl = 12;
+    bool flag = 13;
+    string text = 14;
+    bytes binary = 15;
+    State state = 16;
+    repeated sint64 numbers = 17;
+    repeated float decimals = 18 [packed = false];
+    Child child = 19;
+    repeated Child children = 20;
+    optional int32 present = 21;
+    map<string, int64> entries = 22;
+    repeated Wire tree = 23;
+    message Nested { string value = 1; }
+    Nested nested = 24;
+}

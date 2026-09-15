@@ -1,0 +1,28 @@
+module std.string;
+extern C {
+    string tc_string_view(const char* data, u64 length);
+    string tc_string_copy(string source);
+    string tc_string_concat(string first, string second);
+    void tc_string_free(string value);
+    i64 tc_string_find(string text, string pattern);
+    int tc_string_starts(string text, string prefix);
+    int tc_string_ends(string text, string suffix);
+    i64 tc_parse_int(string text, Error* error);
+    string tc_format_int(i64 value);
+}
+/// Explicit ownership. view() borrows bytes; destroy invalidates all views.
+class OwnedString {
+    string value;
+    string view() { return value; }
+    void destroy() { tc_string_free(value); value = ""; }
+}
+class String {
+    static OwnedString copy(string source) { OwnedString result; result.value = tc_string_copy(source); assert(result.value.data != null); return result; }
+    static OwnedString concat(string first, string second) { OwnedString result; result.value = tc_string_concat(first, second); assert(result.value.data != null); return result; }
+    static OwnedString fromInt(i64 value) { OwnedString result; result.value = tc_format_int(value); assert(result.value.data != null); return result; }
+    static (i64, Error) parseInt(string text) { Error error; var value = tc_parse_int(text, &error); return (value, error); }
+    static i64 indexOf(string text, string pattern) { return tc_string_find(text, pattern); }
+    static bool contains(string text, string pattern) { return tc_string_find(text, pattern) >= 0; }
+    static bool startsWith(string text, string prefix) { return tc_string_starts(text, prefix) != 0; }
+    static bool endsWith(string text, string suffix) { return tc_string_ends(text, suffix) != 0; }
+}

@@ -1,0 +1,19 @@
+{
+  "tcc": {
+    "version": "0.9.28rc",
+    "commit": "0fb54300b56512754221d80adda85ddb9815bceb",
+    "url": "https://github.com/TinyCC/tinycc/tree/0fb54300b56512754221d80adda85ddb9815bceb",
+    "archive": "third_party/tcc/tinycc-source.zip",
+    "source_directory": "tinycc-mob",
+    "sha256": "80027b04aa2c02641b3cf2297f425b51c65cfa91ac5326815ad4f93290c60470",
+    "local_core_changes": false
+  },
+  "nghttp2": {
+    "version": "1.70.0",
+    "url": "https://github.com/nghttp2/nghttp2/releases/tag/v1.70.0",
+    "archive": "third_party/nghttp2/nghttp2-1.70.0.zip",
+    "source_directory": "nghttp2-1.70.0",
+    "sha256": "fbcb929170f9ac0862a3677b423d21178b2ab49daa6bbd9ea96f03bbbb211647",
+    "local_changes": ["configured version/config headers", "TinyCC Windows inline byte swaps"]
+  }
+}

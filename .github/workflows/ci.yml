@@ -1,0 +1,56 @@
+name: TinyC+ verification
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            cc: gcc
+          - os: ubuntu-24.04-arm
+            cc: gcc
+          - os: macos-15
+            cc: clang
+          - os: windows-2025
+            cc: gcc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Configure Windows compiler path
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $candidate = 'C:\msys64\mingw64\bin'
+          if (Test-Path "$candidate\gcc.exe") { $candidate | Out-File -FilePath $env:GITHUB_PATH -Append }
+      - run: python tools/bootstrap.py --cc ${{ matrix.cc }}
+      - run: python build.py --cc ${{ matrix.cc }}
+      - run: python -m pip install -r tests/requirements.txt
+      - run: python tests/run_all.py --cc ${{ matrix.cc }} --fuzz 1000
+      - name: Rebuild frontend with TinyCC
+        run: python build.py
+      - run: python tests/test_compiler.py --fuzz 1000
+  sanitizers:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python tools/bootstrap.py --cc clang
+      - run: python build.py --cc clang --sanitize
+      - run: python tests/test_compiler.py --fuzz 1000 --cc clang
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+          UBSAN_OPTIONS: halt_on_error=1
+      - run: clang -std=c11 -D_POSIX_C_SOURCE=200809L -fsanitize=address,undefined -g tests/runtime_concurrent.c -pthread -o build/concurrent-asan
+      - run: ./build/concurrent-asan
+      - run: clang -std=c11 -D_POSIX_C_SOURCE=200809L -fsanitize=address,undefined -g tests/runtime_network.c -pthread -lm -o build/network-asan
+      - run: ./build/network-asan
+      - run: clang -std=c11 -D_POSIX_C_SOURCE=200809L -fsanitize=address,undefined -g tests/runtime_tui.c -lm -o build/tui-asan
+      - run: ./build/tui-asan

@@ -1,0 +1,84 @@
+module std.net;
+import std.concurrent;
+import std.string;
+extern C {
+    i64 tc_tcp_connect(string host, int port, Error* error);
+    i64 tc_tcp_listen(string host, int port, int backlog, Error* error);
+    i64 tc_tcp_accept(i64 listener, Error* error);
+    i64 tc_udp_bind(string host, int port, Error* error);
+    i64 tc_udp_send(i64 handle, string host, int port, void* data, u64 size);
+    i64 tc_udp_receive(i64 handle, void* data, u64 capacity, void* peer, u64 peer_capacity, int* port);
+    i64 tc_socket_read(i64 handle, void* data, u64 capacity);
+    i64 tc_socket_write(i64 handle, void* data, u64 length);
+    int tc_socket_port(i64 handle);
+    Error tc_socket_close(i64 handle);
+    string tc_dns_resolve(string host, Error* error);
+    void* tc_socket_read_async(i64 handle, void* data, u64 capacity, u64 timeout, void* token);
+    void* tc_socket_write_async(i64 handle, void* data, u64 length, u64 timeout, void* token);
+    void* tc_tcp_accept_async(i64 handle, u64 timeout, void* token);
+    void* tc_tcp_connect_async(string host, int port, u64 timeout, void* token);
+    void* tc_file_read_async(string path);
+    void* tc_file_write_async(string path, string contents);
+    void* tc_dns_resolve_async(string host);
+    void* tc_timer_after(u64 milliseconds);
+}
+
+class Address { string host; int port; }
+
+class Dns {
+    /// Result owns its bytes. Wrap it in OwnedString and destroy once.
+    static Task<string> resolveAsync(string host) { Task<string> task; task.handle = tc_dns_resolve_async(host); return task; }
+    static (OwnedString, Error) resolve(string host) { Error error; OwnedString address; address.value = tc_dns_resolve(host, &error); return (address, error); }
+}
+
+/// A manually owned socket. Finish outstanding operations before close.
+class TcpSocket {
+    i64 handle;
+    static (TcpSocket, Error) connect(string host, int port) { Error error; TcpSocket socket; socket.handle = tc_tcp_connect(host, port, &error); return (socket, error); }
+    static (TcpSocket, Error) listen(string host, int port, int backlog = 32) { Error error; TcpSocket socket; socket.handle = tc_tcp_listen(host, port, backlog, &error); return (socket, error); }
+    (TcpSocket, Error) accept() { Error error; TcpSocket socket; socket.handle = tc_tcp_accept(handle, &error); return (socket, error); }
+    int port() { return tc_socket_port(handle); }
+    i64 read(Slice<byte> destination) { return tc_socket_read(handle, destination.data, destination.length); }
+    i64 write(Slice<byte> source) { return tc_socket_write(handle, source.data, source.length); }
+    Error close() { var error = tc_socket_close(handle); handle = -1; return error; }
+    Task<i64> readAsync(Slice<byte> destination, u64 timeout = 30000, CancellationToken* token = null) {
+        void* cancellation = null;
+        if (token != null) cancellation = token.state.handle;
+        Task<i64> task; task.handle = tc_socket_read_async(handle, destination.data, destination.length, timeout, cancellation); return task;
+    }
+    Task<i64> writeAsync(Slice<byte> source, u64 timeout = 30000, CancellationToken* token = null) {
+        void* cancellation = null;
+        if (token != null) cancellation = token.state.handle;
+        Task<i64> task; task.handle = tc_socket_write_async(handle, source.data, source.length, timeout, cancellation); return task;
+    }
+    async TcpSocket acceptAsync(u64 timeout = 30000, CancellationToken* token = null) {
+        void* cancellation = null; if (token != null) cancellation = token.state.handle;
+        Task<i64> task; task.handle = tc_tcp_accept_async(handle, timeout, cancellation); defer task.destroy();
+        var accepted = await task; TcpSocket socket(accepted); return socket;
+    }
+    static async TcpSocket connectAsync(string host, int port, u64 timeout = 30000, CancellationToken* token = null) {
+        void* cancellation = null; if (token != null) cancellation = token.state.handle;
+        Task<i64> task; task.handle = tc_tcp_connect_async(host, port, timeout, cancellation); defer task.destroy();
+        var connected = await task; TcpSocket socket(connected); return socket;
+    }
+}
+
+class UdpSocket {
+    i64 handle;
+    static (UdpSocket, Error) bind(string host, int port) { Error error; UdpSocket socket; socket.handle = tc_udp_bind(host, port, &error); return (socket, error); }
+    int port() { return tc_socket_port(handle); }
+    i64 sendTo(Address peer, Slice<byte> source) { return tc_udp_send(handle, peer.host, peer.port, source.data, source.length); }
+    i64 receive(Slice<byte> destination) { int port; return tc_udp_receive(handle, destination.data, destination.length, null, 0, &port); }
+    Task<i64> receiveAsync(Slice<byte> destination, u64 timeout = 30000, CancellationToken* token = null) {
+        void* cancellation = null; if (token != null) cancellation = token.state.handle;
+        Task<i64> task; task.handle = tc_socket_read_async(handle, destination.data, destination.length, timeout, cancellation); return task;
+    }
+    Error close() { var error = tc_socket_close(handle); handle = -1; return error; }
+}
+
+class AsyncFile {
+    /// Copies the path and contents before submitting to the bounded I/O worker pool.
+    static Task<void> writeAll(string path, string contents) { Task<void> task; task.handle = tc_file_write_async(path, contents); return task; }
+    /// Result owns its bytes; wrap it in OwnedString and call destroy.
+    static Task<string> readAll(string path) { Task<string> task; task.handle = tc_file_read_async(path); return task; }
+}

@@ -1,0 +1,18 @@
+extern C {
+    struct CPoint { int x; double y; }
+    enum CStatus { C_OK = 0, C_INVALID = 7 }
+    CStatus point_scale(CPoint* point, int scale);
+    double point_sum(CPoint point);
+    int apply_callback(func<int(int)> callback, int value);
+    size_t point_size();
+}
+enum Color { Red = -1, Green = 0, Blue }
+int main() {
+    CPoint point(3, 2.5);
+    assert(sizeof(CPoint) == point_size());
+    CStatus result = point_scale(&point, 2); assert(result == CStatus.C_OK);
+    assert(point_scale(null, 2) == CStatus.C_INVALID);
+    println(point_sum(point));
+    println(apply_callback((int value) => value * value, 4));
+    Color color = Color.Blue; println(color); return 0;
+}

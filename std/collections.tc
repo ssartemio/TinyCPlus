@@ -1,0 +1,69 @@
+module std.collections;
+
+/// A manually owned contiguous array. Copies alias the same allocation.
+/// Call destroy exactly once after the final use of the allocation.
+class Array<T>
+{
+    T* data;
+    u64 length;
+    u64 capacity;
+
+    static Array<T> create()
+    {
+        Array<T> array;
+        return array;
+    }
+
+    void reserve(u64 required)
+    {
+        if (required <= capacity) return;
+        u64 next = capacity * 2;
+        if (next < 8) next = 8;
+        if (next < required) next = required;
+        assert(next <= 18446744073709551615 / sizeof(T));
+        var allocated = realloc(data, next * sizeof(T));
+        assert(allocated != null);
+        data = allocated;
+        capacity = next;
+    }
+
+    void push(T value)
+    {
+        assert(length < 18446744073709551615);
+        reserve(length + 1);
+        data[length] = value;
+        length++;
+    }
+
+    T pop()
+    {
+        assert(length > 0);
+        length--;
+        return data[length];
+    }
+
+    T get(u64 index)
+    {
+        assert(index < length);
+        return data[index];
+    }
+
+    void set(u64 index, T value)
+    {
+        assert(index < length);
+        data[index] = value;
+    }
+
+    void clear()
+    {
+        length = 0;
+    }
+
+    void destroy()
+    {
+        free(data);
+        data = null;
+        length = 0;
+        capacity = 0;
+    }
+}

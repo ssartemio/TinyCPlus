@@ -1,0 +1,99 @@
+import std.tui;
+import std.fs;
+import std.process;
+
+int main() {
+    if (Arguments.count() < 2) {
+        println("Usage: tinyedit FILE [--replay KEYS_FILE] [--snapshot OUTPUT]");
+        return 2;
+    }
+    string path = Arguments.get(1);
+    string replayPath = "";
+    string snapshotPath = "";
+    for (int i = 2; i < Arguments.count(); i++) {
+        var option = Arguments.get(i);
+        if (option == "--replay" && i + 1 < Arguments.count()) { i++; replayPath = Arguments.get(i); }
+        else if (option == "--snapshot" && i + 1 < Arguments.count()) { i++; snapshotPath = Arguments.get(i); }
+        else { println("Unknown or incomplete option."); return 2; }
+    }
+    OwnedString initial;
+    if (File.exists(path)) {
+        var input, readError = File.readAll(path);
+        if (readError != 0) { println("Unable to open file."); return readError; }
+        initial = input;
+    }
+    defer initial.destroy();
+    OwnedString replay;
+    if (len(replayPath) > 0) {
+        var input, readError = File.readAll(replayPath);
+        if (readError != 0) { println("Unable to open replay."); return readError; }
+        replay = input;
+    }
+    defer replay.destroy();
+    var window, error = Window.create(headless: len(replayPath) > 0);
+    if (error != 0) { println("TinyEdit requires an ANSI terminal."); return error; }
+    defer window.destroy();
+    var column = Ui.column();
+    var title = Ui.label(path); column.add(title);
+    var text = Ui.textBox(initial.view()); column.add(text);
+    var status = Ui.label("Ctrl-S Save | Ctrl-Q Quit | Ctrl-F Find | Ctrl-G Line | Ctrl-X Cut | Ctrl-U Paste"); column.add(status);
+    var prompt = Ui.textBox("", height: 1); column.add(prompt);
+    window.setContent(column); window.focus(text);
+    var buffer = text.buffer();
+    OwnedString clipboard; defer clipboard.destroy();
+    bool confirmQuit = false;
+    int promptMode = 0;
+    u64 replayOffset = 0;
+    while (true) {
+        window.draw();
+        if (len(replayPath) == 0) window.refresh();
+        else {
+            if (replayOffset >= len(replay.view())) { println("Replay ended before quit."); return 3; }
+            assert(window.replay(replay.view(), &replayOffset) == 0);
+        }
+        var event = window.nextEvent();
+        if (event.kind == 1) {
+            if (event.key == 17) {
+                if (!buffer.dirty() || confirmQuit) break;
+                confirmQuit = true; status.setText("Unsaved changes. Ctrl-S saves; press Ctrl-Q again to discard."); continue;
+            }
+            confirmQuit = false;
+            if (event.key == 19) {
+                var contents = buffer.text(); defer contents.destroy();
+                var saveError = File.writeAtomic(path, contents.view());
+                if (saveError == 0) { buffer.markClean(); status.setText("Saved."); }
+                else status.setText("Save failed. The buffer remains open.");
+                continue;
+            }
+            if (event.key == 6 || event.key == 7) {
+                promptMode = event.key; prompt.setText(""); window.focus(prompt);
+                if (promptMode == 6) status.setText("Find: type text below, then Enter. Esc cancels.");
+                else status.setText("Go to line: enter a line number, then Enter.");
+                continue;
+            }
+            if (promptMode != 0 && event.key == 27) { promptMode = 0; window.focus(text); continue; }
+            if (promptMode != 0 && (event.key == 13 || event.key == 10)) {
+                var query = prompt.text(); defer query.destroy();
+                if (promptMode == 6) {
+                    var found = buffer.find(query.view(), buffer.position() + 1);
+                    if (found < 0) found = buffer.find(query.view());
+                    if (found >= 0) { buffer.seek(found); status.setText("Match found."); }
+                    else status.setText("No match.");
+                } else {
+                    var line, parseError = String.parseInt(query.view());
+                    if (parseError == 0 && line > 0) { buffer.gotoLine(line - 1); status.setText("Moved to line."); }
+                    else status.setText("Invalid line number.");
+                }
+                promptMode = 0; window.focus(text); continue;
+            }
+            if (promptMode == 0 && event.key == 24) { clipboard.destroy(); clipboard = buffer.cutLine(); status.setText("Line cut. Ctrl-U pastes."); continue; }
+            if (promptMode == 0 && event.key == 21) { if (buffer.insert(clipboard.view()) != 0) status.setText("Unable to paste."); continue; }
+        }
+        if (window.dispatch(event) != 0) status.setText("Unable to apply event.");
+    }
+    if (len(snapshotPath) > 0) {
+        window.draw(); var image = window.snapshot(); defer image.destroy();
+        if (File.writeAll(snapshotPath, image.view()) != 0) return 1;
+    }
+    return 0;
+}

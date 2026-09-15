@@ -1,0 +1,9 @@
+syntax = "proto3";
+package demo;
+
+message UserRequest { int64 id = 1; }
+message UserResponse { string name = 1; repeated string roles = 2; }
+
+service Users {
+    rpc GetUser(UserRequest) returns (UserResponse);
+}

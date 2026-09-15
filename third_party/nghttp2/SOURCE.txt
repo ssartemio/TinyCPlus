@@ -1,0 +1,3 @@
+nghttp2 1.70.0
+https://github.com/nghttp2/nghttp2/releases/tag/v1.70.0
+SHA256: fbcb929170f9ac0862a3677b423d21178b2ab49daa6bbd9ea96f03bbbb211647

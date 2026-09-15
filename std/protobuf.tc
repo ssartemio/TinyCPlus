@@ -1,0 +1,59 @@
+module std.protobuf;
+import std.string;
+import std.collections;
+extern C {
+    int tc_pb_valid_utf8(string text);
+    void* tc_pb_writer();
+    void tc_pb_writer_destroy(void* writer);
+    void tc_pb_write_varint(void* writer, u64 value);
+    void tc_pb_write_fixed(void* writer, u64 value, int count);
+    void tc_pb_write_bytes(void* writer, string value);
+    Error tc_pb_writer_error(void* writer);
+    string tc_pb_writer_take(void* writer);
+    void* tc_pb_reader(string input);
+    void tc_pb_reader_destroy(void* reader);
+    Error tc_pb_reader_error(void* reader);
+    void tc_pb_reader_fail(void* reader);
+    int tc_pb_reader_done(void* reader);
+    u64 tc_pb_read_varint(void* reader);
+    u64 tc_pb_read_fixed(void* reader, int count);
+    string tc_pb_read_bytes(void* reader);
+    uint tc_pb_next(void* reader);
+    uint tc_pb_wire(void* reader);
+    void tc_pb_skip(void* reader, uint field);
+    u64 tc_pb_zigzag(i64 value);
+    i64 tc_pb_unzigzag(u64 value);
+    u64 tc_pb_double_bits(double value);
+    uint tc_pb_float_bits(float value);
+    double tc_pb_bits_double(u64 bits);
+    float tc_pb_bits_float(uint bits);
+}
+
+class ProtoWriter {
+    void* handle;
+    static ProtoWriter create() { ProtoWriter writer(tc_pb_writer()); return writer; }
+    void tag(uint field, uint wire) { assert(field > 0 && field <= 536870911); tc_pb_write_varint(handle, cast<u64>(field) * 8 + wire); }
+    void number(u64 value) { tc_pb_write_varint(handle, value); }
+    void fixed32(u64 value) { tc_pb_write_fixed(handle, value, 4); }
+    void fixed64(u64 value) { tc_pb_write_fixed(handle, value, 8); }
+    void bytes(string value) { tc_pb_write_bytes(handle, value); }
+    Error error() { return tc_pb_writer_error(handle); }
+    OwnedString take() { OwnedString result(tc_pb_writer_take(handle)); return result; }
+    void destroy() { tc_pb_writer_destroy(handle); handle = null; }
+}
+
+class ProtoReader {
+    void* handle;
+    static ProtoReader create(string input) { ProtoReader reader(tc_pb_reader(input)); return reader; }
+    uint next() { return tc_pb_next(handle); }
+    uint wire() { return tc_pb_wire(handle); }
+    u64 number() { return tc_pb_read_varint(handle); }
+    u64 fixed32() { return tc_pb_read_fixed(handle, 4); }
+    u64 fixed64() { return tc_pb_read_fixed(handle, 8); }
+    string bytes() { return tc_pb_read_bytes(handle); }
+    bool done() { return tc_pb_reader_done(handle) != 0; }
+    Error error() { return tc_pb_reader_error(handle); }
+    void fail() { tc_pb_reader_fail(handle); }
+    void skip(uint field) { tc_pb_skip(handle, field); }
+    void destroy() { tc_pb_reader_destroy(handle); handle = null; }
+}

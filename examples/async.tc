@@ -1,0 +1,25 @@
+import std.concurrent;
+
+async int consume(Future<int> input)
+{
+    var value = await input;
+    return value * 2;
+}
+
+void produce(Future<int> output)
+{
+    output.complete(21);
+}
+
+int main()
+{
+    var input = Future<int>.create();
+    defer input.destroy();
+    var consumer = consume(input);
+    defer consumer.destroy();
+    var producer = spawn produce(input);
+    defer producer.destroy();
+    println(consumer.get());
+    producer.get();
+    return 0;
+}

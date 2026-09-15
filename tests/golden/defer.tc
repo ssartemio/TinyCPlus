@@ -1,0 +1,11 @@
+int record(int value) { println(value); return value; }
+int main() {
+    defer println(9);
+    int[3] values = {1, 2, 3};
+    for (index, value in values) {
+        defer println(index);
+        if (value == 2) continue;
+        record(value);
+    }
+    return record(0);
+}

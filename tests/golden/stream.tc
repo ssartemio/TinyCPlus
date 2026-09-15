@@ -1,0 +1,6 @@
+int main() {
+    int[4] values = {1, 2, 3, 4};
+    int threshold = 2;
+    println(values.stream().filter(value => value > threshold)
+        .map(value => value * 2).reduce(0, (total, value) => total + value));
+}

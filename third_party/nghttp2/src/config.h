@@ -1,0 +1,9 @@
+#ifdef _WIN32
+#define HAVE_WINDOWS_H 1
+#define HAVE_WINSOCK2_H 1
+#else
+#define HAVE_ARPA_INET_H 1
+#define HAVE_NETINET_IN_H 1
+#define HAVE_CLOCK_GETTIME 1
+#define HAVE_DECL_CLOCK_MONOTONIC 1
+#endif

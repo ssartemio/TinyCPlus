@@ -1,0 +1,30 @@
+import users;
+
+class UserDirectory {
+    async (UserResponse, Error) GetUser(UserRequest request) {
+        UserResponse response;
+        if (request.id != 42) return (response, 5);
+        response.name = "Ana";
+        response.roles.push("developer");
+        return (response, 0);
+    }
+}
+void serveUsers(void* context) { var server = cast<GrpcServer*>(context); assert(server.serve(1) == 0); }
+async int getUser(int port) {
+    var client = UsersClient.connect("127.0.0.1", port);
+    UserRequest request; request.id = 42;
+    var response, error = await client.GetUser(request); defer response.destroy();
+    assert(error == 0); assert(response.name == "Ana");
+    println(response.name); println(response.roles[0]);
+    return 0;
+}
+int main() {
+    var server, error = GrpcServer.listen("127.0.0.1", 0); assert(error == 0); defer server.destroy();
+    UserDirectory directory;
+    UsersBinding binding; binding.service = &directory;
+    assert(binding.addTo(&server) == 0);
+    var thread = Thread.start(serveUsers, &server);
+    var task = getUser(server.port()); defer task.destroy(); assert(task.get() == 0);
+    assert(thread.join() == 0);
+    return 0;
+}

@@ -1,0 +1,18 @@
+import std.grpc;
+void* echo(string data, void* argument) { return tc_grpc_response(data, 0); }
+void serve(void* context) { var server = cast<GrpcServer*>(context); assert(server.serve(1) == 0); }
+async int request(int port) {
+    GrpcClient client("127.0.0.1", port);
+    var response = await client.callAsync("/demo.Echo/Unary", "hello HTTP/2");
+    defer response.destroy();
+    assert(response.status() == 0);
+    println(response.data());
+    return 0;
+}
+int main() {
+    var server, error = GrpcServer.listen("127.0.0.1", 0); assert(error == 0); defer server.destroy();
+    assert(server.add("/demo.Echo/Unary", echo) == 0);
+    var serving = Thread.start(serve, &server);
+    var task = request(server.port()); defer task.destroy(); assert(task.get() == 0);
+    assert(serving.join() == 0); return 0;
+}

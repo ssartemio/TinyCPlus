@@ -1,0 +1,51 @@
+module std.grpc;
+import std.net;
+extern C {
+    void* tc_grpc_response(string data, int status);
+    string tc_grpc_response_data(void* response);
+    int tc_grpc_response_status(void* response);
+    void tc_grpc_response_destroy(void* response);
+    void* tc_grpc_call(string host, int port, string method, string request, u64 timeout);
+    void* tc_grpc_call_async(string host, int port, string method, string request, u64 timeout);
+    void* tc_grpc_server_create(string host, int port, Error* error);
+    int tc_grpc_server_port(void* server);
+    Error tc_grpc_server_add(void* server, string path, func<void*(string, void*)> handler, void* argument);
+    Error tc_grpc_server_serve(void* server, int maximum_connections);
+    void tc_grpc_server_stop(void* server);
+    void tc_grpc_server_destroy(void* server);
+}
+
+/// Owns its response bytes. Destroy once; data() is a borrowed view.
+class GrpcResponse {
+    void* handle;
+    static GrpcResponse create(string data, int status = 0) { GrpcResponse response(tc_grpc_response(data, status)); return response; }
+    string data() { return tc_grpc_response_data(handle); }
+    int status() { return tc_grpc_response_status(handle); }
+    void destroy() { tc_grpc_response_destroy(handle); handle = null; }
+}
+
+/// Unary, uncompressed gRPC over cleartext HTTP/2. Host is borrowed.
+class GrpcClient {
+    string host;
+    int port;
+    GrpcResponse call(string method, string request, u64 timeout = 30000) {
+        GrpcResponse response(tc_grpc_call(host, port, method, request, timeout)); return response;
+    }
+    async GrpcResponse callAsync(string method, string request, u64 timeout = 30000) {
+        Task<void*> task; task.handle = tc_grpc_call_async(host, port, method, request, timeout); defer task.destroy();
+        var handle = await task; GrpcResponse response(handle); return response;
+    }
+}
+
+/// Register routes before serve(). A handler transfers its returned response.
+class GrpcServer {
+    void* handle;
+    static (GrpcServer, Error) listen(string host, int port) {
+        Error error; GrpcServer server(tc_grpc_server_create(host, port, &error)); return (server, error);
+    }
+    int port() { return tc_grpc_server_port(handle); }
+    Error add(string path, func<void*(string, void*)> handler, void* argument = null) { return tc_grpc_server_add(handle, path, handler, argument); }
+    Error serve(int maximumConnections = 0) { return tc_grpc_server_serve(handle, maximumConnections); }
+    void stop() { tc_grpc_server_stop(handle); }
+    void destroy() { tc_grpc_server_destroy(handle); handle = null; }
+}

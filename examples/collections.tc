@@ -1,0 +1,13 @@
+import std.collections;
+
+int main()
+{
+    var values = Array<int>.create();
+    defer values.destroy();
+    values.push(1);
+    values.push(2);
+    values.push(3);
+    println(values.get(1));
+    println(values.pop());
+    return 0;
+}

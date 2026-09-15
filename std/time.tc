@@ -1,0 +1,7 @@
+module std.time;
+import std.net;
+class Timer {
+    static Task<void> after(u64 milliseconds) { Task<void> task; task.handle = tc_timer_after(milliseconds); return task; }
+    static void sleep(u64 milliseconds) { tc_sleep_ms(milliseconds); }
+    static u64 now() { return tc_clock_ms(); }
+}

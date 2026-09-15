@@ -1,0 +1,33 @@
+(int, Error) divide(int numerator, int denominator)
+{
+    if (denominator == 0) return (0, 1);
+    return (numerator / denominator, 0);
+}
+
+int main()
+{
+    int[5] numbers = {10, 20, 30, 40, 50};
+    var middle = numbers[1:4];
+    var total = 0;
+    for (i, number in middle) {
+        total += number;
+    }
+    assert(total == 90);
+    var quotient, err = divide(90, 3);
+    assert(err == 0);
+    println(quotient);
+
+    int* owned = new int(42);
+    defer delete_placeholder(owned);
+    println(*owned);
+    return 0;
+}
+
+extern C {
+    void free(void* ptr);
+}
+
+void delete_placeholder(int* pointer)
+{
+    free(pointer);
+}

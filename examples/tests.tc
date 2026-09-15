@@ -1,0 +1,2 @@
+@test void arithmetic() { assert(2 + 3 * 4 == 14); }
+@test int result() { return 0; }
