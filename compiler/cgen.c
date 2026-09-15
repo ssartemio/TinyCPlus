@@ -932,6 +932,12 @@ static void signature(CG *g, Node *n, int prototype) {
     line(g, "%s", b.data);
     free(b.data);
 }
+static int runtime_builtin_decl(Node *n) {
+    return !n->owner && (n->flags & NF_EXTERN) && !n->body &&
+           (!strcmp(n->name, "malloc") || !strcmp(n->name, "calloc") ||
+            !strcmp(n->name, "realloc") || !strcmp(n->name, "free") ||
+            !strcmp(n->name, "exit"));
+}
 static void function(CG *g, Node *n) {
     Node *p;
     if (!n->body)
@@ -1286,7 +1292,7 @@ char *generate_c(Context *c) {
     for (t = c->types; t; t = t->next)
         emit_type(&g, t);
     for (n = c->program->body; n; n = n->next) {
-        if (n->kind == N_FUNCTION && !n->args)
+        if (n->kind == N_FUNCTION && !n->args && !runtime_builtin_decl(n))
             signature(&g, n, 1);
         if (n->kind == N_CLASS && !n->params)
             for (m = n->body; m; m = m->next) {
