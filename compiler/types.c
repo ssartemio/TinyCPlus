@@ -41,12 +41,10 @@ Type *type_named(Context *c, const char *name) {
             if (t->kind == TY_U64 && t->name && !strcmp(t->name, "size_t"))
                 return t;
         /*
-         * size_t is semantically the host-sized unsigned integer used by the
-         * current 64-bit targets, but its C spelling matters at the FFI
-         * boundary (notably on Darwin, where size_t is unsigned long while
-         * uint64_t is unsigned long long).  Materialize the canonical u64
-         * first so ID allocation stays exactly as it did for the old alias,
-         * then add a spelling-only view without consuming another type ID.
+         * size_t keeps u64 semantics in TinyC+, but must retain the host C
+         * spelling at ABI boundaries.  Create the canonical u64 exactly as
+         * the old alias did, then attach a spelling-only view without
+         * consuming another type ID.  This keeps generated symbol IDs stable.
          */
         base = type_primitive(c, TY_U64);
         t = (Type *)tc_alloc(c, sizeof(Type));
