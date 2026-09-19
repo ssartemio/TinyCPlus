@@ -40,8 +40,8 @@ class Surface {
     int width() { return tc_gui_surface_width(handle); }
     int height() { return tc_gui_surface_height(handle); }
     void clear(uint color) { tc_gui_surface_clear(handle, color); }
-    uint pixel(int x, int y) { return tc_gui_surface_get(handle, x, y); }
-    void pixel(int x, int y, uint color) { tc_gui_surface_set(handle, x, y, color); }
+    uint getPixel(int x, int y) { return tc_gui_surface_get(handle, x, y); }
+    void setPixel(int x, int y, uint color) { tc_gui_surface_set(handle, x, y, color); }
     void fillRect(int x, int y, int width, int height, uint color) {
         tc_gui_fill_rect(handle, x, y, width, height, color);
     }
