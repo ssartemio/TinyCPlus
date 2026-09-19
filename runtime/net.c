@@ -314,9 +314,9 @@ static void tc_io_loop(void *unused) {
         TcIoRequest *r, *complete = NULL, **cursor;
         int sockets = 0;
         uint64_t now;
-        FD_ZERO(&reads);
-        FD_ZERO(&writes);
-        FD_ZERO(&errors);
+        memset(&reads, 0, sizeof(reads));
+        memset(&writes, 0, sizeof(writes));
+        memset(&errors, 0, sizeof(errors));
         tc_mutex_lock(tc_io_lock);
         if (tc_io_stopping && !tc_io_requests) {
             tc_mutex_unlock(tc_io_lock);

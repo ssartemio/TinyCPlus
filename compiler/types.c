@@ -44,14 +44,15 @@ Type *type_named(Context *c, const char *name) {
          * size_t keeps u64 semantics in TinyC+, but must retain the host C
          * spelling at ABI boundaries.  Create the canonical u64 exactly as
          * the old alias did, then attach a spelling-only view without
-         * consuming another type ID.  This keeps generated symbol IDs stable.
+         * consuming another type ID.  It intentionally is not a Type.alias:
+         * module canonicalization follows aliases and would erase the ABI spelling.
+         * This keeps generated symbol IDs stable while preserving size_t in C.
          */
         base = type_primitive(c, TY_U64);
         t = (Type *)tc_alloc(c, sizeof(Type));
         *t = *base;
         t->name = "size_t";
         t->cname = "size_t";
-        t->alias = base;
         t->next = c->types;
         c->types = t;
         return t;
