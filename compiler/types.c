@@ -29,12 +29,21 @@ Type *type_named(Context *c, const char *name) {
         TypeKind k;
     } aliases[] = {{"int", TY_I32},    {"uint", TY_U32},  {"byte", TY_U8},
                    {"short", TY_I16},  {"long", TY_I64},  {"ulong", TY_U64},
-                   {"size_t", TY_U64}, {"Error", TY_I32}, {"StringView", TY_STRING},
+                   {"Error", TY_I32}, {"StringView", TY_STRING},
                    {NULL, TY_VOID}};
     int i;
     for (i = 0; i <= TY_NULL; i++)
         if (!strcmp(name, names[i]))
             return type_primitive(c, (TypeKind)i);
+    if (!strcmp(name, "size_t")) {
+        for (t = c->types; t; t = t->next)
+            if (t->kind == TY_U64 && t->name && !strcmp(t->name, "size_t"))
+                return t;
+        t = add_type(c, TY_U64);
+        t->name = "size_t";
+        t->cname = "size_t";
+        return t;
+    }
     for (i = 0; aliases[i].name; i++)
         if (!strcmp(name, aliases[i].name))
             return type_primitive(c, aliases[i].k);

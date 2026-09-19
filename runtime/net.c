@@ -165,7 +165,7 @@ static int tc_wait_socket(TcSocket s, int writing, int timeout_ms) {
     if (s < 0 || s >= FD_SETSIZE)
         return -1;
 #endif
-    FD_ZERO(&set);
+    memset(&set, 0, sizeof(set));
     FD_SET(s, &set);
     if (timeout_ms >= 0) {
         timeout.tv_sec = timeout_ms / 1000;

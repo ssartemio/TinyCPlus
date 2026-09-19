@@ -445,7 +445,7 @@ static int tc_ui_read_byte(int timeout) {
     struct timeval time;
     unsigned char byte;
     int ready;
-    FD_ZERO(&set);
+    memset(&set, 0, sizeof(set));
     FD_SET(STDIN_FILENO, &set);
     time.tv_sec = timeout / 1000;
     time.tv_usec = (timeout % 1000) * 1000;
