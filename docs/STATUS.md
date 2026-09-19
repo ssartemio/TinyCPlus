@@ -1,9 +1,10 @@
 # Estado de la entrega
 
-Versión: **1.0.0-rc.1**, candidata funcional para Windows x64.
-Las áreas del roadmap están implementadas; este número no certifica estabilidad
-multiplataforma. La especificación mezcla requisitos inmediatos, intención de
-diseño y ampliaciones futuras: la siguiente tabla indica qué se puede ejecutar.
+Versión: **1.0.0-rc.1**, candidata funcional con validación CI multiplataforma.
+Las áreas del roadmap están implementadas y la matriz de release qualification
+está verde. La etiqueta RC se mantiene hasta la integración/release formal.
+La especificación mezcla requisitos inmediatos, intención de diseño y
+ampliaciones futuras: la siguiente tabla indica qué se puede ejecutar.
 
 | Etapa | Implementación entregada | Evidencia principal |
 |---|---|---|
@@ -30,11 +31,14 @@ protobuf/grpcio; el editor se prueba por replay y snapshots textuales.
 El informe exacto de la ejecución final se conserva en `docs/validation`.
 Los benchmarks no comparan otros lenguajes ni prometen tasas universales.
 
-No se ejecutaron Linux x64/ARM64, macOS ARM64, Clang ni ASan/UBSan en este host.
-La configuración CI incluye esas rutas y un trabajo de sanitizers, pero **un
-archivo de workflow no equivale a una ejecución satisfactoria**. No se inició
-un servicio CI externo ni se publicó el proyecto. Las etiquetas de runners
-siguen la [referencia de GitHub](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+La matriz GitHub Actions se ejecutó satisfactoriamente sobre el commit
+`662fed1acc1235fd191543aa7ce8ac45f2e83c0d` (run #22): Ubuntu x86-64/GCC,
+Ubuntu ARM64/GCC, macOS ARM64/Clang, Windows x64/GCC y un job Ubuntu/Clang con
+AddressSanitizer + UndefinedBehaviorSanitizer. En los jobs nativos se ejecutó
+`tests/run_all.py --fuzz 1000`, se reconstruyó el frontend con TinyCC y se
+repitió `tests/test_compiler.py --fuzz 1000`. La evidencia está en
+`docs/validation/ci-2026-09-19.md`.
+
 Además de layout/eventos por replay, se ejecutó TinyEdit en una terminal Windows
 ConPTY real: entrada Unicode/multilínea, Ctrl-S, contenido guardado verificado,
 Ctrl-Q y restauración de cursor/salida con código cero. No se realizó una
@@ -61,7 +65,8 @@ inspección visual humana en distintos emuladores de terminal.
 - REPL conserva hasta 128 celdas/64 MiB de slots; no deshace efectos de celdas
   fallidas ni libera objetos propietarios automáticamente al reiniciar.
 
-Para declarar **1.0 estable**, deben cerrarse la validación de plataformas y
-sanitizers, manteniendo explícitos estos límites como contrato
-de esa versión. GUI/SwiftUI-like, herencia, GC/ARC, exceptions, reflexión y
-metaprogramación compleja permanecen fuera del alcance solicitado hasta 1.0.
+La validación de plataformas y sanitizers requerida para **1.0 estable** quedó
+cerrada en CI. Resta la integración/release formal manteniendo explícitos estos
+límites como contrato de la versión. GUI/SwiftUI-like, herencia, GC/ARC,
+exceptions, reflexión y metaprogramación compleja permanecen fuera del alcance
+solicitado hasta 1.0.

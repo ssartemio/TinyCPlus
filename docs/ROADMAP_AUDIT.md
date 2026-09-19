@@ -31,21 +31,18 @@ The functional roadmap through 0.10 is present in the repository. The project sh
 | 0.8 networking | Implemented | TCP/UDP/DNS/reactor/timers, HTTP/2 via nghttp2 |
 | 0.9 protobuf/gRPC | Implemented with scoped limits | proto3 subset + unary gRPC over h2c |
 | 0.10 TUI/editor | Implemented | terminal UI, widgets/layout/events, gap-buffer TinyEdit |
-| 1.0 release qualification | Incomplete | Windows x64 evidence exists; Linux/macOS/ARM64/sanitizers still need successful recorded runs |
+| 1.0 release qualification | Complete | GitHub Actions run #22 passed Windows x64, Linux x86-64, Linux ARM64, macOS ARM64/Clang and ASan/UBSan |
 | 1.x graphical GUI | Not implemented | intentionally future work |
 
-## Release blockers for 1.0 stable
+## Release qualification result
 
-The repository itself documents the following qualification gaps:
+The platform/sanitizer blockers identified by this audit were closed on commit
+`662fed1acc1235fd191543aa7ce8ac45f2e83c0d`. GitHub Actions run #22 completed
+successfully across Windows x64/GCC, Ubuntu x86-64/GCC, Ubuntu ARM64/GCC,
+macOS ARM64/Clang and Ubuntu/Clang ASan+UBSan.
 
-1. Linux x86-64 validation has not been recorded.
-2. Linux ARM64 validation has not been recorded.
-3. macOS ARM64 validation has not been recorded.
-4. Clang frontend/runtime validation has not been recorded.
-5. ASan/UBSan runs have not been recorded.
-6. The CI workflow exists, but no successful workflow run is attached to the current `main` commit.
-
-Until those are closed, the correct version label remains `1.0.0-rc.1`.
+The version remains `1.0.0-rc.1` on this validation branch until the changes
+are integrated and a formal stable release is created.
 
 ## Important implementation limits that are acceptable for 1.0 if documented
 
@@ -113,17 +110,9 @@ Keep memory manual, but add optional compile-time diagnostics for obvious owner-
 
 ## Immediate next action
 
-Run the existing CI matrix unchanged first.
-
-Do **not** add new language features until the current workflow is green on:
-
-- Ubuntu x86-64 + GCC;
-- Ubuntu ARM64 + GCC;
-- macOS ARM64 + Clang;
-- Windows x64 + GCC;
-- Ubuntu x86-64 + Clang ASan/UBSan.
-
-If a platform fails, fix portability/reproducibility issues with the smallest possible change and add a regression test.
+Integrate the portability fix and validation evidence into `main`, then make
+the formal 1.0 release decision. Do not mix additional language features into
+that release-qualification change.
 
 ## Release gate
 
