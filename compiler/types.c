@@ -36,12 +36,26 @@ Type *type_named(Context *c, const char *name) {
         if (!strcmp(name, names[i]))
             return type_primitive(c, (TypeKind)i);
     if (!strcmp(name, "size_t")) {
+        Type *base;
         for (t = c->types; t; t = t->next)
             if (t->kind == TY_U64 && t->name && !strcmp(t->name, "size_t"))
                 return t;
-        t = add_type(c, TY_U64);
+        /*
+         * size_t is semantically the host-sized unsigned integer used by the
+         * current 64-bit targets, but its C spelling matters at the FFI
+         * boundary (notably on Darwin, where size_t is unsigned long while
+         * uint64_t is unsigned long long).  Materialize the canonical u64
+         * first so ID allocation stays exactly as it did for the old alias,
+         * then add a spelling-only view without consuming another type ID.
+         */
+        base = type_primitive(c, TY_U64);
+        t = (Type *)tc_alloc(c, sizeof(Type));
+        *t = *base;
         t->name = "size_t";
         t->cname = "size_t";
+        t->alias = base;
+        t->next = c->types;
+        c->types = t;
         return t;
     }
     for (i = 0; aliases[i].name; i++)
