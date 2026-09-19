@@ -21,5 +21,7 @@ El informe de distribución se obtuvo antes de agregar este índice y los propio
 informes al ZIP; los tests de código usan los mismos fuentes y ejecutables.
 El manifiesto SHA256SUMS del ZIP final permite comprobar su contenido completo.
 
-No se presenta un resultado de Clang, ASan/UBSan, Linux o macOS: esos trabajos
-están preparados en `.github/workflows/ci.yml`, pero no se ejecutaron aquí.
+La validación multiplataforma posterior está registrada en
+[ci-2026-09-19.md](ci-2026-09-19.md): la matriz GitHub Actions pasó en
+Windows x64/GCC, Ubuntu x86-64/GCC, Ubuntu ARM64/GCC, macOS ARM64/Clang y
+Ubuntu/Clang con ASan/UBSan.

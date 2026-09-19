@@ -29,12 +29,34 @@ Type *type_named(Context *c, const char *name) {
         TypeKind k;
     } aliases[] = {{"int", TY_I32},    {"uint", TY_U32},  {"byte", TY_U8},
                    {"short", TY_I16},  {"long", TY_I64},  {"ulong", TY_U64},
-                   {"size_t", TY_U64}, {"Error", TY_I32}, {"StringView", TY_STRING},
+                   {"Error", TY_I32}, {"StringView", TY_STRING},
                    {NULL, TY_VOID}};
     int i;
     for (i = 0; i <= TY_NULL; i++)
         if (!strcmp(name, names[i]))
             return type_primitive(c, (TypeKind)i);
+    if (!strcmp(name, "size_t")) {
+        Type *base;
+        for (t = c->types; t; t = t->next)
+            if (t->kind == TY_U64 && t->name && !strcmp(t->name, "size_t"))
+                return t;
+        /*
+         * size_t keeps u64 semantics in TinyC+, but must retain the host C
+         * spelling at ABI boundaries.  Create the canonical u64 exactly as
+         * the old alias did, then attach a spelling-only view without
+         * consuming another type ID.  It intentionally is not a Type.alias:
+         * module canonicalization follows aliases and would erase the ABI spelling.
+         * This keeps generated symbol IDs stable while preserving size_t in C.
+         */
+        base = type_primitive(c, TY_U64);
+        t = (Type *)tc_alloc(c, sizeof(Type));
+        *t = *base;
+        t->name = "size_t";
+        t->cname = "size_t";
+        t->next = c->types;
+        c->types = t;
+        return t;
+    }
     for (i = 0; aliases[i].name; i++)
         if (!strcmp(name, aliases[i].name))
             return type_primitive(c, aliases[i].k);

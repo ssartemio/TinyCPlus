@@ -5,11 +5,11 @@ async/await, red, generación Protobuf, gRPC unary sobre HTTP/2, TUI y el editor
 `tinyedit`. El frontend genera C inspeccionable y utiliza libtcc o un compilador
 C externo. No requiere LLVM, VM, GC ni Python para ejecutar el compilador o las aplicaciones.
 
-Esta entrega implementa las áreas del roadmap hasta 1.0. Se identifica como
-**candidata de entrega**, porque las pruebas ejecutadas aquí corresponden a
-Windows x64 con TinyCC y GCC. Las rutas POSIX y los trabajos de CI incluidos
-requieren validación en sus máquinas correspondientes antes de declarar una
-versión estable multiplataforma. Consulte [cobertura y límites](docs/STATUS.md).
+Esta entrega implementa las áreas del roadmap hasta 1.0. Sigue identificada como
+**candidata de entrega** hasta completar la integración/release formal, pero la
+matriz CI ya fue validada en Windows x64/GCC, Ubuntu x86-64/GCC, Ubuntu ARM64/GCC,
+macOS ARM64/Clang y Ubuntu x86-64 con ASan/UBSan. Consulte
+[cobertura y límites](docs/STATUS.md) y [evidencia CI](docs/validation/ci-2026-09-19.md).
 
 ## Empezar en Windows x64
 

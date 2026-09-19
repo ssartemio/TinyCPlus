@@ -165,7 +165,7 @@ static int tc_wait_socket(TcSocket s, int writing, int timeout_ms) {
     if (s < 0 || s >= FD_SETSIZE)
         return -1;
 #endif
-    FD_ZERO(&set);
+    memset(&set, 0, sizeof(set));
     FD_SET(s, &set);
     if (timeout_ms >= 0) {
         timeout.tv_sec = timeout_ms / 1000;
@@ -314,9 +314,9 @@ static void tc_io_loop(void *unused) {
         TcIoRequest *r, *complete = NULL, **cursor;
         int sockets = 0;
         uint64_t now;
-        FD_ZERO(&reads);
-        FD_ZERO(&writes);
-        FD_ZERO(&errors);
+        memset(&reads, 0, sizeof(reads));
+        memset(&writes, 0, sizeof(writes));
+        memset(&errors, 0, sizeof(errors));
         tc_mutex_lock(tc_io_lock);
         if (tc_io_stopping && !tc_io_requests) {
             tc_mutex_unlock(tc_io_lock);
