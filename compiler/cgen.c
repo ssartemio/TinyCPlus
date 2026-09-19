@@ -1273,6 +1273,11 @@ char *generate_c(Context *c) {
             line(&g, "#include \"tui.c\"");
             break;
         }
+    for (n = c->program->body; n; n = n->next)
+        if (n->kind == N_MODULE && !strcmp(n->name, "std.gui")) {
+            line(&g, "#include \"gui.c\"");
+            break;
+        }
     if (c->repl_mode) {
         line(&g, "extern void *tc_repl_slot(const char *name, size_t size);");
         line(&g, "extern int tc_repl_initialize(const char *name, size_t size);");

@@ -47,7 +47,7 @@ compilers = [str(bundled)] if bundled.exists() else [shutil.which('cc') or 'cc']
 if args.cc and args.cc not in compilers:
     compilers.append(args.cc)
 for cc in compilers:
-    for name in ('concurrent', 'network', 'tui'):
+    for name in ('concurrent', 'network', 'tui', 'gui'):
         output = native/('runtime_'+name+ext)
         flags = ['-std=c11', '-I'+str(ROOT/'runtime')]
         if os.name != 'nt':

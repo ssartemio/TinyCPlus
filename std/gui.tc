@@ -1,0 +1,80 @@
+module std.gui;
+
+/// Packed pixel format is 0xAARRGGBB. Surfaces own their pixel memory explicitly.
+extern C {
+    uint tc_gui_rgba(uint red, uint green, uint blue, uint alpha);
+    void* tc_gui_surface_create(int width, int height, Error* error);
+    void tc_gui_surface_destroy(void* surface);
+    int tc_gui_surface_width(void* surface);
+    int tc_gui_surface_height(void* surface);
+    void tc_gui_surface_clear(void* surface, uint color);
+    uint tc_gui_surface_get(void* surface, int x, int y);
+    void tc_gui_surface_set(void* surface, int x, int y, uint color);
+    void tc_gui_fill_rect(void* surface, int x, int y, int width, int height, uint color);
+    void tc_gui_rect(void* surface, int x, int y, int width, int height, uint color);
+    void tc_gui_line(void* surface, int x0, int y0, int x1, int y1, uint color);
+    void tc_gui_blit(void* destination, int dx, int dy, void* source, int sx, int sy, int width, int height);
+    int tc_gui_surface_damage(void* surface, int* x, int* y, int* width, int* height);
+    void tc_gui_surface_damage_clear(void* surface);
+    u64 tc_gui_surface_checksum(void* surface);
+    void* tc_gui_buffer_create(int width, int height, Error* error);
+    void tc_gui_buffer_destroy(void* buffer);
+    void* tc_gui_buffer_front(void* buffer);
+    void* tc_gui_buffer_back(void* buffer);
+    int tc_gui_buffer_present(void* buffer);
+}
+
+class Pixel {
+    static uint rgba(uint red, uint green, uint blue, uint alpha = 255) {
+        return tc_gui_rgba(red, green, blue, alpha);
+    }
+}
+
+class Surface {
+    void* handle;
+    static (Surface, Error) create(int width, int height) {
+        Error error;
+        Surface surface(tc_gui_surface_create(width, height, &error));
+        return (surface, error);
+    }
+    int width() { return tc_gui_surface_width(handle); }
+    int height() { return tc_gui_surface_height(handle); }
+    void clear(uint color) { tc_gui_surface_clear(handle, color); }
+    uint pixel(int x, int y) { return tc_gui_surface_get(handle, x, y); }
+    void pixel(int x, int y, uint color) { tc_gui_surface_set(handle, x, y, color); }
+    void fillRect(int x, int y, int width, int height, uint color) {
+        tc_gui_fill_rect(handle, x, y, width, height, color);
+    }
+    void rect(int x, int y, int width, int height, uint color) {
+        tc_gui_rect(handle, x, y, width, height, color);
+    }
+    void line(int x0, int y0, int x1, int y1, uint color) {
+        tc_gui_line(handle, x0, y0, x1, y1, color);
+    }
+    void blit(int x, int y, Surface source, int sourceX = 0, int sourceY = 0,
+              int width = -1, int height = -1) {
+        int w = width < 0 ? source.width() : width;
+        int h = height < 0 ? source.height() : height;
+        tc_gui_blit(handle, x, y, source.handle, sourceX, sourceY, w, h);
+    }
+    bool damage(int* x, int* y, int* width, int* height) {
+        return tc_gui_surface_damage(handle, x, y, width, height) != 0;
+    }
+    void clearDamage() { tc_gui_surface_damage_clear(handle); }
+    u64 checksum() { return tc_gui_surface_checksum(handle); }
+    void destroy() { tc_gui_surface_destroy(handle); handle = null; }
+}
+
+/// Owns two surfaces. front()/back() are borrowed and must not be destroyed separately.
+class DoubleBuffer {
+    void* handle;
+    static (DoubleBuffer, Error) create(int width, int height) {
+        Error error;
+        DoubleBuffer buffer(tc_gui_buffer_create(width, height, &error));
+        return (buffer, error);
+    }
+    Surface front() { Surface surface(tc_gui_buffer_front(handle)); return surface; }
+    Surface back() { Surface surface(tc_gui_buffer_back(handle)); return surface; }
+    int present() { return tc_gui_buffer_present(handle); }
+    void destroy() { tc_gui_buffer_destroy(handle); handle = null; }
+}
