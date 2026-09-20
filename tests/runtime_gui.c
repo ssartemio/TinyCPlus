@@ -41,6 +41,11 @@ int main(void) {
     assert(tc_gui_surface_get(surface, 5, 1) == blue);
     assert(tc_gui_surface_get(surface, 6, 2) == blue);
     assert(tc_gui_surface_checksum(surface) != 0);
+    tc_gui_surface_damage_clear(surface);
+    assert(tc_gui_text_width(TC_STRING("ABC"), 1) == 17);
+    tc_gui_text(surface, 0, 0, TC_STRING("A1?"), tc_gui_rgba(255, 255, 255, 255), 1);
+    assert(tc_gui_surface_damage(surface, &x, &y, &width, &height));
+    assert(width > 0 && height > 0);
 
     buffer = (TcGuiBuffer *)tc_gui_buffer_create(4, 3, &error);
     assert(buffer && error == 0);
@@ -70,6 +75,6 @@ int main(void) {
     tc_gui_buffer_destroy(buffer);
     tc_gui_surface_destroy(source);
     tc_gui_surface_destroy(surface);
-    puts("GUI runtime verified: pixels, clipping, lines, blit, damage, double buffering and window events");
+    puts("GUI runtime verified: pixels, clipping, lines, blit, bitmap text, damage, double buffering and window events");
     return 0;
 }
