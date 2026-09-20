@@ -11,6 +11,8 @@ int main(void) {
     TcGuiSurface *surface = (TcGuiSurface *)tc_gui_surface_create(8, 6, &error);
     TcGuiSurface *source;
     TcGuiBuffer *buffer;
+    TcGuiWindow *window;
+    TcGuiEvent event;
     int changed;
 
     assert(surface && error == 0);
@@ -50,9 +52,24 @@ int main(void) {
     assert(tc_gui_buffer_present(buffer) == 1);
     assert(tc_gui_surface_get(tc_gui_buffer_front(buffer), 2, 1) == red);
 
+    window = (TcGuiWindow *)tc_gui_window_create(5, 4, TC_STRING("headless"), 1, &error);
+    assert(window && error == 0 && tc_gui_window_open(window));
+    tc_gui_surface_clear(tc_gui_window_surface(window), green);
+    assert(tc_gui_window_present(window) == 20);
+    assert(tc_gui_window_post(window, TC_GUI_EVENT_CUSTOM, 42, 1, 2, 3, 4, 5, 1, 'Z') == 0);
+    memset(&event, 0, sizeof(event));
+    tc_gui_window_next(window, 0, &event.kind, &event.key, &event.x, &event.y, &event.width,
+                       &event.height, &event.button, &event.pressed, &event.codepoint);
+    assert(event.kind == TC_GUI_EVENT_CUSTOM && event.key == 42 && event.x == 1 && event.y == 2);
+    assert(event.width == 3 && event.height == 4 && event.button == 5 && event.pressed == 1);
+    assert(event.codepoint == 'Z');
+    tc_gui_window_close(window);
+    assert(!tc_gui_window_open(window));
+    tc_gui_window_destroy(window);
+
     tc_gui_buffer_destroy(buffer);
     tc_gui_surface_destroy(source);
     tc_gui_surface_destroy(surface);
-    puts("GUI runtime verified: pixels, clipping, lines, blit, damage and double buffering");
+    puts("GUI runtime verified: pixels, clipping, lines, blit, damage, double buffering and window events");
     return 0;
 }
