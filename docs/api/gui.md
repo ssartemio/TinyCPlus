@@ -74,16 +74,21 @@ static void button(Surface surface, GuiRect area, string text, bool pressed = fa
 
 ## GuiEvent
 
-Event kinds:
+Event kinds are exposed as `GuiEventKind`:
 
 ```text
-1 key
-2 text
-3 mouse
-4 resize
-5 close
-6 custom
+None   = 0
+Key    = 1
+Text   = 2
+Mouse  = 3
+Resize = 4
+Close  = 5
+Custom = 6
 ```
+
+Mouse buttons use `GuiMouseButton.None/Left/Right/Middle` (0/1/2/3).
+The underlying fields remain integers at the C ABI boundary, so these enums add
+readability without changing layout or runtime cost.
 
 Fields include key/codepoint, mouse coordinates/button state, and resize width/height.
 
