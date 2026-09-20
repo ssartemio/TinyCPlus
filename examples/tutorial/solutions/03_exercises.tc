@@ -1,0 +1,57 @@
+(int, Error) average(Slice<int> values)
+{
+    if (values.length == 0)
+        return (0, 1);
+
+    int total = 0;
+    for (value in values)
+        total += value;
+
+    return (total / cast<int>(values.length), 0);
+}
+
+(int, Error) maximum(Slice<int> values)
+{
+    if (values.length == 0)
+        return (0, 1);
+
+    int result = values[0];
+
+    for (value in values)
+        if (value > result)
+            result = value;
+
+    return (result, 0);
+}
+
+int countWarnings(Slice<int> values, int threshold = 60)
+{
+    int count = 0;
+
+    for (value in values)
+        if (value >= threshold)
+            count++;
+
+    return count;
+}
+
+int main()
+{
+    int[6] samples = {45, 48, 50, 62, 70, 57};
+
+    var maximumValue, maximumError = maximum(samples[:]);
+    assert(maximumError == 0 && maximumValue == 70);
+
+    var warningCount = countWarnings(samples[:]);
+    assert(warningCount == 2);
+
+    int[1] storage = {0};
+    var empty = storage[0:0];
+    var unused, emptyError = average(empty);
+    assert(emptyError != 0);
+
+    println(maximumValue);
+    println(warningCount);
+    println(emptyError != 0);
+    return 0;
+}

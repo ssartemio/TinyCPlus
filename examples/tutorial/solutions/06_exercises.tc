@@ -1,0 +1,38 @@
+import std.collections;
+
+int main()
+{
+    int[6] values = {42, 61, 95, 55, 88, 73};
+
+    var maximum = values.stream().reduce(0, (best, x) => {
+        if (x > best)
+            return x;
+        return best;
+    });
+
+    var first, found =
+        values.stream()
+              .filter(x => x >= 90)
+              .first();
+
+    var critical = Array<int>.create();
+    defer critical.destroy();
+
+    values.stream()
+          .filter(x => x >= 90)
+          .collect(&critical);
+
+    int factor = 2;
+    var multiply = owned((int value) => value * factor);
+    defer multiply.destroy();
+
+    assert(maximum == 95);
+    assert(found && first == 95);
+    assert(critical.length == 1);
+    assert(multiply(21) == 42);
+
+    println(maximum);
+    println(critical.length);
+    println(multiply(21));
+    return 0;
+}

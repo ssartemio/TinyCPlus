@@ -1,0 +1,100 @@
+import std.fs;
+import std.net;
+import std.string;
+
+(int, Error) loadScore(string path)
+{
+    var contents, error = File.readAll(path);
+    if (error != 0)
+        return (0, error);
+    defer contents.destroy();
+
+    var value, parseError = String.parseInt(contents.view());
+    if (parseError != 0)
+        return (0, parseError);
+
+    return (cast<int>(value), 0);
+}
+
+async int serveOnce(TcpSocket listener, int score)
+{
+    var socket = await listener.acceptAsync();
+    defer socket.close();
+
+    byte[1] request = {};
+    var received = await socket.readAsync(request[:], timeout: 2000);
+
+    byte[4] response = {1, 0, 0, 0};
+
+    if (received != 1 || request[0] != 1) {
+        response[3] = 1;
+    }
+    else {
+        response[1] = cast<byte>(score);
+        if (score < 60)
+            response[2] = 0;
+        else if (score < 90)
+            response[2] = 1;
+        else
+            response[2] = 2;
+    }
+
+    var written = await socket.writeAsync(response[:], timeout: 2000);
+    if (written != 4)
+        return 2;
+
+    return 0;
+}
+
+int main()
+{
+    string path = "build/tutorial-server-score.txt";
+    assert(File.writeAtomic(path, "73") == 0);
+
+    var score, loadError = loadScore(path);
+    assert(loadError == 0 && score == 73);
+
+    var listener, error = TcpSocket.listen("127.0.0.1", 0);
+    assert(error == 0);
+    defer listener.close();
+
+    var invalidServer = serveOnce(listener, score);
+    defer invalidServer.destroy();
+
+    var badClient, badError =
+        TcpSocket.connect("127.0.0.1", listener.port());
+    assert(badError == 0);
+    byte[1] badRequest = {9};
+    byte[4] badResponse = {};
+    assert(badClient.write(badRequest[:]) == 1);
+    assert(badClient.read(badResponse[:]) == 4);
+    badClient.close();
+
+    assert(invalidServer.get() == 0);
+    assert(badResponse[3] == 1);
+
+    var validServer = serveOnce(listener, score);
+    defer validServer.destroy();
+
+    var client, connectError =
+        TcpSocket.connect("127.0.0.1", listener.port());
+    assert(connectError == 0);
+    byte[1] request = {1};
+    byte[4] response = {};
+    assert(client.write(request[:]) == 1);
+    assert(client.read(response[:]) == 4);
+    client.close();
+
+    assert(validServer.get() == 0);
+    assert(response[0] == 1);
+    assert(response[1] == 73);
+    assert(response[2] == 1);
+    assert(response[3] == 0);
+
+    println(badResponse[3]);
+    println(response[1]);
+    println(response[2]);
+
+    assert(File.remove(path) == 0);
+    return 0;
+}

@@ -1,0 +1,27 @@
+import std.string;
+
+int earlyReturn()
+{
+    defer println("cleanup");
+    println("body");
+    return 42;
+}
+
+int main()
+{
+    var first = String.copy("first");
+    defer first.destroy();
+
+    var second = String.copy("second");
+    defer second.destroy();
+
+    var third = String.copy("third");
+    defer third.destroy();
+
+    println(first.view());
+    println(second.view());
+    println(third.view());
+
+    println(earlyReturn());
+    return 0;
+}

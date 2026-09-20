@@ -27,6 +27,20 @@ CASES = [
     ("12_tinystatus_tui.tc", "dashboard ok\n"),
 ]
 
+SOLUTION_CASES = [
+    ("01_exercises.tc", "WARN\n90\n"),
+    ("02_exercises.tc", "100\n3\n4\n"),
+    ("03_exercises.tc", "70\n2\n1\n"),
+    ("04_exercises.tc", "first\nsecond\nthird\nbody\ncleanup\n42\n"),
+    ("05_exercises.tc", "61\n0\n"),
+    ("06_exercises.tc", "95\n1\n42\n"),
+    ("08_exercises.tc", "missing\n73\n"),
+    ("09_exercises.tc", "20\n4\n42\nclosed\n"),
+    ("10_exercises.tc", "10\n"),
+    ("11_exercises.tc", "1\n73\n1\n"),
+    ("12_exercises.tc", "dashboard exercises ok\n"),
+]
+
 def invoke(command):
     return subprocess.run(
         [str(TINY), *map(str, command), "--home", str(ROOT)],
@@ -68,6 +82,15 @@ assert result.returncode == 0, (result.stdout, result.stderr)
 assert result.stdout == "61\n781\n", result.stdout
 passed += 1
 print("PASS 07_modules/main.tc")
+
+solutions = tutorial / "solutions"
+for filename, expected in SOLUTION_CASES:
+    path = solutions / filename
+    result = check_case(path)
+    assert result.returncode == 0, (filename, result.stdout, result.stderr)
+    assert result.stdout == expected, (filename, result.stdout, expected)
+    passed += 1
+    print("PASS solution", filename)
 
 EDGE_CASES = [
     ("03_bounds_fail.tc", 101, "index out of bounds"),
