@@ -33,8 +33,8 @@ extern C {
     int tc_gui_window_open(void* window);
     void* tc_gui_window_surface(void* window);
     int tc_gui_window_present(void* window);
-    Error tc_gui_window_post(void* window, int kind, int key, int x, int y, int width, int height, int button, int pressed, uint codepoint, double scrollX, double scrollY);
-    void tc_gui_window_next(void* window, int timeout, int* kind, int* key, int* x, int* y, int* width, int* height, int* button, int* pressed, uint* codepoint, double* scrollX, double* scrollY);
+    Error tc_gui_window_post(void* window, int kind, int key, int x, int y, int width, int height, int button, int pressed, uint codepoint, double scrollX, double scrollY, int modifiers);
+    void tc_gui_window_next(void* window, int timeout, int* kind, int* key, int* x, int* y, int* width, int* height, int* button, int* pressed, uint* codepoint, double* scrollX, double* scrollY, int* modifiers);
     void tc_gui_window_close(void* window);
     void tc_gui_window_destroy(void* window);
     void* tc_gui_textbox_create(string initial);
@@ -213,6 +213,14 @@ enum GuiMouseButton {
     Middle = 3
 }
 
+enum GuiModifier {
+    Shift = 1,
+    Control = 2,
+    Alt = 4,
+    Super = 8,
+    CapsLock = 16
+}
+
 /// Event payload uses integer fields at the C ABI boundary.
 /// Use GuiEventKind and GuiMouseButton instead of numeric literals.
 class GuiEvent {
@@ -227,6 +235,7 @@ class GuiEvent {
     uint codepoint;
     double scrollX;
     double scrollY;
+    int modifiers;
 }
 
 /// Owns a double-buffered native/headless drawing target.
@@ -248,13 +257,13 @@ class GuiWindow {
     Error post(GuiEvent event) {
         return tc_gui_window_post(handle, event.kind, event.key, event.x, event.y, event.width,
                                   event.height, event.button, event.pressed, event.codepoint,
-                                  event.scrollX, event.scrollY);
+                                  event.scrollX, event.scrollY, event.modifiers);
     }
     GuiEvent nextEvent(int timeout = 16) {
         GuiEvent event;
         tc_gui_window_next(handle, timeout, &event.kind, &event.key, &event.x, &event.y,
                            &event.width, &event.height, &event.button, &event.pressed,
-                           &event.codepoint, &event.scrollX, &event.scrollY);
+                           &event.codepoint, &event.scrollX, &event.scrollY, &event.modifiers);
         return event;
     }
     void close() { tc_gui_window_close(handle); }
@@ -308,6 +317,9 @@ class GuiInput {
     }
     static bool scroll(GuiEvent event) {
         return event.kind == GuiEventKind.Scroll;
+    }
+    static bool hasModifier(GuiEvent event, int modifier) {
+        return (event.modifiers & modifier) != 0;
     }
 }
 

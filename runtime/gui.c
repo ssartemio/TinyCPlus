@@ -484,6 +484,13 @@ enum {
     TC_GUI_EVENT_CUSTOM = 6,
     TC_GUI_EVENT_SCROLL = 7
 };
+enum {
+    TC_GUI_MOD_SHIFT = 1,
+    TC_GUI_MOD_CONTROL = 2,
+    TC_GUI_MOD_ALT = 4,
+    TC_GUI_MOD_SUPER = 8,
+    TC_GUI_MOD_CAPS_LOCK = 16
+};
 
 static int tc_gui_encode_utf8(uint32_t cp, char bytes[4]) {
     if (cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff))
@@ -633,6 +640,7 @@ typedef struct TcGuiEvent {
     int32_t kind, key, x, y, width, height, button, pressed;
     uint32_t codepoint;
     double scroll_x, scroll_y;
+    int32_t modifiers;
 } TcGuiEvent;
 
 typedef struct TcGuiWindow {
@@ -715,6 +723,15 @@ static int32_t tc_gui_key_code(WPARAM key) {
     default: return (int32_t)key;
     }
 }
+static int32_t tc_gui_win_modifiers(void) {
+    int32_t modifiers = 0;
+    if (GetKeyState(VK_SHIFT) & 0x8000) modifiers |= TC_GUI_MOD_SHIFT;
+    if (GetKeyState(VK_CONTROL) & 0x8000) modifiers |= TC_GUI_MOD_CONTROL;
+    if (GetKeyState(VK_MENU) & 0x8000) modifiers |= TC_GUI_MOD_ALT;
+    if ((GetKeyState(VK_LWIN) | GetKeyState(VK_RWIN)) & 0x8000) modifiers |= TC_GUI_MOD_SUPER;
+    if (GetKeyState(VK_CAPITAL) & 1) modifiers |= TC_GUI_MOD_CAPS_LOCK;
+    return modifiers;
+}
 static void tc_gui_push_mouse(TcGuiWindow *window, LPARAM value, int button, int pressed) {
     TcGuiEvent event;
     memset(&event, 0, sizeof(event));
@@ -723,6 +740,7 @@ static void tc_gui_push_mouse(TcGuiWindow *window, LPARAM value, int button, int
     event.y = tc_gui_mouse_y(value);
     event.button = button;
     event.pressed = pressed;
+    event.modifiers = tc_gui_win_modifiers();
     tc_gui_event_push(window, event);
 }
 static void tc_gui_push_scroll(TcGuiWindow *window, WPARAM wparam, LPARAM lparam,
@@ -741,6 +759,7 @@ static void tc_gui_push_scroll(TcGuiWindow *window, WPARAM wparam, LPARAM lparam
         event.scroll_x = (double)(int16_t)((wparam >> 16) & 0xffff) / (double)WHEEL_DELTA;
     else
         event.scroll_y = (double)(int16_t)((wparam >> 16) & 0xffff) / (double)WHEEL_DELTA;
+    event.modifiers = tc_gui_win_modifiers();
     tc_gui_event_push(window, event);
 }
 static LRESULT CALLBACK tc_gui_window_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
@@ -787,6 +806,7 @@ static LRESULT CALLBACK tc_gui_window_proc(HWND hwnd, UINT message, WPARAM wpara
         memset(&event, 0, sizeof(event));
         event.kind = TC_GUI_EVENT_KEY;
         event.key = tc_gui_key_code(wparam);
+        event.modifiers = tc_gui_win_modifiers();
         tc_gui_event_push(window, event);
         return 0;
     }
@@ -806,6 +826,7 @@ static LRESULT CALLBACK tc_gui_window_proc(HWND hwnd, UINT message, WPARAM wpara
             memset(&event, 0, sizeof(event));
             event.kind = TC_GUI_EVENT_TEXT;
             event.codepoint = cp;
+            event.modifiers = tc_gui_win_modifiers();
             tc_gui_event_push(window, event);
         }
         return 0;
@@ -1002,7 +1023,8 @@ int32_t tc_gui_window_present(void *handle) {
 }
 int32_t tc_gui_window_post(void *handle, int32_t kind, int32_t key, int32_t x, int32_t y,
                            int32_t width, int32_t height, int32_t button, int32_t pressed,
-                           uint32_t codepoint, double scroll_x, double scroll_y) {
+                           uint32_t codepoint, double scroll_x, double scroll_y,
+                           int32_t modifiers) {
     TcGuiEvent event;
     memset(&event, 0, sizeof(event));
     event.kind = kind;
@@ -1016,12 +1038,13 @@ int32_t tc_gui_window_post(void *handle, int32_t kind, int32_t key, int32_t x, i
     event.codepoint = codepoint;
     event.scroll_x = scroll_x;
     event.scroll_y = scroll_y;
+    event.modifiers = modifiers;
     return tc_gui_event_push((TcGuiWindow *)handle, event);
 }
 void tc_gui_window_next(void *handle, int32_t timeout, int32_t *kind, int32_t *key, int32_t *x,
                         int32_t *y, int32_t *width, int32_t *height, int32_t *button,
                         int32_t *pressed, uint32_t *codepoint, double *scroll_x,
-                        double *scroll_y) {
+                        double *scroll_y, int32_t *modifiers) {
     TcGuiWindow *window = (TcGuiWindow *)handle;
     TcGuiEvent event;
     memset(&event, 0, sizeof(event));
@@ -1070,6 +1093,7 @@ ready:
     if (codepoint) *codepoint = event.codepoint;
     if (scroll_x) *scroll_x = event.scroll_x;
     if (scroll_y) *scroll_y = event.scroll_y;
+    if (modifiers) *modifiers = event.modifiers;
 }
 void tc_gui_window_close(void *handle) {
     TcGuiWindow *window = (TcGuiWindow *)handle;

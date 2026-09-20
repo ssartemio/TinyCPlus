@@ -8,7 +8,7 @@ static void gui_native_drain(TcGuiWindow *window) {
     do {
         memset(&event, 0, sizeof(event));
         tc_gui_window_next(window, 0, &event.kind, &event.key, &event.x, &event.y, &event.width,
-                           &event.height, &event.button, &event.pressed, &event.codepoint, &event.scroll_x, &event.scroll_y);
+                           &event.height, &event.button, &event.pressed, &event.codepoint, &event.scroll_x, &event.scroll_y, &event.modifiers);
     } while (event.kind != TC_GUI_EVENT_NONE);
 }
 #endif
@@ -82,21 +82,22 @@ int main(void) {
     assert(tc_gui_window_backing_scale(window) == 1.0);
     tc_gui_surface_clear(tc_gui_window_surface(window), green);
     assert(tc_gui_window_present(window) == 20);
-    assert(tc_gui_window_post(window, TC_GUI_EVENT_CUSTOM, 42, 1, 2, 3, 4, 5, 1, 'Z', 0.0, 0.0) == 0);
+    assert(tc_gui_window_post(window, TC_GUI_EVENT_CUSTOM, 42, 1, 2, 3, 4, 5, 1, 'Z', 0.0, 0.0, 0) == 0);
     memset(&event, 0, sizeof(event));
     tc_gui_window_next(window, 0, &event.kind, &event.key, &event.x, &event.y, &event.width,
-                       &event.height, &event.button, &event.pressed, &event.codepoint, &event.scroll_x, &event.scroll_y);
+                       &event.height, &event.button, &event.pressed, &event.codepoint, &event.scroll_x, &event.scroll_y, &event.modifiers);
     assert(event.kind == TC_GUI_EVENT_CUSTOM && event.key == 42 && event.x == 1 && event.y == 2);
     assert(event.width == 3 && event.height == 4 && event.button == 5 && event.pressed == 1);
     assert(event.codepoint == 'Z');
     assert(tc_gui_window_post(window, TC_GUI_EVENT_SCROLL, 0, 2, 3, 0, 0, 0, 0, 0,
-                              0.25, -1.5) == 0);
+                              0.25, -1.5, TC_GUI_MOD_SHIFT | TC_GUI_MOD_ALT) == 0);
     memset(&event, 0, sizeof(event));
     tc_gui_window_next(window, 0, &event.kind, &event.key, &event.x, &event.y, &event.width,
                        &event.height, &event.button, &event.pressed, &event.codepoint,
-                       &event.scroll_x, &event.scroll_y);
+                       &event.scroll_x, &event.scroll_y, &event.modifiers);
     assert(event.kind == TC_GUI_EVENT_SCROLL && event.x == 2 && event.y == 3);
     assert(event.scroll_x == 0.25 && event.scroll_y == -1.5);
+    assert(event.modifiers == (TC_GUI_MOD_SHIFT | TC_GUI_MOD_ALT));
     tc_gui_window_close(window);
     assert(!tc_gui_window_open(window));
     tc_gui_window_destroy(window);
@@ -122,21 +123,21 @@ int main(void) {
         PostMessageA(native->hwnd, WM_KEYDOWN, VK_LEFT, 0);
         tc_gui_window_next(native, 250, &native_event.kind, &native_event.key, &native_event.x,
                            &native_event.y, &native_event.width, &native_event.height,
-                           &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y);
+                           &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y, &native_event.modifiers);
         assert(native_event.kind == TC_GUI_EVENT_KEY && native_event.key == TC_KEY_LEFT);
 
         memset(&native_event, 0, sizeof(native_event));
         PostMessageA(native->hwnd, WM_CHAR, 'A', 0);
         tc_gui_window_next(native, 250, &native_event.kind, &native_event.key, &native_event.x,
                            &native_event.y, &native_event.width, &native_event.height,
-                           &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y);
+                           &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y, &native_event.modifiers);
         assert(native_event.kind == TC_GUI_EVENT_TEXT && native_event.codepoint == 'A');
 
         memset(&native_event, 0, sizeof(native_event));
         PostMessageA(native->hwnd, WM_LBUTTONUP, 0, MAKELPARAM(7, 9));
         tc_gui_window_next(native, 250, &native_event.kind, &native_event.key, &native_event.x,
                            &native_event.y, &native_event.width, &native_event.height,
-                           &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y);
+                           &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y, &native_event.modifiers);
         assert(native_event.kind == TC_GUI_EVENT_MOUSE && native_event.button == 1);
         assert(native_event.x == 7 && native_event.y == 9 && native_event.pressed == 0);
 
@@ -149,7 +150,7 @@ int main(void) {
             tc_gui_window_next(native, 250, &native_event.kind, &native_event.key, &native_event.x,
                                &native_event.y, &native_event.width, &native_event.height,
                                &native_event.button, &native_event.pressed, &native_event.codepoint,
-                               &native_event.scroll_x, &native_event.scroll_y);
+                               &native_event.scroll_x, &native_event.scroll_y, &native_event.modifiers);
             assert(native_event.kind == TC_GUI_EVENT_SCROLL);
             assert(native_event.x == 7 && native_event.y == 9);
             assert(native_event.scroll_x == 0.0 && native_event.scroll_y == 1.0);
@@ -159,7 +160,7 @@ int main(void) {
         memset(&native_event, 0, sizeof(native_event));
         tc_gui_window_next(native, 250, &native_event.kind, &native_event.key, &native_event.x,
                            &native_event.y, &native_event.width, &native_event.height,
-                           &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y);
+                           &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y, &native_event.modifiers);
         assert(native_event.kind == TC_GUI_EVENT_CLOSE && !tc_gui_window_open(native));
         tc_gui_window_destroy(native);
     }
@@ -195,14 +196,16 @@ int main(void) {
         sent.xkey.window = xwindow;
         sent.xkey.root = DefaultRootWindow(display);
         sent.xkey.same_screen = True;
+        sent.xkey.state = ShiftMask | ControlMask;
         sent.xkey.keycode = XKeysymToKeycode(display, XK_Left);
         assert(XSendEvent(display, xwindow, True, KeyPressMask, &sent));
         XFlush(display);
         memset(&native_event, 0, sizeof(native_event));
         tc_gui_window_next(native, 250, &native_event.kind, &native_event.key, &native_event.x,
                            &native_event.y, &native_event.width, &native_event.height,
-                           &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y);
+                           &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y, &native_event.modifiers);
         assert(native_event.kind == TC_GUI_EVENT_KEY && native_event.key == TC_KEY_LEFT);
+        assert(native_event.modifiers == (TC_GUI_MOD_SHIFT | TC_GUI_MOD_CONTROL));
 
         memset(&sent, 0, sizeof(sent));
         sent.xbutton.type = ButtonRelease;
@@ -218,7 +221,7 @@ int main(void) {
         memset(&native_event, 0, sizeof(native_event));
         tc_gui_window_next(native, 250, &native_event.kind, &native_event.key, &native_event.x,
                            &native_event.y, &native_event.width, &native_event.height,
-                           &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y);
+                           &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y, &native_event.modifiers);
         assert(native_event.kind == TC_GUI_EVENT_MOUSE && native_event.button == 1);
         assert(native_event.x == 7 && native_event.y == 9 && native_event.pressed == 0);
 
@@ -237,7 +240,7 @@ int main(void) {
         tc_gui_window_next(native, 250, &native_event.kind, &native_event.key, &native_event.x,
                            &native_event.y, &native_event.width, &native_event.height,
                            &native_event.button, &native_event.pressed, &native_event.codepoint,
-                           &native_event.scroll_x, &native_event.scroll_y);
+                           &native_event.scroll_x, &native_event.scroll_y, &native_event.modifiers);
         assert(native_event.kind == TC_GUI_EVENT_SCROLL);
         assert(native_event.x == 11 && native_event.y == 13);
         assert(native_event.scroll_x == 0.0 && native_event.scroll_y == 1.0);
@@ -247,12 +250,12 @@ int main(void) {
         memset(&native_event, 0, sizeof(native_event));
         tc_gui_window_next(native, 500, &native_event.kind, &native_event.key, &native_event.x,
                            &native_event.y, &native_event.width, &native_event.height,
-                           &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y);
+                           &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y, &native_event.modifiers);
         while (native_event.kind != TC_GUI_EVENT_RESIZE && native_event.kind != TC_GUI_EVENT_NONE) {
             memset(&native_event, 0, sizeof(native_event));
             tc_gui_window_next(native, 500, &native_event.kind, &native_event.key, &native_event.x,
                                &native_event.y, &native_event.width, &native_event.height,
-                               &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y);
+                               &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y, &native_event.modifiers);
         }
         assert(native_event.kind == TC_GUI_EVENT_RESIZE);
         assert(native_event.width == 120 && native_event.height == 72);
@@ -271,12 +274,12 @@ int main(void) {
         memset(&native_event, 0, sizeof(native_event));
         tc_gui_window_next(native, 500, &native_event.kind, &native_event.key, &native_event.x,
                            &native_event.y, &native_event.width, &native_event.height,
-                           &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y);
+                           &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y, &native_event.modifiers);
         while (native_event.kind != TC_GUI_EVENT_CLOSE && native_event.kind != TC_GUI_EVENT_NONE) {
             memset(&native_event, 0, sizeof(native_event));
             tc_gui_window_next(native, 500, &native_event.kind, &native_event.key, &native_event.x,
                                &native_event.y, &native_event.width, &native_event.height,
-                               &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y);
+                               &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y, &native_event.modifiers);
         }
         assert(native_event.kind == TC_GUI_EVENT_CLOSE && !tc_gui_window_open(native));
         tc_gui_window_destroy(native);
@@ -304,17 +307,17 @@ int main(void) {
             memset(&native_event, 0, sizeof(native_event));
             tc_gui_window_next(native, 0, &native_event.kind, &native_event.key, &native_event.x,
                                &native_event.y, &native_event.width, &native_event.height,
-                               &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y);
+                               &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y, &native_event.modifiers);
             assert(native_event.kind == TC_GUI_EVENT_RESIZE);
             assert(native_event.width == 140 && native_event.height == 90);
             assert(tc_gui_window_width(native) == 140 && tc_gui_window_height(native) == 90);
         }
 
-        assert(tc_gui_window_post(native, TC_GUI_EVENT_CUSTOM, 91, 0, 0, 0, 0, 0, 0, 0, 0.0, 0.0) == 0);
+        assert(tc_gui_window_post(native, TC_GUI_EVENT_CUSTOM, 91, 0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0) == 0);
         memset(&native_event, 0, sizeof(native_event));
         tc_gui_window_next(native, 0, &native_event.kind, &native_event.key, &native_event.x,
                            &native_event.y, &native_event.width, &native_event.height,
-                           &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y);
+                           &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y, &native_event.modifiers);
         assert(native_event.kind == TC_GUI_EVENT_CUSTOM && native_event.key == 91);
 
         {
@@ -351,7 +354,8 @@ int main(void) {
                 ((void *(*)(void *, TcCocoaSel, uint64_t, TcCocoaPoint, uint64_t, double, long,
                              void *, void *, void *, TcCocoaBool, unsigned short))tc_cocoa.msg_send)
                 (event_class, tc_cocoa_sel("keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:"),
-                 10, point, 0, 0.0, (long)number, NULL, letter, letter, 0, 0);
+                 10, point, (1ull << 17) | (1ull << 20), 0.0, (long)number, NULL,
+                 letter, letter, 0, 0);
             assert(key_event);
             tc_cocoa_process_event(key_event);
             memset(&native_event, 0, sizeof(native_event));
@@ -360,6 +364,7 @@ int main(void) {
             memset(&native_event, 0, sizeof(native_event));
             assert(tc_gui_event_pop(native, &native_event));
             assert(native_event.kind == TC_GUI_EVENT_TEXT && native_event.codepoint == 'a');
+            assert(native_event.modifiers == (TC_GUI_MOD_SHIFT | TC_GUI_MOD_SUPER));
 
             key_event =
                 ((void *(*)(void *, TcCocoaSel, uint64_t, TcCocoaPoint, uint64_t, double, long,
@@ -393,19 +398,20 @@ int main(void) {
             assert(native_event.kind == TC_GUI_EVENT_MOUSE && native_event.button == 1);
             assert(native_event.x == 7 && native_event.pressed == 0);
 
-            tc_cocoa_push_scroll(native, point, 0.5, -1.25);
+            tc_cocoa_push_scroll(native, point, 0.5, -1.25, TC_GUI_MOD_ALT);
             memset(&native_event, 0, sizeof(native_event));
             assert(tc_gui_event_pop(native, &native_event));
             assert(native_event.kind == TC_GUI_EVENT_SCROLL);
             assert(native_event.x == 7);
             assert(native_event.scroll_x == 0.5 && native_event.scroll_y == -1.25);
+            assert(native_event.modifiers == TC_GUI_MOD_ALT);
         }
 
         tc_gui_window_close(native);
         memset(&native_event, 0, sizeof(native_event));
         tc_gui_window_next(native, 0, &native_event.kind, &native_event.key, &native_event.x,
                            &native_event.y, &native_event.width, &native_event.height,
-                           &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y);
+                           &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y, &native_event.modifiers);
         assert(native_event.kind == TC_GUI_EVENT_CLOSE && !tc_gui_window_open(native));
         tc_gui_window_destroy(native);
     }
