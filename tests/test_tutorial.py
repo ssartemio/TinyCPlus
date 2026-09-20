@@ -23,6 +23,8 @@ CASES = [
     ("08_persistence_files.tc", "72\n"),
     ("09_concurrency.tc", "1\n40\n41\n42\n"),
     ("10_async_network.tc", "42\n"),
+    ("11_tinystatus_server.tc", "1\n72\n1\n0\n"),
+    ("12_tinystatus_tui.tc", "dashboard ok\n"),
 ]
 
 def invoke(command):
