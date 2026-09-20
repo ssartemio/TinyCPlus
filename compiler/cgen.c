@@ -1276,6 +1276,7 @@ char *generate_c(Context *c) {
     for (n = c->program->body; n; n = n->next)
         if (n->kind == N_MODULE && !strcmp(n->name, "std.gui")) {
             line(&g, "#include \"gui.c\"");
+            c->uses_gui = 1;
             break;
         }
     if (c->repl_mode) {
