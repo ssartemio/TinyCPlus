@@ -2,6 +2,17 @@
 #include <assert.h>
 #include <stdio.h>
 
+#ifdef _WIN32
+static void gui_native_drain(TcGuiWindow *window) {
+    TcGuiEvent event;
+    do {
+        memset(&event, 0, sizeof(event));
+        tc_gui_window_next(window, 0, &event.kind, &event.key, &event.x, &event.y, &event.width,
+                           &event.height, &event.button, &event.pressed, &event.codepoint);
+    } while (event.kind != TC_GUI_EVENT_NONE);
+}
+#endif
+
 int main(void) {
     int error = 0, x = 0, y = 0, width = 0, height = 0;
     uint32_t black = tc_gui_rgba(0, 0, 0, 255);
@@ -88,6 +99,7 @@ int main(void) {
         native = (TcGuiWindow *)tc_gui_window_create(64, 48, TC_STRING("TinyC+ CI"), 0, &error);
         assert(native && error == 0 && native->hwnd && tc_gui_window_open(native));
         ShowWindow(native->hwnd, SW_HIDE);
+        gui_native_drain(native);
 
         {
             int32_t native_width = tc_gui_window_width(native);
