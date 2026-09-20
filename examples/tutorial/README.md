@@ -11,6 +11,8 @@ incluye en la suite estable.
 
 Ejecutar todo:
 
+Primero compile el frontend con `python build.py`. La suite crea `build/` si falta.
+
 ```bash
 python tests/test_tutorial.py
 ```
@@ -37,7 +39,7 @@ Después de intentar los ejercicios de cada capítulo:
 solutions/             soluciones explícitas por capítulo
 exercises/             fallos esperados y casos de borde
 07_modules/            solución multiarchivo/FFI
-experimental/          capítulo 13, fuera de main
+experimental/          capítulo 13, requiere API GUI ausente en main
 EXERCISE_SOLUTIONS.md  mapa de cobertura
 ```
 

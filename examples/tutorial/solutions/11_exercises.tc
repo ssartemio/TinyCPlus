@@ -16,6 +16,19 @@ import std.string;
     return (cast<int>(value), 0);
 }
 
+// A single read may return fewer bytes than requested, even on localhost.
+int readExactly(TcpSocket socket, Slice<byte> frame)
+{
+    int offset = 0;
+    while (offset < cast<int>(frame.length)) {
+        var received = socket.read(frame[offset:frame.length]);
+        if (received <= 0)
+            return 1;
+        offset += cast<int>(received);
+    }
+    return 0;
+}
+
 async int serveOnce(TcpSocket listener, int score)
 {
     var socket = await listener.acceptAsync();
@@ -67,7 +80,7 @@ int main()
     byte[1] badRequest = {9};
     byte[4] badResponse = {};
     assert(badClient.write(badRequest[:]) == 1);
-    assert(badClient.read(badResponse[:]) == 4);
+    assert(readExactly(badClient, badResponse[:]) == 0);
     badClient.close();
 
     assert(invalidServer.get() == 0);
@@ -82,7 +95,7 @@ int main()
     byte[1] request = {1};
     byte[4] response = {};
     assert(client.write(request[:]) == 1);
-    assert(client.read(response[:]) == 4);
+    assert(readExactly(client, response[:]) == 0);
     client.close();
 
     assert(validServer.get() == 0);

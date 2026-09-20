@@ -187,4 +187,10 @@ No hay reserva escondida para los frames.
 
 [`examples/tutorial/11_tinystatus_server.tc`](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/11_tinystatus_server.tc)
 
+La [solución de los ejercicios](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/solutions/11_exercises.tc)
+incluye `readExactly`, el byte de error y la carga del score desde un archivo.
+El [ejemplo avanzado](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/exercises/11_multi_client.tc)
+atiende a dos clientes con `spawn`. Cada worker cierra el socket que recibe y
+`main` espera las tareas antes de cerrar el listener.
+
 La CI ejecuta esta solución como parte de `tests/test_tutorial.py`.

@@ -2,7 +2,9 @@ module tutorial.main;
 import model;
 
 extern C {
+    struct CReading { int temperature; int load; }
     int status_checksum(int temperature, int load);
+    size_t status_reading_size();
 }
 
 int main()
@@ -11,6 +13,9 @@ int main()
 
     assert(sample.score() == 61);
     assert(status_checksum(24, 37) == 781);
+    CReading reading(24, 37);
+    assert(sizeof(CReading) == status_reading_size());
+    assert(reading.temperature == 24);
 
     println(sample.score());
     println(status_checksum(24, 37));
