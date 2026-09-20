@@ -23,6 +23,7 @@ TinyString tc_argument(int32_t index) {
 #else
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/wait.h>
 #endif
 
 static char *tc_cstring(TinyString s) {
@@ -359,5 +360,190 @@ TinyString tc_environment(TinyString key) {
         result.length = strlen(value);
     }
     return result;
+}
+/* ---- Support for StringBuilder, Console.writeError and Process.spawn ---- */
+void tc_bytes_copy(char *destination, TinyString source) {
+    if (source.length)
+        memcpy(destination, source.data, source.length);
+}
+/* Shortest %.*g text that reads back as exactly the same double. */
+TinyString tc_format_double(double value) {
+    char buffer[40];
+    int precision, n = 0;
+    TinyString s;
+    for (precision = 1; precision <= 17; precision++) {
+        n = snprintf(buffer, sizeof(buffer), "%.*g", precision, value);
+        if (value != value || strtod(buffer, NULL) == value)
+            break;
+    }
+    s.data = buffer;
+    s.length = (size_t)n;
+    return tc_string_copy(s);
+}
+void tc_write_error(TinyString text) {
+    fflush(stdout);
+    if (text.length)
+        fwrite(text.data, 1, text.length, stderr);
+    fflush(stderr);
+}
+#ifdef _WIN32
+static int tc_spawn_quote(char **out, size_t *length, size_t *capacity, const char *s, size_t n) {
+    size_t i, slashes = 0, need = *length + 3 + 2 * n + 1;
+    char *p = *out;
+    if (need > *capacity) {
+        size_t next = *capacity ? *capacity : 256;
+        while (next < need)
+            next *= 2;
+        p = (char *)realloc(p, next);
+        if (!p)
+            return 0;
+        *out = p;
+        *capacity = next;
+    }
+    if (*length)
+        p[(*length)++] = ' ';
+    p[(*length)++] = '"';
+    for (i = 0; i < n; i++) {
+        if (s[i] == '\\') {
+            slashes++;
+            continue;
+        }
+        if (s[i] == '"') {
+            while (slashes) {
+                p[(*length)++] = '\\';
+                p[(*length)++] = '\\';
+                slashes--;
+            }
+            p[(*length)++] = '\\';
+            p[(*length)++] = '"';
+        } else {
+            while (slashes) {
+                p[(*length)++] = '\\';
+                slashes--;
+            }
+            p[(*length)++] = s[i];
+        }
+    }
+    while (slashes) {
+        p[(*length)++] = '\\';
+        p[(*length)++] = '\\';
+        slashes--;
+    }
+    p[(*length)++] = '"';
+    p[*length] = 0;
+    return 1;
+}
+#endif
+/*
+ * Runs argv[0] with the given arguments, without a shell, and waits for it.
+ * Returns the exit status (128 + signal on POSIX). *error is 0 on success and
+ * non-zero when the program could not be started at all.
+ */
+int32_t tc_process_spawn(TinyString *argv, uint64_t count, int32_t *error) {
+    uint64_t i;
+    *error = 0;
+    if (!argv || count == 0) {
+        *error = 1;
+        return -1;
+    }
+    for (i = 0; i < count; i++)
+        if (argv[i].length && memchr(argv[i].data, 0, argv[i].length)) {
+            *error = 1;
+            return -1;
+        }
+    fflush(stdout);
+    fflush(stderr);
+#ifdef _WIN32
+    {
+        char *command = NULL;
+        size_t length = 0, capacity = 0;
+        STARTUPINFOA si;
+        PROCESS_INFORMATION pi;
+        DWORD code = 0;
+        for (i = 0; i < count; i++)
+            if (!tc_spawn_quote(&command, &length, &capacity, argv[i].data, argv[i].length)) {
+                free(command);
+                *error = 1;
+                return -1;
+            }
+        memset(&si, 0, sizeof(si));
+        si.cb = sizeof(si);
+        memset(&pi, 0, sizeof(pi));
+        if (!CreateProcessA(NULL, command, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) {
+            free(command);
+            *error = (int32_t)GetLastError();
+            if (!*error)
+                *error = 1;
+            return -1;
+        }
+        free(command);
+        WaitForSingleObject(pi.hProcess, INFINITE);
+        GetExitCodeProcess(pi.hProcess, &code);
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+        return (int32_t)code;
+    }
+#else
+    {
+        char **args = (char **)calloc((size_t)count + 1, sizeof(char *));
+        int report[2], status = 0, child_errno = 0;
+        ssize_t got;
+        pid_t pid;
+        if (!args) {
+            *error = ENOMEM;
+            return -1;
+        }
+        for (i = 0; i < count; i++) {
+            args[i] = (char *)malloc(argv[i].length + 1);
+            if (!args[i])
+                break;
+            if (argv[i].length)
+                memcpy(args[i], argv[i].data, argv[i].length);
+            args[i][argv[i].length] = 0;
+        }
+        if (i < count || pipe(report) != 0) {
+            *error = errno ? errno : ENOMEM;
+            for (i = 0; i < count; i++)
+                free(args[i]);
+            free(args);
+            return -1;
+        }
+        fcntl(report[1], F_SETFD, FD_CLOEXEC);
+        pid = fork();
+        if (pid == 0) {
+            close(report[0]);
+            execvp(args[0], args);
+            child_errno = errno;
+            if (write(report[1], &child_errno, sizeof(child_errno)) < 0)
+                _exit(127);
+            _exit(127);
+        }
+        close(report[1]);
+        for (i = 0; i < count; i++)
+            free(args[i]);
+        free(args);
+        if (pid < 0) {
+            *error = errno ? errno : 1;
+            close(report[0]);
+            return -1;
+        }
+        do
+            got = read(report[0], &child_errno, sizeof(child_errno));
+        while (got < 0 && errno == EINTR);
+        close(report[0]);
+        while (waitpid(pid, &status, 0) < 0)
+            if (errno != EINTR) {
+                *error = errno;
+                return -1;
+            }
+        if (got == (ssize_t)sizeof(child_errno)) {
+            *error = child_errno ? child_errno : 1;
+            return -1;
+        }
+        if (WIFEXITED(status))
+            return WEXITSTATUS(status);
+        return 128 + WTERMSIG(status);
+    }
+#endif
 }
 #endif

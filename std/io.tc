@@ -1,6 +1,9 @@
 module std.io;
 import std.string;
-extern C { string tc_read_line(); }
+extern C { string tc_read_line(); void tc_write_error(string text); }
 class Console {
     static OwnedString readLine() { OwnedString line; line.value = tc_read_line(); return line; }
+    /// Writes text to standard error, after flushing standard output.
+    static void writeError(string text) { tc_write_error(text); }
+    static void writeErrorLine(string text) { tc_write_error(text); tc_write_error("\n"); }
 }

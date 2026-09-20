@@ -118,7 +118,12 @@ bytes que puede contener NUL. Los literales viven todo el programa.
 `len(s)` y `.length` están disponibles. `==` compara contenidos de strings.
 Los escapes incluyen `\0`, `\n`, `\t` y `\xNN`, con exactamente dos dígitos hex.
 
-`String.copy`, `concat`, `fromInt` y `File.readAll` producen `OwnedString`.
+`String.copy`, `concat`, `fromInt`, `fromDouble` y `File.readAll` producen
+`OwnedString`. `fromDouble` escribe el texto decimal más corto que se relee como
+el mismo `double`. Para construir texto incrementalmente use `StringBuilder`
+(`append`, `appendChar`, `appendInt`, `appendUnsigned`, `appendHex`,
+`appendDouble`, `view`, `toOwned`, `clear`, `destroy`): crece por duplicación,
+sin copias cuadráticas; su `view()` queda inválida tras el siguiente cambio.
 Su `.view()` queda inválida después de `.destroy()`. Las slices de arrays
 quedan inválidas al liberar/reubicar su almacenamiento.
 Los bounds se comprueban por defecto; `--no-bounds-check` los desactiva.
