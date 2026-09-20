@@ -73,6 +73,7 @@ RUN = [
     ('switch_defer_scope', 'int main(){switch(1){case 1:defer println(2);println(1);default:{}}println(3);}', '1\n2\n3\n'),
     ('switch_async', 'import std.concurrent;async int f(int x,Future<int> input){int r=0;switch(x){case 1:var n=await input;r=n+10;default:r=x*2;}return r;}void produce(Future<int> o){o.complete(5);}int main(){var input=Future<int>.create();defer input.destroy();var t=f(1,input);defer t.destroy();var p=spawn produce(input);defer p.destroy();println(t.get());p.get();}', '15\n'),
     ('switch_keywords_as_identifiers', 'int main(){int case=1;int default=2;println(case+default);}', '3\n'),
+    ('switch_keywords_in_case_body', 'int main(){int default=0;int case=1;switch(1){case 1:default=3;case=case+default;case++;println(default);println(case);default:println(99);}switch(7){case -7,7:println("hit");default:println("miss");}}', '3\n5\nhit\n'),
     ('hash_builtin', 'int main(){assert(hash(42)==hash(42));assert(hash(\"abc\")==hash(\"abc\"));assert(hash(\"abc\")!=hash(\"abd\"));int x=0;assert(hash(&x)==hash(&x));println(\"ok\");}', 'ok\n'),
     ('hash_user_function', 'u64 hash(int x){return 7;}int main(){println(hash(3));}', '7\n'),
     ('hash_user_method', 'class Box{int v;int hash(int x){return x+1000;}int go(){return hash(5);}}int main(){Box b;println(b.go());assert(hash(5)==hash(5));}', '1005\n'),
