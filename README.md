@@ -32,6 +32,10 @@ Ctrl-F busca; Ctrl-G va a una línea; Ctrl-X corta una línea; Ctrl-U pega.
 También admite flechas, Home, End, Backspace y Delete. Requiere una consola
 con soporte ANSI. [Ejemplo de widgets](examples/tui.tc).
 
+Los `bin\*.exe` versionados son de la entrega inicial rc.1 (2026-09-15) y no
+incluyen lo añadido después (`switch`, `hash()`, `Map<K,V>`, `StringBuilder`,
+`Process.spawn`); reconstruya con `python build.py` para usarlo.
+
 No mueva únicamente `tiny.exe`: conserve `compiler` (para reconstruir), `runtime`,
 `std` y `third_party` junto al directorio `bin`. Para otra disposición use
 `TINY_HOME` o `--home RUTA`.

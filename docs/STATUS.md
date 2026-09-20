@@ -21,6 +21,26 @@ ampliaciones futuras: la siguiente tabla indica qué se puede ejecutar.
 | 0.10 | Ventanas/celdas, widgets/layout/eventos, editor gap buffer | tests/runtime_tui.c, tests/test_editor.py |
 | 1.0 | Integración, bootstrap reproducible, documentación, pruebas, benchmarks, empaquetado | tests/run_all.py; docs/validation; tools/package.py |
 
+## Añadido después de rc.1
+
+Lenguaje y librería incorporados tras la etapa 1.0, cada uno con pruebas en
+`tests/test_compiler.py`, `tests/test_tools.py` o `tests/test_stdlib.py`:
+
+- `switch` sobre enteros, `char`, `bool`, enums y strings, sin caída al siguiente
+  caso y con cobertura obligatoria de todos los valores en un enum sin
+  `default`; builtin `hash()` para enteros, `char`, `bool`, enums, punteros y
+  strings.
+- `Map<K,V>` en `std.collections`: tabla hash propietaria con direccionamiento
+  abierto.
+- `StringBuilder`, `String.fromDouble`, `Console.writeError`/`writeErrorLine` y
+  `Process.spawn` (sin shell) en `std.string`, `std.io` y `std.process`.
+- Finales de línea LF en todo el repositorio y bootstrap POSIX que ya no toca el
+  paquete Windows versionado (`third_party/tcc/posix/`, ignorado por git).
+
+Los binarios `bin/tiny.exe`, `bin/tinyc.exe` y `bin/tinyedit.exe` versionados son
+del 2026-09-15 y **no incluyen** nada de lo anterior. Reconstruya con
+`python build.py` para usarlo.
+
 ## Verificación y alcance
 
 Windows x64: frontend construido con TinyCC y GCC; todos los casos de ejecución
@@ -37,7 +57,9 @@ Ubuntu ARM64/GCC, macOS ARM64/Clang, Windows x64/GCC y un job Ubuntu/Clang con
 AddressSanitizer + UndefinedBehaviorSanitizer. En los jobs nativos se ejecutó
 `tests/run_all.py --fuzz 1000`, se reconstruyó el frontend con TinyCC y se
 repitió `tests/test_compiler.py --fuzz 1000`. La evidencia está en
-`docs/validation/ci-2026-09-19.md`.
+`docs/validation/ci-2026-09-19.md`. Esas cifras y los informes de `docs/validation`
+describen ese commit: los cambios posteriores se integraron con la misma matriz
+en verde, cuyos resultados están en la pestaña Actions del repositorio.
 
 Además de layout/eventos por replay, se ejecutó TinyEdit en una terminal Windows
 ConPTY real: entrada Unicode/multilínea, Ctrl-S, contenido guardado verificado,
@@ -62,6 +84,12 @@ inspección visual humana en distintos emuladores de terminal.
   Protobuf cubre el subconjunto proto3 documentado y rechaza proto2/oneof.
 - TUI usa codepoints y anchura aproximada; no implementa grapheme clusters ni
   shaping Unicode completo. Los paths Windows se limitan a las APIs ANSI/C.
+- `Map<K,V>` y `StringBuilder` son de gestión manual: las copias comparten el
+  mismo almacenamiento (un `put` o `append` que reasigna deja colgantes las demás
+  copias), las claves string de un `Map` son vistas que deben sobrevivir a la
+  entrada y `StringBuilder.view()` se invalida con el siguiente cambio.
+- En un `switch`, un `break` directo dentro de un caso es un error (los casos no
+  caen); para salir de un bucle desde un caso use una variable de control.
 - REPL conserva hasta 128 celdas/64 MiB de slots; no deshace efectos de celdas
   fallidas ni libera objetos propietarios automáticamente al reiniciar.
 

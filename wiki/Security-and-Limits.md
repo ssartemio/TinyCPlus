@@ -15,6 +15,16 @@ No existe borrow checker. El programador puede crear:
 
 Las APIs y `defer` reducen errores, pero no eliminan la responsabilidad manual.
 
+Algunas APIs añaden reglas propias:
+
+- `Map<K,V>` y `StringBuilder`: las copias comparten el mismo almacenamiento; un
+  `put` o `append` que reasigna deja colgantes las demás copias. Llame a `destroy`
+  una sola vez.
+- Las claves string de un `Map` son vistas: el texto debe vivir más que la
+  entrada. `StringBuilder.view()` se invalida con el siguiente cambio.
+- `Process.spawn` no usa shell: cada argumento llega tal cual, sin expansión ni
+  redirecciones. `Process.run` sí pasa el comando a la shell del sistema.
+
 ## Aritmética
 
 Signed overflow y shifts inválidos conservan riesgos comparables a C. No hay

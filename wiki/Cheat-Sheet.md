@@ -69,6 +69,60 @@ defer values.destroy();
 values.push(42);
 ```
 
+## Switch
+
+```c
+switch (n)
+{
+    case 0:
+        return "vacío";
+    case 1, 2, 3:
+        return "pocos";
+    default:
+        return "muchos";
+}
+```
+
+## Map<K,V>
+
+```c
+import std.collections;
+
+var ages = Map<string, int>.create();
+defer ages.destroy();
+
+ages.put("Ana", 30);
+var age, found = ages.get("Ana");
+println(ages.getOr("Marta", -1));
+```
+
+## StringBuilder
+
+```c
+import std.string;
+
+var text = StringBuilder.create();
+defer text.destroy();
+
+text.append("n=");
+text.appendInt(-42);
+println(text.view());
+```
+
+## Lanzar un proceso (sin shell)
+
+```c
+import std.collections;
+import std.process;
+
+var args = Array<string>.create();
+defer args.destroy();
+args.push("echo");
+args.push("hola");
+
+var status, error = Process.spawn(&args);
+```
+
 ## Clase
 
 ```c
