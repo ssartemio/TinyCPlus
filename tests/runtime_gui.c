@@ -13,6 +13,8 @@ int main(void) {
     TcGuiBuffer *buffer;
     TcGuiWindow *window;
     TcGuiEvent event;
+    void *textbox;
+    TinyString box_text;
     int changed;
 
     assert(surface && error == 0);
@@ -72,9 +74,21 @@ int main(void) {
     assert(!tc_gui_window_open(window));
     tc_gui_window_destroy(window);
 
+    textbox = tc_gui_textbox_create(TC_STRING("abc"));
+    assert(textbox);
+    assert(tc_gui_textbox_event(textbox, TC_GUI_EVENT_TEXT, 0, 'X') == 0);
+    box_text = tc_gui_textbox_text(textbox);
+    assert(tc_string_equal(box_text, TC_STRING("Xabc")));
+    tc_string_free(box_text);
+    assert(tc_gui_textbox_dirty(textbox));
+    tc_gui_textbox_draw(surface, textbox, 0, 0, 8, 6, 1, 0xffffffffu, black, green);
+    tc_gui_textbox_clean(textbox);
+    assert(!tc_gui_textbox_dirty(textbox));
+    tc_gui_textbox_destroy(textbox);
+
     tc_gui_buffer_destroy(buffer);
     tc_gui_surface_destroy(source);
     tc_gui_surface_destroy(surface);
-    puts("GUI runtime verified: pixels, clipping, lines, blit, bitmap text, damage, double buffering and window events");
+    puts("GUI runtime verified: pixels, clipping, lines, blit, bitmap text, textbox editing, damage, double buffering and window events");
     return 0;
 }
