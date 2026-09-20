@@ -1,6 +1,9 @@
 #ifndef TC_GUI_IMPLEMENTATION
 #define TC_GUI_IMPLEMENTATION
 #include "tiny_runtime.h"
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 typedef uint32_t TcGuiPixel;
 
@@ -318,5 +321,385 @@ int32_t tc_gui_buffer_present(void *handle) {
     tc_gui_damage(front, back->x0, back->y0, back->x1 - back->x0, back->y1 - back->y0);
     back->dirty = 0;
     return changed;
+}
+
+int32_t tc_gui_buffer_resize(void *handle, int32_t width, int32_t height) {
+    TcGuiBuffer *buffer = (TcGuiBuffer *)handle;
+    TcGuiSurface front, back;
+    int result;
+    if (!buffer)
+        return 3;
+    result = tc_gui_surface_init(&front, width, height);
+    if (result)
+        return result;
+    result = tc_gui_surface_init(&back, width, height);
+    if (result) {
+        tc_gui_surface_release(&front);
+        return result;
+    }
+    tc_gui_surface_release(&buffer->front);
+    tc_gui_surface_release(&buffer->back);
+    buffer->front = front;
+    buffer->back = back;
+    return 0;
+}
+
+enum {
+    TC_GUI_EVENT_NONE = 0,
+    TC_GUI_EVENT_KEY = 1,
+    TC_GUI_EVENT_TEXT = 2,
+    TC_GUI_EVENT_MOUSE = 3,
+    TC_GUI_EVENT_RESIZE = 4,
+    TC_GUI_EVENT_CLOSE = 5,
+    TC_GUI_EVENT_CUSTOM = 6
+};
+
+typedef struct TcGuiEvent {
+    int32_t kind, key, x, y, width, height, button, pressed;
+    uint32_t codepoint;
+} TcGuiEvent;
+
+typedef struct TcGuiWindow {
+    TcGuiBuffer *buffer;
+    int headless, open;
+    TcGuiEvent events[64];
+    unsigned event_read, event_write;
+#ifdef _WIN32
+    HWND hwnd;
+    uint32_t surrogate;
+#endif
+} TcGuiWindow;
+
+static int tc_gui_event_push(TcGuiWindow *window, TcGuiEvent event) {
+    unsigned next;
+    if (!window)
+        return 3;
+    next = (window->event_write + 1u) % 64u;
+    if (next == window->event_read)
+        return 8;
+    window->events[window->event_write] = event;
+    window->event_write = next;
+    return 0;
+}
+
+static int tc_gui_event_pop(TcGuiWindow *window, TcGuiEvent *event) {
+    if (!window || window->event_read == window->event_write)
+        return 0;
+    *event = window->events[window->event_read];
+    window->event_read = (window->event_read + 1u) % 64u;
+    return 1;
+}
+
+#ifdef _WIN32
+static const char tc_gui_window_class[] = "TinyCPlusGuiWindow";
+static ATOM tc_gui_window_atom;
+
+static int32_t tc_gui_mouse_x(LPARAM value) {
+    return (int32_t)(int16_t)(value & 0xffff);
+}
+static int32_t tc_gui_mouse_y(LPARAM value) {
+    return (int32_t)(int16_t)((value >> 16) & 0xffff);
+}
+static void tc_gui_push_mouse(TcGuiWindow *window, LPARAM value, int button, int pressed) {
+    TcGuiEvent event;
+    memset(&event, 0, sizeof(event));
+    event.kind = TC_GUI_EVENT_MOUSE;
+    event.x = tc_gui_mouse_x(value);
+    event.y = tc_gui_mouse_y(value);
+    event.button = button;
+    event.pressed = pressed;
+    tc_gui_event_push(window, event);
+}
+static LRESULT CALLBACK tc_gui_window_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
+    TcGuiWindow *window = (TcGuiWindow *)(uintptr_t)GetWindowLongPtrA(hwnd, GWLP_USERDATA);
+    if (message == WM_NCCREATE) {
+        CREATESTRUCTA *create = (CREATESTRUCTA *)(uintptr_t)lparam;
+        window = (TcGuiWindow *)create->lpCreateParams;
+        window->hwnd = hwnd;
+        SetWindowLongPtrA(hwnd, GWLP_USERDATA, (LONG_PTR)(uintptr_t)window);
+    }
+    if (!window)
+        return DefWindowProcA(hwnd, message, wparam, lparam);
+    switch (message) {
+    case WM_CLOSE: {
+        TcGuiEvent event;
+        memset(&event, 0, sizeof(event));
+        event.kind = TC_GUI_EVENT_CLOSE;
+        tc_gui_event_push(window, event);
+        window->open = 0;
+        DestroyWindow(hwnd);
+        return 0;
+    }
+    case WM_DESTROY:
+        window->hwnd = NULL;
+        window->open = 0;
+        return 0;
+    case WM_SIZE: {
+        int width = (int)(uint16_t)(lparam & 0xffff);
+        int height = (int)(uint16_t)((lparam >> 16) & 0xffff);
+        if (width > 0 && height > 0 &&
+            (width != window->buffer->front.width || height != window->buffer->front.height) &&
+            tc_gui_buffer_resize(window->buffer, width, height) == 0) {
+            TcGuiEvent event;
+            memset(&event, 0, sizeof(event));
+            event.kind = TC_GUI_EVENT_RESIZE;
+            event.width = width;
+            event.height = height;
+            tc_gui_event_push(window, event);
+        }
+        return 0;
+    }
+    case WM_KEYDOWN: {
+        TcGuiEvent event;
+        memset(&event, 0, sizeof(event));
+        event.kind = TC_GUI_EVENT_KEY;
+        event.key = (int32_t)wparam;
+        tc_gui_event_push(window, event);
+        return 0;
+    }
+    case WM_CHAR: {
+        uint32_t cp = (uint32_t)wparam;
+        if (cp >= 0xd800 && cp <= 0xdbff) {
+            window->surrogate = cp;
+            return 0;
+        }
+        if (cp >= 0xdc00 && cp <= 0xdfff && window->surrogate) {
+            cp = 0x10000u + ((window->surrogate - 0xd800u) << 10) + (cp - 0xdc00u);
+            window->surrogate = 0;
+        } else
+            window->surrogate = 0;
+        {
+            TcGuiEvent event;
+            memset(&event, 0, sizeof(event));
+            event.kind = TC_GUI_EVENT_TEXT;
+            event.codepoint = cp;
+            tc_gui_event_push(window, event);
+        }
+        return 0;
+    }
+    case WM_MOUSEMOVE:
+        tc_gui_push_mouse(window, lparam, 0, 0);
+        return 0;
+    case WM_LBUTTONDOWN:
+        tc_gui_push_mouse(window, lparam, 1, 1);
+        return 0;
+    case WM_LBUTTONUP:
+        tc_gui_push_mouse(window, lparam, 1, 0);
+        return 0;
+    case WM_RBUTTONDOWN:
+        tc_gui_push_mouse(window, lparam, 2, 1);
+        return 0;
+    case WM_RBUTTONUP:
+        tc_gui_push_mouse(window, lparam, 2, 0);
+        return 0;
+    case WM_MBUTTONDOWN:
+        tc_gui_push_mouse(window, lparam, 3, 1);
+        return 0;
+    case WM_MBUTTONUP:
+        tc_gui_push_mouse(window, lparam, 3, 0);
+        return 0;
+    case WM_PAINT: {
+        PAINTSTRUCT paint;
+        HDC dc = BeginPaint(hwnd, &paint);
+        TcGuiSurface *surface = &window->buffer->front;
+        BITMAPINFO bitmap;
+        memset(&bitmap, 0, sizeof(bitmap));
+        bitmap.bmiHeader.biSize = sizeof(bitmap.bmiHeader);
+        bitmap.bmiHeader.biWidth = surface->width;
+        bitmap.bmiHeader.biHeight = -surface->height;
+        bitmap.bmiHeader.biPlanes = 1;
+        bitmap.bmiHeader.biBitCount = 32;
+        bitmap.bmiHeader.biCompression = BI_RGB;
+        StretchDIBits(dc, 0, 0, surface->width, surface->height, 0, 0, surface->width,
+                      surface->height, surface->pixels, &bitmap, DIB_RGB_COLORS, SRCCOPY);
+        EndPaint(hwnd, &paint);
+        tc_gui_surface_damage_clear(surface);
+        return 0;
+    }
+    default:
+        return DefWindowProcA(hwnd, message, wparam, lparam);
+    }
+}
+static int tc_gui_register_window(void) {
+    WNDCLASSA type;
+    if (tc_gui_window_atom)
+        return 1;
+    memset(&type, 0, sizeof(type));
+    type.lpfnWndProc = tc_gui_window_proc;
+    type.hInstance = GetModuleHandleA(NULL);
+    type.hCursor = LoadCursorA(NULL, IDC_ARROW);
+    type.lpszClassName = tc_gui_window_class;
+    tc_gui_window_atom = RegisterClassA(&type);
+    return tc_gui_window_atom != 0 || GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
+}
+#endif
+
+void *tc_gui_window_create(int32_t width, int32_t height, TinyString title, int32_t headless,
+                           int32_t *error) {
+    TcGuiWindow *window = (TcGuiWindow *)calloc(1, sizeof(*window));
+    if (error) *error = 0;
+    if (!window) {
+        if (error) *error = 8;
+        return NULL;
+    }
+    window->buffer = (TcGuiBuffer *)tc_gui_buffer_create(width, height, error);
+    if (!window->buffer) {
+        free(window);
+        return NULL;
+    }
+    window->headless = !!headless;
+    window->open = 1;
+#ifdef _WIN32
+    if (!window->headless) {
+        RECT area = {0, 0, width, height};
+        char *caption;
+        if (!tc_gui_register_window()) {
+            if (error) *error = 9;
+            tc_gui_buffer_destroy(window->buffer);
+            free(window);
+            return NULL;
+        }
+        caption = (char *)malloc(title.length + 1);
+        if (!caption) {
+            if (error) *error = 8;
+            tc_gui_buffer_destroy(window->buffer);
+            free(window);
+            return NULL;
+        }
+        memcpy(caption, title.data, title.length);
+        caption[title.length] = 0;
+        AdjustWindowRect(&area, WS_OVERLAPPEDWINDOW, FALSE);
+        window->hwnd = CreateWindowExA(
+            0, tc_gui_window_class, caption, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
+            area.right - area.left, area.bottom - area.top, NULL, NULL, GetModuleHandleA(NULL),
+            window);
+        free(caption);
+        if (!window->hwnd) {
+            if (error) *error = 9;
+            tc_gui_buffer_destroy(window->buffer);
+            free(window);
+            return NULL;
+        }
+        ShowWindow(window->hwnd, SW_SHOW);
+        UpdateWindow(window->hwnd);
+    }
+#else
+    (void)title;
+    if (!window->headless) {
+        if (error) *error = 9;
+        tc_gui_buffer_destroy(window->buffer);
+        free(window);
+        return NULL;
+    }
+#endif
+    return window;
+}
+
+int32_t tc_gui_window_width(void *handle) {
+    TcGuiWindow *window = (TcGuiWindow *)handle;
+    return window ? window->buffer->back.width : 0;
+}
+int32_t tc_gui_window_height(void *handle) {
+    TcGuiWindow *window = (TcGuiWindow *)handle;
+    return window ? window->buffer->back.height : 0;
+}
+int32_t tc_gui_window_open(void *handle) {
+    TcGuiWindow *window = (TcGuiWindow *)handle;
+    return window && window->open;
+}
+void *tc_gui_window_surface(void *handle) {
+    TcGuiWindow *window = (TcGuiWindow *)handle;
+    return window ? &window->buffer->back : NULL;
+}
+int32_t tc_gui_window_present(void *handle) {
+    TcGuiWindow *window = (TcGuiWindow *)handle;
+    int32_t changed;
+    if (!window)
+        return 0;
+    changed = tc_gui_buffer_present(window->buffer);
+#ifdef _WIN32
+    if (!window->headless && window->hwnd && changed) {
+        InvalidateRect(window->hwnd, NULL, FALSE);
+        UpdateWindow(window->hwnd);
+    }
+#endif
+    return changed;
+}
+int32_t tc_gui_window_post(void *handle, int32_t kind, int32_t key, int32_t x, int32_t y,
+                           int32_t width, int32_t height, int32_t button, int32_t pressed,
+                           uint32_t codepoint) {
+    TcGuiEvent event;
+    memset(&event, 0, sizeof(event));
+    event.kind = kind;
+    event.key = key;
+    event.x = x;
+    event.y = y;
+    event.width = width;
+    event.height = height;
+    event.button = button;
+    event.pressed = pressed;
+    event.codepoint = codepoint;
+    return tc_gui_event_push((TcGuiWindow *)handle, event);
+}
+void tc_gui_window_next(void *handle, int32_t timeout, int32_t *kind, int32_t *key, int32_t *x,
+                        int32_t *y, int32_t *width, int32_t *height, int32_t *button,
+                        int32_t *pressed, uint32_t *codepoint) {
+    TcGuiWindow *window = (TcGuiWindow *)handle;
+    TcGuiEvent event;
+    memset(&event, 0, sizeof(event));
+#ifdef _WIN32
+    if (window && !window->headless) {
+        DWORD start = GetTickCount();
+        for (;;) {
+            MSG message;
+            while (PeekMessageA(&message, NULL, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&message);
+                DispatchMessageA(&message);
+                if (tc_gui_event_pop(window, &event))
+                    goto ready;
+            }
+            if (tc_gui_event_pop(window, &event))
+                goto ready;
+            if (timeout <= 0 || (int32_t)(GetTickCount() - start) >= timeout)
+                break;
+            MsgWaitForMultipleObjects(0, NULL, FALSE, 10, QS_ALLINPUT);
+        }
+    } else
+#endif
+    if (window)
+        tc_gui_event_pop(window, &event);
+#ifdef _WIN32
+ready:
+#endif
+    if (kind) *kind = event.kind;
+    if (key) *key = event.key;
+    if (x) *x = event.x;
+    if (y) *y = event.y;
+    if (width) *width = event.width;
+    if (height) *height = event.height;
+    if (button) *button = event.button;
+    if (pressed) *pressed = event.pressed;
+    if (codepoint) *codepoint = event.codepoint;
+}
+void tc_gui_window_close(void *handle) {
+    TcGuiWindow *window = (TcGuiWindow *)handle;
+    if (!window)
+        return;
+    window->open = 0;
+#ifdef _WIN32
+    if (!window->headless && window->hwnd)
+        PostMessageA(window->hwnd, WM_CLOSE, 0, 0);
+#endif
+}
+void tc_gui_window_destroy(void *handle) {
+    TcGuiWindow *window = (TcGuiWindow *)handle;
+    if (!window)
+        return;
+#ifdef _WIN32
+    if (window->hwnd)
+        DestroyWindow(window->hwnd);
+#endif
+    tc_gui_buffer_destroy(window->buffer);
+    free(window);
 }
 #endif
