@@ -1,0 +1,149 @@
+import std.net;
+import std.string;
+import std.time;
+import std.tui;
+
+async int serveOnce(TcpSocket listener)
+{
+    var socket = await listener.acceptAsync();
+    defer socket.close();
+
+    byte[1] request = {};
+    var received = await socket.readAsync(request[:]);
+
+    if (received != 1 || request[0] != 1)
+        return 2;
+
+    byte[3] response = {1, 72, 1};
+    var written = await socket.writeAsync(response[:]);
+
+    if (written != 3)
+        return 3;
+
+    return 0;
+}
+
+async int probe(string host, int port)
+{
+    var socket =
+        await TcpSocket.connectAsync(
+            host,
+            port,
+            timeout: 2000
+        );
+
+    defer socket.close();
+
+    byte[1] request = {1};
+    byte[3] response = {};
+
+    var sent =
+        await socket.writeAsync(
+            request[:],
+            timeout: 2000
+        );
+
+    if (sent != 1)
+        return -1;
+
+    var received =
+        await socket.readAsync(
+            response[:],
+            timeout: 2000
+        );
+
+    if (received != 3 || response[0] != 1)
+        return -1;
+
+    return response[1];
+}
+
+int main()
+{
+    var listener, listenError =
+        TcpSocket.listen("127.0.0.1", 0);
+
+    assert(listenError == 0);
+    defer listener.close();
+
+    var server = serveOnce(listener);
+    defer server.destroy();
+
+    var window, uiError =
+        Window.create(
+            width: 44,
+            height: 8,
+            headless: true
+        );
+
+    assert(uiError == 0);
+    defer window.destroy();
+
+    var root = Ui.column();
+    root.add(Ui.label("TinyStatus"));
+
+    var panel = Ui.panel("Server");
+    var status = Ui.label("Connecting...");
+    panel.add(status);
+    root.add(panel);
+
+    window.setContent(root);
+
+    var request =
+        probe(
+            "127.0.0.1",
+            listener.port()
+        );
+    defer request.destroy();
+
+    int spins = 0;
+
+    while (!request.ready() && spins < 5000) {
+        // Headless CI updates the cell buffer but does not emit ANSI.
+        window.draw();
+
+        var event =
+            window.nextEvent(timeout: 1);
+
+        window.dispatch(event);
+        Timer.sleep(1);
+        spins++;
+    }
+
+    assert(request.ready());
+
+    var score, networkError =
+        request.result();
+
+    assert(networkError == 0);
+    assert(score == 72);
+
+    var number = String.fromInt(score);
+    defer number.destroy();
+
+    var message =
+        String.concat(
+            "Server score: ",
+            number.view()
+        );
+    defer message.destroy();
+
+    status.setText(message.view());
+
+    window.draw();
+
+    var snapshot = window.snapshot();
+    defer snapshot.destroy();
+
+    assert(
+        String.contains(
+            snapshot.view(),
+            "Server score: 72"
+        )
+    );
+
+    assert(server.get() == 0);
+
+    println("dashboard ok");
+    return 0;
+}

@@ -1,0 +1,59 @@
+import std.concurrent;
+
+int twice(int value)
+{
+    return value * 2;
+}
+
+void produce(Channel<int> channel)
+{
+    channel.send(42);
+    channel.close();
+}
+
+int main()
+{
+    var a = spawn twice(1);
+    defer a.destroy();
+    var b = spawn twice(2);
+    defer b.destroy();
+    var c = spawn twice(3);
+    defer c.destroy();
+    var d = spawn twice(4);
+    defer d.destroy();
+
+    var completed = Atomic.create();
+    defer completed.destroy();
+
+    int total = 0;
+    total += a.get();
+    completed.add(1);
+    total += b.get();
+    completed.add(1);
+    total += c.get();
+    completed.add(1);
+    total += d.get();
+    completed.add(1);
+
+    assert(total == 20);
+    assert(completed.load() == 4);
+
+    var channel = Channel<int>.create(2);
+    defer channel.destroy();
+
+    var producer = spawn produce(channel);
+    defer producer.destroy();
+
+    var message, error = channel.receive();
+    assert(error == 0 && message == 42);
+    producer.get();
+
+    var unused, closed = channel.receive();
+    assert(closed != 0);
+
+    println(total);
+    println(completed.load());
+    println(message);
+    println("closed");
+    return 0;
+}

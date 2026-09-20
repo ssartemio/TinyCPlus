@@ -1,0 +1,73 @@
+import std.fs;
+import std.string;
+import std.time;
+import std.tui;
+
+int main()
+{
+    var window, error =
+        Window.create(
+            width: 44,
+            height: 8,
+            headless: true
+        );
+
+    assert(error == 0);
+    defer window.destroy();
+
+    var root = Ui.column();
+    root.add(Ui.label("TinyStatus exercises"));
+
+    var panel = Ui.panel("Server");
+    var status = Ui.label("Waiting");
+    panel.add(status);
+    root.add(panel);
+
+    window.setContent(root);
+
+    var timer = Timer.after(1);
+    defer timer.destroy();
+    timer.get();
+
+    int score = 72;
+    string severity = "WARNING";
+
+    var number = String.fromInt(score);
+    defer number.destroy();
+
+    var first = String.concat("Score: ", number.view());
+    defer first.destroy();
+
+    var second = String.concat(first.view(), " | ");
+    defer second.destroy();
+
+    var message = String.concat(second.view(), severity);
+    defer message.destroy();
+
+    status.setText(message.view());
+
+    assert(File.writeAtomic(
+        "build/tutorial-dashboard-history.txt",
+        message.view()
+    ) == 0);
+
+    window.draw();
+
+    var snapshot = window.snapshot();
+    defer snapshot.destroy();
+
+    assert(String.contains(snapshot.view(), "Score: 72"));
+    assert(String.contains(snapshot.view(), "WARNING"));
+
+    var stored, readError =
+        File.readAll("build/tutorial-dashboard-history.txt");
+    assert(readError == 0);
+    defer stored.destroy();
+
+    assert(String.contains(stored.view(), "Score: 72"));
+
+    println("dashboard exercises ok");
+
+    assert(File.remove("build/tutorial-dashboard-history.txt") == 0);
+    return 0;
+}

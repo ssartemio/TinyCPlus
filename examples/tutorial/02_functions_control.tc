@@ -1,0 +1,40 @@
+int healthScore(int temperature, int load, int factor = 1)
+{
+    return temperature + load * factor;
+}
+
+int clampScore(int value, int minimum, int maximum)
+{
+    if (value < minimum) return minimum;
+    if (value > maximum) return maximum;
+    return value;
+}
+
+int classify(int score)
+{
+    if (score < 60) return 0;
+    if (score < 90) return 1;
+    if (score < 120) return 2;
+    return 3;
+}
+
+int main()
+{
+    var score = healthScore(load: 37, factor: 1, temperature: 24);
+    assert(score == 61);
+    assert(clampScore(200, 0, 100) == 100);
+    assert(classify(score) == 1);
+
+    int total = 0;
+    for (int sample = 0; sample < 6; sample = sample + 1) {
+        if (sample == 2)
+            continue;
+        total += sample;
+    }
+
+    assert(total == 13);
+    println(score);
+    println(classify(score));
+    println(total);
+    return 0;
+}

@@ -1,0 +1,46 @@
+import std.collections;
+
+int main()
+{
+    var scores = Array<int>.create();
+    defer scores.destroy();
+
+    scores.push(42);
+    scores.push(61);
+    scores.push(95);
+    scores.push(55);
+    scores.push(88);
+    scores.push(73);
+
+    assert(scores.length == 6);
+
+    var warnings = scores.stream().filter(x => x >= 60).count();
+    assert(warnings == 4);
+
+    var first, found = scores.stream().filter(x => x >= 90).first();
+    assert(found && first == 95);
+
+    var maximum = scores.stream().reduce(0, (best, x) => {
+        if (x > best)
+            return x;
+        return best;
+    });
+    assert(maximum == 95);
+
+    var selected = Array<int>.create();
+    defer selected.destroy();
+
+    scores.stream().filter(x => x >= 60).collect(&selected);
+    assert(selected.length == 4);
+
+    int factor = 2;
+    var multiply = owned((int value) => value * factor);
+    defer multiply.destroy();
+
+    assert(multiply(21) == 42);
+
+    println(warnings);
+    println(maximum);
+    println(selected.length);
+    return 0;
+}

@@ -1,0 +1,42 @@
+import std.net;
+
+async int receiveFour(TcpSocket listener)
+{
+    var socket = await listener.acceptAsync();
+    defer socket.close();
+
+    byte[4] buffer = {};
+    var received = await socket.readAsync(buffer[:], timeout: 2000);
+
+    if (received != 4)
+        return -1;
+
+    return buffer[0] + buffer[1] + buffer[2] + buffer[3];
+}
+
+int main()
+{
+    var listener, error = TcpSocket.listen("127.0.0.1", 0);
+    assert(error == 0);
+    defer listener.close();
+
+    var server = receiveFour(listener);
+    defer server.destroy();
+
+    var connecting =
+        TcpSocket.connectAsync(
+            "127.0.0.1",
+            listener.port(),
+            timeout: 2000
+        );
+    defer connecting.destroy();
+
+    var client = connecting.get();
+    defer client.close();
+
+    byte[4] payload = {1, 2, 3, 4};
+    assert(client.write(payload[:]) == 4);
+
+    println(server.get());
+    return 0;
+}

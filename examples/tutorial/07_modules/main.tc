@@ -1,0 +1,18 @@
+module tutorial.main;
+import model;
+
+extern C {
+    int status_checksum(int temperature, int load);
+}
+
+int main()
+{
+    Measurement sample(24, 37);
+
+    assert(sample.score() == 61);
+    assert(status_checksum(24, 37) == 781);
+
+    println(sample.score());
+    println(status_checksum(24, 37));
+    return 0;
+}

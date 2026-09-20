@@ -1,0 +1,34 @@
+import std.string;
+
+OwnedString makeStatus(int value)
+{
+    var number = String.fromInt(value);
+    defer number.destroy();
+
+    return String.concat("status=", number.view());
+}
+
+int main()
+{
+    int* heapValue = new int(42);
+
+    assert(*heapValue == 42);
+
+    var first = String.copy("Tiny");
+    defer first.destroy();
+
+    var second = String.concat(first.view(), "C+");
+    defer second.destroy();
+
+    var status = makeStatus(*heapValue);
+    defer status.destroy();
+
+    assert(second.view() == "TinyC+");
+    assert(status.view() == "status=42");
+
+    println(second.view());
+    println(status.view());
+
+    delete heapValue;
+    return 0;
+}

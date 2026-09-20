@@ -1,0 +1,17 @@
+int main()
+{
+    i32 temperature = 50;
+    int load = 40;
+    bool connected = false;
+    var score = temperature + load;
+
+    assert(score == 90);
+
+    if (connected && score < 80)
+        println("OK");
+    else
+        println("WARN");
+
+    println(score);
+    return 0;
+}

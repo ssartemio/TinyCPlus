@@ -1,0 +1,13 @@
+int work()
+{
+    defer println("cleanup");
+
+    println("body");
+    return 42;
+}
+
+int main()
+{
+    println(work());
+    return 0;
+}
