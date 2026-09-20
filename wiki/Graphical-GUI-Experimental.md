@@ -100,19 +100,19 @@ int main()
 
 ## Desarrollo por PR
 
-**PR #4 — GUI foundation**  
+**[PR #4 — GUI foundation](https://github.com/ssartemio/TinyCPlus/pull/4)**  
 Surface, DoubleBuffer, bitmap text, GuiWindow, Win32/GDI, eventos, TextBox,
 Button, Focus y pruebas.
 
-**PR #9 — Linux/X11**  
+**[PR #9 — Linux/X11](https://github.com/ssartemio/TinyCPlus/pull/9)**  
 Backend Xlib con `XPutImage`, eventos normalizados y smoke real bajo Xvfb en
 x86-64/ARM64.
 
-**PR #10 — widgets portables**  
+**[PR #10 — widgets portables](https://github.com/ssartemio/TinyCPlus/pull/10)**  
 Checkbox, ProgressBar y helpers adicionales de layout, implementados en TinyC+
 sin runtime C extra.
 
-**feature/gui-macos**  
+**[feature/gui-macos](https://github.com/ssartemio/TinyCPlus/tree/feature/gui-macos)**  
 Backend Cocoa/CoreGraphics experimental desde C11 mediante runtime Objective-C.
 La compilación y enlace se validan con Clang; la validación WindowServer real es
 un paso separado.

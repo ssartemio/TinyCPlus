@@ -125,6 +125,7 @@ explícitamente las pruebas que necesitan paquetes Python; no es una validación
 - [Cobertura del roadmap y límites](docs/STATUS.md)
 - [Índice de API estándar](docs/API.md)
 - [Dependencias y licencias](THIRD_PARTY.md)
+- [Wiki completa del proyecto](wiki/Home.md)
 
 La especificación original se conserva en [docs/SPEC.md](docs/SPEC.md) como
 referencia de requisitos. El comportamiento implementado se describe en estos

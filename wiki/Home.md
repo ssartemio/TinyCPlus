@@ -93,6 +93,8 @@ modelo de TinyC+.
 
 **[Arquitectura del compilador](Compiler-Architecture)** → cómo se implementa.
 
+**[Mapa del repositorio](Project-Structure)** → dónde vive cada responsabilidad.
+
 **[Cookbook de ejemplos](Examples-Cookbook)** → programas representativos.
 
 ## Capacidades principales

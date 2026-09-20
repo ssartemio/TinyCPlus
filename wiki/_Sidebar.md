@@ -7,6 +7,7 @@
 - [Filosofía y diseño](Philosophy-and-Design)
 - [Recorrido por el lenguaje](Language-Tour)
 - [Cookbook de ejemplos](Examples-Cookbook)
+- [Cheat sheet](Cheat-Sheet)
 
 **Lenguaje**
 - [Memoria y recursos](Memory-and-Resources)
@@ -23,6 +24,7 @@
 **Proyecto**
 - [Tooling, CLI y REPL](Tooling-CLI-and-REPL)
 - [Arquitectura del compilador](Compiler-Architecture)
+- [Mapa del repositorio](Project-Structure)
 - [Modelo de costes y rendimiento](Cost-Model-and-Performance)
 - [Biblioteca estándar](Standard-Library)
 - [Testing, CI y calidad](Testing-CI-and-Release)
