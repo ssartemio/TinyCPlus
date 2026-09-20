@@ -1,0 +1,26 @@
+import std.gui;
+
+int main() {
+    var window, error = GuiWindow.create(width: 800, height: 500, title: "TinyC+ GUI");
+    if (error != 0) {
+        println(error);
+        return error;
+    }
+    defer window.destroy();
+
+    uint background = Pixel.rgba(18, 24, 32);
+    uint accent = Pixel.rgba(70, 160, 240);
+    while (window.isOpen()) {
+        GuiEvent event = window.nextEvent(timeout: 16);
+        if (event.kind == 5)
+            break;
+
+        Surface canvas = window.surface();
+        canvas.clear(background);
+        canvas.fillRect(40, 40, 240, 100, accent);
+        canvas.rect(20, 20, window.width() - 40, window.height() - 40,
+                    Pixel.rgba(230, 237, 243));
+        window.present();
+    }
+    return 0;
+}
