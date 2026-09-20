@@ -119,3 +119,8 @@ int main() {
 ''')
 p = run('run', textbox_source)
 assert p.returncode == 0, (p.stdout, p.stderr)
+
+
+form_source = ROOT / 'examples' / 'gui_form.tc'
+p = run('check', form_source)
+assert p.returncode == 0, (p.stdout, p.stderr)
