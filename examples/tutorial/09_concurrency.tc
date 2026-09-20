@@ -1,0 +1,50 @@
+import std.concurrent;
+
+void increment(void* argument)
+{
+    Atomic* counter = argument;
+    counter.add(1);
+}
+
+int doubleValue(int value)
+{
+    return value * 2;
+}
+
+int main()
+{
+    var counter = Atomic.create();
+    defer counter.destroy();
+
+    var thread = Thread.start(increment, &counter);
+    assert(thread.join() == 0);
+    assert(counter.load() == 1);
+
+    var future = Future<int>.create();
+    defer future.destroy();
+
+    assert(future.complete(40) == 0);
+    assert(future.ready());
+
+    var futureValue, futureError = future.get();
+    assert(futureError == 0 && futureValue == 40);
+
+    var channel = Channel<int>.create(2);
+    defer channel.destroy();
+
+    assert(channel.send(41) == 0);
+    var message, channelError = channel.receive();
+    assert(channelError == 0 && message == 41);
+    channel.close();
+
+    var task = spawn doubleValue(21);
+    defer task.destroy();
+
+    assert(task.get() == 42);
+
+    println(counter.load());
+    println(futureValue);
+    println(message);
+    println(42);
+    return 0;
+}

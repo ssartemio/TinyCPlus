@@ -1,0 +1,40 @@
+import std.net;
+
+async int serveOnce(TcpSocket listener)
+{
+    var socket = await listener.acceptAsync();
+    defer socket.close();
+
+    byte[8] buffer = {};
+
+    var received = await socket.readAsync(buffer[:]);
+    assert(received == 3);
+    assert(buffer[0] == 1);
+    assert(buffer[1] == 2);
+    assert(buffer[2] == 3);
+
+    return 42;
+}
+
+int main()
+{
+    var listener, error = TcpSocket.listen("127.0.0.1", 0);
+    assert(error == 0);
+    defer listener.close();
+
+    var serving = serveOnce(listener);
+    defer serving.destroy();
+
+    var connecting =
+        TcpSocket.connectAsync("127.0.0.1", listener.port());
+    defer connecting.destroy();
+
+    var client = connecting.get();
+    defer client.close();
+
+    byte[3] data = {1, 2, 3};
+    assert(client.write(data[:]) == 3);
+
+    println(serving.get());
+    return 0;
+}

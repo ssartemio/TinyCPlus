@@ -1,0 +1,43 @@
+interface Scorable {
+    int score();
+}
+
+class Measurement {
+    int temperature;
+    int load;
+
+    Measurement(int temperature, int load)
+    {
+        this.temperature = temperature;
+        this.load = load;
+    }
+
+    int score()
+    {
+        return temperature + load;
+    }
+
+    property bool healthy {
+        get => score() < 80;
+    }
+}
+
+int consume(Scorable value)
+{
+    return value.score();
+}
+
+int main()
+{
+    Measurement sample(24, 37);
+    Scorable source = &sample;
+
+    assert(sample.score() == 61);
+    assert(sample.healthy);
+    assert(source.score() == 61);
+    assert(consume(&sample) == 61);
+
+    println(sample.score());
+    println(sample.healthy);
+    return 0;
+}

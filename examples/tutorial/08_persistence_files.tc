@@ -1,0 +1,45 @@
+import std.fs;
+import std.string;
+
+Error saveScore(string path, int score)
+{
+    var text = String.fromInt(score);
+    defer text.destroy();
+
+    return File.writeAtomic(path, text.view());
+}
+
+(int, Error) loadScore(string path)
+{
+    var contents, error = File.readAll(path);
+
+    if (error != 0)
+        return (0, error);
+
+    defer contents.destroy();
+
+    var value, parseError = String.parseInt(contents.view());
+
+    if (parseError != 0)
+        return (0, parseError);
+
+    return (cast<int>(value), 0);
+}
+
+int main()
+{
+    string path = "build/tutorial-status.txt";
+
+    assert(saveScore(path, 72) == 0);
+    assert(File.exists(path));
+
+    var value, error = loadScore(path);
+
+    assert(error == 0);
+    assert(value == 72);
+
+    println(value);
+
+    assert(File.remove(path) == 0);
+    return 0;
+}

@@ -1,0 +1,17 @@
+module tutorial.model;
+
+class Measurement {
+    int temperature;
+    int load;
+
+    Measurement(int temperature, int load)
+    {
+        this.temperature = temperature;
+        this.load = load;
+    }
+
+    int score()
+    {
+        return temperature + load;
+    }
+}

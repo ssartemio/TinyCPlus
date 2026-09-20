@@ -1,0 +1,17 @@
+int main()
+{
+    int temperature = 24;
+    int load = 37;
+    bool connected = true;
+    var score = temperature + load;
+
+    assert(score == 61);
+
+    if (connected && score < 80)
+        println("OK");
+    else
+        println("WARN");
+
+    println(score);
+    return 0;
+}
