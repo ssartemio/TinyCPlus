@@ -53,8 +53,12 @@ class Surface {
     }
     void blit(int x, int y, Surface source, int sourceX = 0, int sourceY = 0,
               int width = -1, int height = -1) {
-        int w = width < 0 ? source.width() : width;
-        int h = height < 0 ? source.height() : height;
+        int w = width;
+        int h = height;
+        if (w < 0)
+            w = source.width();
+        if (h < 0)
+            h = source.height();
         tc_gui_blit(handle, x, y, source.handle, sourceX, sourceY, w, h);
     }
     bool damage(int* x, int* y, int* width, int* height) {
