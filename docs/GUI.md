@@ -68,3 +68,15 @@ The first graphical widgets are intentionally immediate-mode:
 `OwnedString`, accepts normalized `GuiEvent` key/text input and draws a
 single-line field with caret. Long content uses a small horizontal viewport so
 the caret remains visible. This is deliberately not a second text engine.
+
+
+### Stateful button and focus
+
+`GuiButton` wraps the immediate button renderer with press/release state and
+keyboard activation through Enter/Space when focused. Its label is a borrowed
+`string`, so the caller must keep non-literal backing storage alive.
+
+`GuiFocus` is intentionally small: it stores a focus index, supports
+`next()/previous()/set()`, and consumes Tab to advance. Mouse hit-testing
+remains explicit, which keeps layout and ownership visible instead of introducing
+a hidden widget tree.

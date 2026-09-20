@@ -195,3 +195,48 @@ int main() {
 ''')
 p = run('run', input_source)
 assert p.returncode == 0, (p.stdout, p.stderr)
+
+
+button_focus_source = folder / 'button_focus.tc'
+button_focus_source.write_text(r'''
+import std.gui;
+
+int main() {
+    GuiFocus focus = GuiFocus(2);
+    assert(focus.isFocused(0));
+
+    GuiEvent tab;
+    tab.kind = 1;
+    tab.key = 9;
+    assert(focus.handleEvent(tab));
+    assert(focus.isFocused(1));
+    focus.previous();
+    assert(focus.isFocused(0));
+
+    GuiButton button = GuiButton("OK");
+    GuiRect area = GuiRect(10, 10, 80, 24);
+
+    GuiEvent press;
+    press.kind = 3;
+    press.button = 1;
+    press.pressed = 1;
+    press.x = 20;
+    press.y = 15;
+    assert(!button.handleEvent(press, area));
+    assert(button.down);
+
+    GuiEvent release = press;
+    release.pressed = 0;
+    assert(button.handleEvent(release, area));
+    assert(!button.down);
+
+    GuiEvent enter;
+    enter.kind = 1;
+    enter.key = 13;
+    assert(button.handleEvent(enter, area, focused: true));
+    assert(!button.handleEvent(enter, area, focused: false));
+    return 0;
+}
+''')
+p = run('run', button_focus_source)
+assert p.returncode == 0, (p.stdout, p.stderr)

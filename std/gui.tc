@@ -283,3 +283,84 @@ class GuiInput {
         return event.kind == 2;
     }
 }
+
+
+/// Small stateful button built on the immediate-mode renderer.
+/// text is a borrowed string and must outlive the button.
+class GuiButton {
+    string text;
+    bool down;
+
+    GuiButton(string text) {
+        this.text = text;
+        this.down = false;
+    }
+
+    bool handleEvent(GuiEvent event, GuiRect area, bool focused = false) {
+        if (event.kind == 3 && event.button == 1) {
+            if (event.pressed != 0) {
+                down = area.contains(event.x, event.y);
+                return false;
+            }
+            bool clicked = down && area.contains(event.x, event.y);
+            down = false;
+            return clicked;
+        }
+        if (focused && event.kind == 1 && (event.key == 13 || event.key == 32))
+            return true;
+        return false;
+    }
+
+    void draw(Surface surface, GuiRect area) {
+        GuiDraw.button(surface, area, text, pressed: down);
+    }
+}
+
+/// Minimal focus index for forms. Tab advances focus; callers may set focus on mouse hits.
+class GuiFocus {
+    int index;
+    int count;
+
+    GuiFocus(int count) {
+        this.count = count;
+        if (count > 0)
+            this.index = 0;
+        else
+            this.index = -1;
+    }
+
+    bool isFocused(int candidate) { return candidate == index; }
+
+    void set(int candidate) {
+        if (candidate >= 0 && candidate < count)
+            index = candidate;
+    }
+
+    void next() {
+        if (count < 1) {
+            index = -1;
+            return;
+        }
+        index = index + 1;
+        if (index >= count)
+            index = 0;
+    }
+
+    void previous() {
+        if (count < 1) {
+            index = -1;
+            return;
+        }
+        index = index - 1;
+        if (index < 0)
+            index = count - 1;
+    }
+
+    bool handleEvent(GuiEvent event) {
+        if (event.kind == 1 && event.key == 9) {
+            next();
+            return true;
+        }
+        return false;
+    }
+}
