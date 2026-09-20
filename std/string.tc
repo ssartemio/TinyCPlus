@@ -9,6 +9,8 @@ extern C {
     int tc_string_ends(string text, string suffix);
     i64 tc_parse_int(string text, Error* error);
     string tc_format_int(i64 value);
+    string tc_format_double(double value);
+    void tc_bytes_copy(char* destination, string source);
 }
 /// Explicit ownership. view() borrows bytes; destroy invalidates all views.
 class OwnedString {
@@ -19,10 +21,138 @@ class OwnedString {
 class String {
     static OwnedString copy(string source) { OwnedString result; result.value = tc_string_copy(source); assert(result.value.data != null); return result; }
     static OwnedString concat(string first, string second) { OwnedString result; result.value = tc_string_concat(first, second); assert(result.value.data != null); return result; }
+    /// Shortest decimal text that reads back as exactly the same double.
+    static OwnedString fromDouble(double value) { OwnedString result; result.value = tc_format_double(value); assert(result.value.data != null); return result; }
     static OwnedString fromInt(i64 value) { OwnedString result; result.value = tc_format_int(value); assert(result.value.data != null); return result; }
     static (i64, Error) parseInt(string text) { Error error; var value = tc_parse_int(text, &error); return (value, error); }
     static i64 indexOf(string text, string pattern) { return tc_string_find(text, pattern); }
     static bool contains(string text, string pattern) { return tc_string_find(text, pattern) >= 0; }
     static bool startsWith(string text, string prefix) { return tc_string_starts(text, prefix) != 0; }
     static bool endsWith(string text, string suffix) { return tc_string_ends(text, suffix) != 0; }
+}
+
+/// A growable byte buffer for building text without quadratic copying.
+/// view() borrows the current bytes; it is invalidated by the next append,
+/// clear or destroy. Copies alias the same buffer. Call destroy exactly once.
+class StringBuilder {
+    char* data;
+    u64 length;
+    u64 capacity;
+
+    static StringBuilder create() {
+        StringBuilder builder;
+        return builder;
+    }
+
+    /// Ensures room for extra more bytes plus a terminating NUL.
+    void reserve(u64 extra) {
+        assert(extra < 18446744073709551615 - length);
+        u64 required = length + extra + 1;
+        if (required <= capacity) return;
+        u64 next = capacity * 2;
+        if (next < 64) next = 64;
+        if (next < required) next = required;
+        var allocated = realloc(data, next);
+        assert(allocated != null);
+        data = allocated;
+        capacity = next;
+    }
+
+    void append(string text) {
+        if (text.length == 0) return;
+        reserve(text.length);
+        tc_bytes_copy(&data[length], text);
+        length = length + text.length;
+        data[length] = '\0';
+    }
+
+    void appendChar(char value) {
+        reserve(1);
+        data[length] = value;
+        length++;
+        data[length] = '\0';
+    }
+
+    void appendUnsigned(u64 value) {
+        char[20] digits;
+        int count = 0;
+        while (true) {
+            digits[count] = cast<char>(48 + cast<int>(value % 10));
+            value = value / 10;
+            count++;
+            if (value == 0) break;
+        }
+        reserve(cast<u64>(count));
+        while (count > 0) {
+            count--;
+            data[length] = digits[count];
+            length++;
+        }
+        data[length] = '\0';
+    }
+
+    void appendInt(i64 value) {
+        if (value < 0) {
+            appendChar('-');
+            // Negate in unsigned arithmetic so the minimum i64 is exact.
+            appendUnsigned(0 - cast<u64>(value));
+        } else
+            appendUnsigned(cast<u64>(value));
+    }
+
+    /// Lowercase hexadecimal without prefix.
+    void appendHex(u64 value) {
+        char[16] digits;
+        int count = 0;
+        while (true) {
+            int nibble = cast<int>(value % 16);
+            if (nibble < 10)
+                digits[count] = cast<char>(48 + nibble);
+            else
+                digits[count] = cast<char>(87 + nibble);
+            value = value / 16;
+            count++;
+            if (value == 0) break;
+        }
+        reserve(cast<u64>(count));
+        while (count > 0) {
+            count--;
+            data[length] = digits[count];
+            length++;
+        }
+        data[length] = '\0';
+    }
+
+    void appendDouble(double value) {
+        var text = tc_format_double(value);
+        assert(text.data != null);
+        append(text);
+        tc_string_free(text);
+    }
+
+    /// Borrowed view of the current contents.
+    string view() {
+        if (length == 0) return "";
+        return tc_string_view(data, length);
+    }
+
+    /// Independent copy that outlives the builder.
+    OwnedString toOwned() {
+        OwnedString result;
+        result.value = tc_string_copy(view());
+        assert(result.value.data != null);
+        return result;
+    }
+
+    void clear() {
+        length = 0;
+        if (capacity > 0) data[0] = '\0';
+    }
+
+    void destroy() {
+        free(data);
+        data = null;
+        length = 0;
+        capacity = 0;
+    }
 }

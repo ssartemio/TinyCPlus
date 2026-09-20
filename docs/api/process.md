@@ -4,6 +4,12 @@ Source: `std/process.tc`
 
 Module: `std.process`
 
+## tc_process_spawn
+
+```c
+i32 tc_process_spawn(string* arguments, u64 count, i32* error);
+```
+
 ## tc_process_command
 
 ```c
@@ -58,6 +64,16 @@ Executes a shell command explicitly; return status follows the host C runtime.
 
 ```c
 static i32 run(string command);
+```
+
+### Process.spawn
+
+Runs arguments[0] with the remaining arguments, without a shell, and
+waits for it. Returns (exit status, error): error is 0 when the program
+ran, non-zero when it could not be started. On POSIX a signal gives 128+n.
+
+```c
+static (i32, i32) spawn(Array<string>* arguments);
 ```
 
 ### Process.environment

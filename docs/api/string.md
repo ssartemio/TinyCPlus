@@ -58,6 +58,18 @@ i64 tc_parse_int(string text, i32* error);
 string tc_format_int(i64 value);
 ```
 
+## tc_format_double
+
+```c
+string tc_format_double(double value);
+```
+
+## tc_bytes_copy
+
+```c
+void tc_bytes_copy(char* destination, string source);
+```
+
 ## OwnedString
 
 Explicit ownership. view() borrows bytes; destroy invalidates all views.
@@ -102,6 +114,14 @@ static OwnedString copy(string source);
 static OwnedString concat(string first, string second);
 ```
 
+### String.fromDouble
+
+Shortest decimal text that reads back as exactly the same double.
+
+```c
+static OwnedString fromDouble(double value);
+```
+
 ### String.fromInt
 
 ```c
@@ -136,5 +156,113 @@ static bool startsWith(string text, string prefix);
 
 ```c
 static bool endsWith(string text, string suffix);
+```
+
+## StringBuilder
+
+A growable byte buffer for building text without quadratic copying.
+view() borrows the current bytes; it is invalidated by the next append,
+clear or destroy. Copies alias the same buffer. Call destroy exactly once.
+
+```c
+class StringBuilder
+```
+
+### StringBuilder.data
+
+```c
+char* data;
+```
+
+### StringBuilder.length
+
+```c
+u64 length;
+```
+
+### StringBuilder.capacity
+
+```c
+u64 capacity;
+```
+
+### StringBuilder.create
+
+```c
+static StringBuilder create();
+```
+
+### StringBuilder.reserve
+
+Ensures room for extra more bytes plus a terminating NUL.
+
+```c
+void reserve(u64 extra);
+```
+
+### StringBuilder.append
+
+```c
+void append(string text);
+```
+
+### StringBuilder.appendChar
+
+```c
+void appendChar(char value);
+```
+
+### StringBuilder.appendUnsigned
+
+```c
+void appendUnsigned(u64 value);
+```
+
+### StringBuilder.appendInt
+
+```c
+void appendInt(i64 value);
+```
+
+### StringBuilder.appendHex
+
+Lowercase hexadecimal without prefix.
+
+```c
+void appendHex(u64 value);
+```
+
+### StringBuilder.appendDouble
+
+```c
+void appendDouble(double value);
+```
+
+### StringBuilder.view
+
+Borrowed view of the current contents.
+
+```c
+string view();
+```
+
+### StringBuilder.toOwned
+
+Independent copy that outlives the builder.
+
+```c
+OwnedString toOwned();
+```
+
+### StringBuilder.clear
+
+```c
+void clear();
+```
+
+### StringBuilder.destroy
+
+```c
+void destroy();
 ```
 
