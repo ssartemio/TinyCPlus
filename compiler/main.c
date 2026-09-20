@@ -19,6 +19,7 @@ static void usage(FILE *f) {
           "  --emit-tokens        Print lexer tokens\n"
           "  --emit-asm           Generate assembler with --cc gcc/clang\n"
           "  --cc PATH            Use an external C compiler instead of libtcc\n"
+          "  --gui-backend NAME   GUI backend: headless, x11 (Linux), cocoa (macOS)\n"
           "  --c-source PATH      Compile and link a C source or object file\n"
           "  -I PATH / -L PATH    Add C include / library search paths\n"
           "  -l NAME              Link a C library\n"
@@ -180,6 +181,9 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "tiny: %s needs a value (at most 32 per option)\n", a);
                 return 2;
             }
+        } else if (!strcmp(a, "--gui-backend")) {
+            if (++i == argc || backend_gui_backend(argv[i]))
+                return 2;
         } else if (!strcmp(a, "-o") || !strcmp(a, "--cc") || !strcmp(a, "--home")) {
             if (++i == argc) {
                 fprintf(stderr, "tiny: %s requires an argument\n", a);

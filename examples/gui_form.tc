@@ -13,13 +13,13 @@ int main() {
 
     while (window.isOpen()) {
         GuiEvent event = window.nextEvent(timeout: 16);
-        if (event.kind == 5)
+        if (event.kind == GuiEventKind.Close)
             break;
 
         GuiRect field = GuiRect(40, 70, 360, 28);
         GuiRect closeArea = GuiRect(40, 116, 120, 30);
 
-        if (event.kind == 3 && event.button == 1 && event.pressed != 0) {
+        if (event.kind == GuiEventKind.Mouse && event.button == GuiMouseButton.Left && event.pressed != 0) {
             if (field.contains(event.x, event.y))
                 focus.set(0);
             if (closeArea.contains(event.x, event.y))

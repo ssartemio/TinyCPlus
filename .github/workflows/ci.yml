@@ -56,3 +56,32 @@ jobs:
       - run: ./build/tui-asan
       - run: clang -std=c11 -D_POSIX_C_SOURCE=200809L -fsanitize=address,undefined -g tests/runtime_gui.c -lm -o build/gui-asan
       - run: ./build/gui-asan
+
+  gui-x11:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update && sudo apt-get install -y libx11-dev xvfb
+      - run: python tools/bootstrap.py --cc gcc
+      - run: python build.py --cc gcc
+      - run: gcc -std=c11 -D_POSIX_C_SOURCE=200809L -DTC_GUI_X11_BACKEND tests/runtime_gui.c -lX11 -lm -o build/gui-x11
+      - run: xvfb-run -a ./build/gui-x11
+      - run: xvfb-run -a ./bin/tiny run tests/gui_x11.tc --cc gcc --gui-backend x11
+      - run: xvfb-run -a ./bin/tiny run tests/gui_x11.tc --gui-backend x11
+
+  gui-cocoa:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python tools/bootstrap.py --cc clang
+      - run: python build.py --cc clang
+      - run: clang -std=c11 -D_POSIX_C_SOURCE=200809L -DTC_GUI_COCOA_BACKEND tests/runtime_gui.c -lm -o build/gui-cocoa
+      - run: ./build/gui-cocoa
+      - run: ./bin/tiny run tests/gui_cocoa.tc --cc clang --gui-backend cocoa
+      - run: ./bin/tiny run tests/gui_cocoa.tc --gui-backend cocoa

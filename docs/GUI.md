@@ -4,7 +4,7 @@ Status: experimental post-1.0 work on `feature/gui-foundation`.
 
 The renderer remains deterministic and in-memory on every supported platform.
 `GuiWindow` adds a platform-neutral window/event abstraction. Headless windows
-work everywhere; Windows additionally has the first native backend using Win32/GDI.
+work everywhere; Windows uses Win32/GDI, Linux can opt into X11, and macOS can opt into Cocoa.
 
 ## Contract
 
@@ -18,8 +18,12 @@ work everywhere; Windows additionally has the first native backend using Win32/G
 - built-in dependency-free 5x7 bitmap text is available for ASCII-oriented UI;
 - lowercase letters map to uppercase glyphs in this first font;
 - unsupported Unicode codepoints currently render as `?`;
-- native windows currently exist only on Win32; Linux/macOS use headless windows;
-- Win32 presentation uses GDI and the same 0xAARRGGBB front buffer.
+- Windows native windows use Win32/GDI;
+- Linux native windows are available with `--gui-backend x11`;
+- Linux headless remains the default, so X11 is not a build dependency for ordinary TinyC+;
+- macOS native windows are available with `--gui-backend cocoa`;
+- headless remains the default on Linux/macOS;
+- Win32, X11 and Cocoa present the same `0xAARRGGBB` front buffer.
 
 ## Core API
 
@@ -39,7 +43,7 @@ on Windows.
 
 1. validate the Win32 native path interactively in addition to CI compilation;
 2. reuse Row/Column layout rules for graphical Label/Button/TextBox;
-3. add macOS and Linux native backends without changing Surface/Canvas semantics;
+3. evaluate a Wayland backend and define a cross-platform HiDPI policy without changing Surface/Canvas semantics;
 4. add richer font backends later without changing the basic Surface contract;
 5. keep GUI/TUI event payloads interoperable while preserving their existing kind values.
 
@@ -80,3 +84,140 @@ keyboard activation through Enter/Space when focused. Its label is a borrowed
 `next()/previous()/set()`, and consumes Tab to advance. Mouse hit-testing
 remains explicit, which keeps layout and ownership visible instead of introducing
 a hidden widget tree.
+
+
+## Linux X11 backend
+
+The X11 backend is deliberately opt-in:
+
+```sh
+tiny run examples/gui_window.tc --gui-backend x11
+tiny run examples/gui_window.tc --cc gcc --gui-backend x11
+```
+
+Compilation enables `TC_GUI_X11_BACKEND` and links `libX11` only for that
+invocation. Headless GUI programs continue to compile without X11 headers or
+libraries.
+
+The backend currently provides:
+
+- native window creation and close protocol handling;
+- the same double-buffered `Surface` used by Win32/headless;
+- partial damaged-region presentation through `XPutImage`;
+- resize events with buffer recreation;
+- special-key normalization through `std.input`;
+- key/text, pointer motion and three-button mouse events;
+- timeout-based event waiting through the X connection file descriptor.
+
+CI installs `libx11-dev` only in the dedicated X11 job and runs the native
+tests under Xvfb. Both the external GCC backend and libtcc execute a TinyC+
+native X11 program there.
+
+Current limits:
+
+- X11 uses the default TrueColor visual with standard RGB masks;
+- text input uses XIM/XIC with `Xutf8LookupString` when available and falls back to `XLookupString`; advanced IME preedit UI is still future work;
+- Wayland is not implemented yet;
+- X11 is not auto-selected from `DISPLAY`; explicit selection keeps builds
+  deterministic and avoids making desktop development packages mandatory.
+
+
+## macOS Cocoa backend
+
+The Cocoa backend is also opt-in:
+
+```sh
+tiny run examples/gui_window.tc --gui-backend cocoa
+tiny run examples/gui_window.tc --cc clang --gui-backend cocoa
+```
+
+The implementation remains C11. It does not compile Objective-C source: the
+runtime loads `libobjc`, AppKit and CoreGraphics dynamically, registers a
+small `NSView` subclass through the Objective-C runtime, and sends messages
+through a typed `objc_msgSend` bridge. This keeps the compiler and generated
+program on the same C/libtcc path used elsewhere.
+
+The backend currently provides:
+
+- native `NSApplication` / `NSWindow` creation and explicit lifecycle;
+- drawing of the existing TinyC+ front buffer through CoreGraphics;
+- the same `GuiEvent` queue used by headless/Win32/X11;
+- normalized special keys through `std.input`;
+- text events from `NSEvent.characters`;
+- mouse motion/button normalization;
+- close detection and timeout-based AppKit event polling.
+
+The dedicated macOS CI job executes the Cocoa runtime directly, then runs a
+native TinyC+ Cocoa program with both Clang and libtcc. It also constructs
+native `NSEvent` objects to verify special-key, text and mouse translation.
+
+Current limits:
+
+- Cocoa windows are resizable and rebuild their framebuffer/CGImage on `windowDidResize:`;
+- advanced IME/composition semantics are not yet modeled beyond AppKit's text value;
+- rendering uses a cached CoreGraphics image backed directly by the TinyC+
+  framebuffer; higher-DPI scaling policy is still intentionally undefined;
+- Cocoa is not auto-selected: explicit backend selection keeps headless builds
+  deterministic.
+
+
+## HiDPI policy
+
+GUI geometry remains expressed in logical units. `GuiWindow.width()`,
+`height()` and its borrowed `Surface` use that logical coordinate space;
+the runtime does not silently allocate a larger Retina framebuffer.
+
+`GuiWindow.backingScale()` exposes the native logical-to-device scale when a
+backend provides one. Cocoa returns `NSWindow.backingScaleFactor`; headless
+and backends without an explicit device-scale policy currently return `1.0`.
+Applications that need pixel-density-aware assets can use this value without
+changing ordinary layout code.
+
+
+## Scroll events
+
+Scroll is a first-class event (`GuiEventKind.Scroll`) rather than a synthetic
+mouse button. Events carry `double scrollX` and `double scrollY`; positive X
+means right and positive Y means up.
+
+Backend normalization:
+
+- Win32: `WM_MOUSEWHEEL/WM_MOUSEHWHEEL`, divided by `WHEEL_DELTA`;
+- X11: buttons 4/5 map to Y +1/-1 and 6/7 to X -1/+1;
+- Cocoa: `scrollingDeltaX/Y` is preserved, including fractional trackpad input;
+- headless/custom events preserve caller-provided double values exactly.
+
+This keeps application scrolling logic portable while retaining high-resolution
+input where the native backend provides it.
+
+
+## Modifier keys
+
+`GuiEvent.modifiers` carries a portable bitmask for Shift, Control, Alt,
+Super/Command/Windows and Caps Lock. Values are exposed through
+`GuiModifier` and can be tested with `GuiInput.hasModifier()`.
+
+Normalization:
+
+- Win32 reads the keyboard state for key, text, mouse and wheel messages;
+- X11 maps `ShiftMask`, `ControlMask`, `Mod1Mask`, `Mod4Mask` and
+  `LockMask`;
+- Cocoa maps NSEvent Shift, Control, Option, Command and Caps Lock flags;
+- headless/custom events preserve caller-provided modifier bits.
+
+This makes shortcuts such as Ctrl+S or Shift+click portable without changing
+the underlying integer event ABI.
+
+
+### Checkbox and progress
+
+`GuiCheckbox` adds mouse press/release and focused Enter/Space activation while
+keeping label ownership borrowed. It draws entirely through `Surface`.
+
+`GuiProgressBar` stores an explicit integer value/range, clamps updates, and
+renders without allocations. `percent()` is provided for status text when
+needed.
+
+`GuiLayout.pad()` applies asymmetric margins and `GuiLayout.center()` places
+a fixed-size rectangle in an available area. Both return geometry values only;
+they do not allocate or create a hidden layout tree.

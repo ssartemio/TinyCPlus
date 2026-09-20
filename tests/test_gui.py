@@ -42,12 +42,30 @@ int main() {
     int changed = window.present();
     assert(changed == 96);
     GuiEvent event;
-    event.kind = 6;
+    event.kind = GuiEventKind.Custom;
     event.key = 77;
     assert(window.post(event) == 0);
     GuiEvent received = window.nextEvent(timeout: 0);
-    assert(received.kind == 6);
+    assert(received.kind == GuiEventKind.Custom);
     assert(received.key == 77);
+
+    GuiEvent scroll;
+    scroll.kind = GuiEventKind.Scroll;
+    scroll.x = 4;
+    scroll.y = 5;
+    scroll.scrollX = 0.5;
+    scroll.scrollY = -1.25;
+    scroll.modifiers = GuiModifier.Shift | GuiModifier.Alt;
+    assert(window.post(scroll) == 0);
+    GuiEvent scrolled = window.nextEvent(timeout: 0);
+    assert(scrolled.kind == GuiEventKind.Scroll);
+    assert(scrolled.x == 4 && scrolled.y == 5);
+    assert(scrolled.scrollX == 0.5 && scrolled.scrollY == -1.25);
+    assert(GuiInput.scroll(scrolled));
+    assert(GuiInput.hasModifier(scrolled, GuiModifier.Shift));
+    assert(GuiInput.hasModifier(scrolled, GuiModifier.Alt));
+    assert(!GuiInput.hasModifier(scrolled, GuiModifier.Control));
+
     window.close();
     assert(!window.isOpen());
     return 0;
@@ -99,7 +117,7 @@ int main() {
     defer box.destroy();
 
     GuiEvent text;
-    text.kind = 2;
+    text.kind = GuiEventKind.Text;
     text.codepoint = 88;
     assert(box.handleEvent(text) == 0);
     assert(box.dirty());
@@ -165,13 +183,21 @@ import std.gui;
 import std.tui;
 
 int main() {
+    assert(GuiEventKind.Key == 1);
+    assert(GuiEventKind.Close == 5);
+    assert(GuiMouseButton.Left == 1);
+    assert(GuiModifier.Shift == 1);
+    assert(GuiModifier.Control == 2);
+    assert(GuiModifier.Alt == 4);
+    assert(GuiModifier.Super == 8);
+    assert(GuiModifier.CapsLock == 16);
     assert(InputKey.Left == 1001);
     assert(InputKey.Right == 1002);
     assert(InputKey.Delete == 1007);
     assert(InputKey.PageDown == 1009);
 
     GuiEvent graphical;
-    graphical.kind = 1;
+    graphical.kind = GuiEventKind.Key;
     graphical.key = InputKey.Left;
     assert(GuiInput.key(graphical, InputKey.Left));
 
@@ -185,7 +211,7 @@ int main() {
     terminal.focus(input);
 
     UiEvent event;
-    event.kind = 1;
+    event.kind = GuiEventKind.Key;
     event.key = InputKey.End;
     assert(terminal.dispatch(event) == 0);
     event.key = InputKey.Left;
@@ -206,7 +232,7 @@ int main() {
     assert(focus.isFocused(0));
 
     GuiEvent tab;
-    tab.kind = 1;
+    tab.kind = GuiEventKind.Key;
     tab.key = 9;
     assert(focus.handleEvent(tab));
     assert(focus.isFocused(1));
@@ -217,8 +243,8 @@ int main() {
     GuiRect area = GuiRect(10, 10, 80, 24);
 
     GuiEvent press;
-    press.kind = 3;
-    press.button = 1;
+    press.kind = GuiEventKind.Mouse;
+    press.button = GuiMouseButton.Left;
     press.pressed = 1;
     press.x = 20;
     press.y = 15;
@@ -231,7 +257,7 @@ int main() {
     assert(!button.down);
 
     GuiEvent enter;
-    enter.kind = 1;
+    enter.kind = GuiEventKind.Key;
     enter.key = 13;
     assert(button.handleEvent(enter, area, focused: true));
     assert(!button.handleEvent(enter, area, focused: false));
@@ -239,4 +265,65 @@ int main() {
 }
 ''')
 p = run('run', button_focus_source)
+assert p.returncode == 0, (p.stdout, p.stderr)
+
+
+widgets_more_source = folder / 'widgets_more.tc'
+widgets_more_source.write_text(r'''
+import std.gui;
+
+int main() {
+    var surface, error = Surface.create(180, 90);
+    if (error != 0)
+        return error;
+    defer surface.destroy();
+
+    GuiRect outer = GuiRect(0, 0, 180, 90);
+    GuiRect padded = GuiLayout.pad(outer, 10, 8, 12, 6);
+    assert(padded.x == 10 && padded.y == 8);
+    assert(padded.width == 158 && padded.height == 76);
+    GuiRect centered = GuiLayout.center(outer, 60, 20);
+    assert(centered.x == 60 && centered.y == 35);
+
+    GuiCheckbox check = GuiCheckbox("ENABLED");
+    GuiRect checkArea = GuiRect(12, 12, 120, 20);
+
+    GuiEvent press;
+    press.kind = GuiEventKind.Mouse;
+    press.button = GuiMouseButton.Left;
+    press.pressed = 1;
+    press.x = 15;
+    press.y = 15;
+    assert(!check.handleEvent(press, checkArea));
+    assert(check.down);
+
+    GuiEvent release = press;
+    release.pressed = 0;
+    assert(check.handleEvent(release, checkArea));
+    assert(check.checked);
+    assert(!check.down);
+
+    GuiEvent space;
+    space.kind = GuiEventKind.Key;
+    space.key = 32;
+    assert(check.handleEvent(space, checkArea, focused: true));
+    assert(!check.checked);
+
+    GuiProgressBar progress = GuiProgressBar(200);
+    progress.set(50);
+    assert(progress.percent() == 25);
+    progress.set(500);
+    assert(progress.value == 200 && progress.percent() == 100);
+    progress.set(-10);
+    assert(progress.value == 0);
+
+    surface.clear(Pixel.rgba(18, 24, 32));
+    check.draw(surface, checkArea);
+    progress.set(125);
+    progress.draw(surface, GuiRect(12, 48, 150, 18));
+    assert(surface.checksum() != 0);
+    return 0;
+}
+''')
+p = run('run', widgets_more_source)
 assert p.returncode == 0, (p.stdout, p.stderr)
