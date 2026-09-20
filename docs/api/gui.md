@@ -87,10 +87,16 @@ Custom = 6
 ```
 
 Mouse buttons use `GuiMouseButton.None/Left/Right/Middle` (0/1/2/3).
-The underlying fields remain integers at the C ABI boundary, so these enums add
-readability without changing layout or runtime cost.
 
-Fields include key/codepoint, mouse coordinates/button state, and resize width/height.
+`GuiEventKind.Scroll` carries `double scrollX` and `double scrollY`.
+Positive X scrolls to the right and positive Y scrolls upward. Coordinates
+`x/y` identify the pointer position when the backend provides it. Win32
+normalizes wheel deltas by `WHEEL_DELTA`, X11 maps wheel buttons to ±1 steps,
+and Cocoa preserves native trackpad/wheel precision.
+
+The event kind/button fields remain integers at the C ABI boundary, so the enums
+add readability without changing their layout. Other fields include key/codepoint,
+mouse coordinates/button state, and resize width/height.
 
 ## GuiWindow
 
