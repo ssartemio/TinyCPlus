@@ -47,3 +47,10 @@ python tools/publish-wiki.py
 
 El script clona el repositorio Wiki, sincroniza estas páginas, hace commit y
 push usando las credenciales Git configuradas en el equipo.
+
+
+## Curso integrado
+
+La Wiki incluye el curso progresivo `TinyCPlus-Desde-Cero.md` y 13 capítulos
+`Curso-01-...` a `Curso-13-...`. Estos archivos también se sincronizan con
+la Wiki nativa mediante `tools/publish-wiki.py`.

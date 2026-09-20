@@ -78,6 +78,16 @@ preguntas:
 - ¿puede resolverse en compile-time?
 - ¿puede implementarse como biblioteca en vez de complicar el compilador?
 
+## Curso guiado: TinyC+ desde cero
+
+Si prefiere aprender construyendo una aplicación completa, siga
+**[TinyC+ desde cero](TinyCPlus-Desde-Cero)**.
+
+Son 13 capítulos acumulativos. El proyecto empieza como un programa de consola,
+pasa por memoria manual, clases, colecciones, archivos y concurrencia, añade un
+protocolo TCP y termina en un dashboard TUI no bloqueante. El capítulo final
+muestra la migración a la GUI gráfica experimental.
+
 ## Dónde empezar
 
 Si es su primera visita, continúe con:
