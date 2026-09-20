@@ -42,6 +42,66 @@ class Pixel {
     }
 }
 
+
+class GuiRect {
+    int x;
+    int y;
+    int width;
+    int height;
+    GuiRect(int x, int y, int width, int height) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+    }
+    bool contains(int px, int py) {
+        return px >= x && py >= y && px < x + width && py < y + height;
+    }
+    GuiRect inset(int amount) {
+        int w = width - amount * 2;
+        int h = height - amount * 2;
+        if (w < 0)
+            w = 0;
+        if (h < 0)
+            h = 0;
+        return GuiRect(x + amount, y + amount, w, h);
+    }
+}
+
+class GuiLayout {
+    static GuiRect row(GuiRect area, int count, int gap, int index) {
+        if (count < 1)
+            return area;
+        int available = area.width - gap * (count - 1);
+        int size = available / count;
+        if (size < 0)
+            size = 0;
+        int x = area.x + index * (size + gap);
+        int width = size;
+        if (index == count - 1)
+            width = area.x + area.width - x;
+        if (width < 0)
+            width = 0;
+        return GuiRect(x, area.y, width, area.height);
+    }
+
+    static GuiRect column(GuiRect area, int count, int gap, int index) {
+        if (count < 1)
+            return area;
+        int available = area.height - gap * (count - 1);
+        int size = available / count;
+        if (size < 0)
+            size = 0;
+        int y = area.y + index * (size + gap);
+        int height = size;
+        if (index == count - 1)
+            height = area.y + area.height - y;
+        if (height < 0)
+            height = 0;
+        return GuiRect(area.x, y, area.width, height);
+    }
+}
+
 class Surface {
     void* handle;
     static (Surface, Error) create(int width, int height) {
@@ -83,6 +143,30 @@ class Surface {
         tc_gui_text(handle, x, y, text, color, scale);
     }
     void destroy() { tc_gui_surface_destroy(handle); handle = null; }
+}
+
+
+class GuiDraw {
+    static void label(Surface surface, GuiRect area, string text, uint color,
+                      int scale = 1, bool centered = false) {
+        int x = area.x;
+        int y = area.y + (area.height - 7 * scale) / 2;
+        if (centered)
+            x = area.x + (area.width - surface.textWidth(text, scale)) / 2;
+        surface.text(x, y, text, color, scale);
+    }
+
+    static void button(Surface surface, GuiRect area, string text, bool pressed = false,
+                       uint foreground = 15134195, uint background = 2113632,
+                       uint pressedBackground = 4210752) {
+        uint fill = background;
+        if (pressed)
+            fill = pressedBackground;
+        surface.fillRect(area.x, area.y, area.width, area.height, fill);
+        surface.rect(area.x, area.y, area.width, area.height, foreground);
+        GuiRect inner = area.inset(2);
+        label(surface, inner, text, foreground, 1, true);
+    }
 }
 
 /// Owns two surfaces. front()/back() are borrowed and must not be destroyed separately.
