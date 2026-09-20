@@ -75,18 +75,18 @@ def tcc(source):
         for name in ['include','lib']:
             shutil.copytree(win/name,dest/name,dirs_exist_ok=True)
     else:
+        # POSIX hosts install into an untracked subdirectory so the committed
+        # Windows package (include/, lib/, tcc.exe, libtcc.dll) is never touched.
+        dest = ROOT/'third_party/tcc/posix'
+        resolved = dest.resolve()
+        if resolved.parent != (ROOT/'third_party/tcc').resolve():
+            raise SystemExit('Invalid dependency install directory')
+        if dest.exists():
+            shutil.rmtree(dest)
         # The source archive includes configure; invoking sh needs no executable permission.
         run(['sh','configure','--cc='+cc,'--prefix='+str(dest),'--bindir='+str(dest),
              '--libdir='+str(dest),'--tccdir='+str(dest),'--disable-static'],source)
         run(['make','-j2'],source)
-        # Avoid mixing Windows SDK headers from the portable package with host headers.
-        if (dest/'include/winapi').exists():
-            for directory in (dest/'include', dest/'lib'):
-                resolved = directory.resolve()
-                if not resolved.is_relative_to(dest.resolve()) or resolved == dest.resolve():
-                    raise SystemExit('Invalid dependency install directory')
-                if directory.exists():
-                    shutil.rmtree(directory)
         run(['make','install'],source)
     for name in ['COPYING','VERSION','libtcc.h']:
         shutil.copy2(source/name,dest/name)

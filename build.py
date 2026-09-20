@@ -14,7 +14,7 @@ parser.add_argument('--debug', action='store_true')
 parser.add_argument('--sanitize', action='store_true', help='GCC/Clang ASan and UBSan (requires host runtimes)')
 args = parser.parse_args()
 ext = '.exe' if os.name == 'nt' else ''
-bundled = ROOT / 'third_party' / 'tcc' / ('tcc' + ext)
+bundled = ROOT / 'third_party' / 'tcc' / ('tcc.exe' if os.name == 'nt' else 'posix/tcc')
 cc = args.cc or (str(bundled) if bundled.exists() else shutil.which('cc') or shutil.which('gcc') or shutil.which('clang'))
 if not cc:
     raise SystemExit('A C compiler is required. Set CC or use --cc /path/to/compiler.')

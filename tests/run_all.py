@@ -45,7 +45,7 @@ for name in ('test_modules_ffi.py', 'test_tools.py', 'test_stdlib.py', 'test_edi
     if name in ('test_tutorial.py', 'test_stdlib.py') and args.cc:
         command += ['--cc', args.cc]
     run(name, command)
-bundled = ROOT/'third_party/tcc'/('tcc'+ext)
+bundled = ROOT/'third_party/tcc'/('tcc.exe' if os.name == 'nt' else 'posix/tcc')
 compilers = [str(bundled)] if bundled.exists() else [shutil.which('cc') or 'cc']
 if args.cc and args.cc not in compilers:
     compilers.append(args.cc)

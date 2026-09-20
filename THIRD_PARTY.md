@@ -9,6 +9,10 @@ Original source archives are included. Their checksums, upstream URLs and exact
 revisions are in [dependencies.json](third_party/dependencies.json).
 `python tools/bootstrap.py --verify-only` verifies both archives.
 
+On Linux and macOS, `tools/bootstrap.py` builds TinyCC from the same archive into
+the untracked directory `third_party/tcc/posix/`; the committed Windows package is
+left untouched.
+
 TinyCC's compiler core is unmodified. The Windows package includes its runtime
 support objects, SDK headers and import definitions. The original archive keeps
 the notices associated with those files. libtcc is dynamically loaded and can
