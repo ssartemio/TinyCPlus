@@ -116,7 +116,16 @@ tiny run app.tc --gui-backend x11
 Without that option Linux keeps the dependency-free headless implementation.
 The X11 backend uses the same `Surface` and event API, links `libX11` only for
 the selected build, and is exercised under Xvfb with both GCC and libtcc.
-macOS currently remains headless.
+macOS can select the native Cocoa bridge explicitly:
+
+```sh
+tiny run app.tc --gui-backend cocoa
+```
+
+The Cocoa bridge is implemented in pure C by loading the Objective-C runtime,
+AppKit and CoreGraphics dynamically, so it also works with libtcc. The first
+Cocoa window is fixed-size; resize support and explicit HiDPI policy are still
+future work.
 
 
 ## GuiTextBox
