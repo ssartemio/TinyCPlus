@@ -55,3 +55,32 @@ int main() {
 ''')
 p = run('run', window_source)
 assert p.returncode == 0, (p.stdout, p.stderr)
+
+
+layout_source = folder / 'layout.tc'
+layout_source.write_text(r'''
+import std.gui;
+int main() {
+    var surface, error = Surface.create(80, 24);
+    if (error != 0)
+        return error;
+    defer surface.destroy();
+
+    GuiRect area = GuiRect(2, 2, 76, 20);
+    GuiRect left = GuiLayout.row(area, 2, 4, 0);
+    GuiRect right = GuiLayout.row(area, 2, 4, 1);
+    assert(left.contains(3, 3));
+    assert(!left.contains(79, 3));
+    assert(right.x > left.x + left.width);
+
+    surface.clear(Pixel.rgba(16, 24, 32));
+    GuiDraw.button(surface, left, "OK");
+    GuiDraw.button(surface, right, "CANCEL", pressed: true);
+    GuiDraw.label(surface, GuiRect(0, 0, 80, 2), "TINYC+", Pixel.rgba(255, 255, 255),
+                  centered: true);
+    assert(surface.checksum() != 0);
+    return 0;
+}
+''')
+p = run('run', layout_source)
+assert p.returncode == 0, (p.stdout, p.stderr)
