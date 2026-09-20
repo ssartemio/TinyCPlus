@@ -481,7 +481,8 @@ enum {
     TC_GUI_EVENT_MOUSE = 3,
     TC_GUI_EVENT_RESIZE = 4,
     TC_GUI_EVENT_CLOSE = 5,
-    TC_GUI_EVENT_CUSTOM = 6
+    TC_GUI_EVENT_CUSTOM = 6,
+    TC_GUI_EVENT_SCROLL = 7
 };
 
 static int tc_gui_encode_utf8(uint32_t cp, char bytes[4]) {
@@ -631,6 +632,7 @@ int32_t tc_gui_buffer_resize(void *handle, int32_t width, int32_t height) {
 typedef struct TcGuiEvent {
     int32_t kind, key, x, y, width, height, button, pressed;
     uint32_t codepoint;
+    double scroll_x, scroll_y;
 } TcGuiEvent;
 
 typedef struct TcGuiWindow {
@@ -723,6 +725,24 @@ static void tc_gui_push_mouse(TcGuiWindow *window, LPARAM value, int button, int
     event.pressed = pressed;
     tc_gui_event_push(window, event);
 }
+static void tc_gui_push_scroll(TcGuiWindow *window, WPARAM wparam, LPARAM lparam,
+                               int horizontal) {
+    POINT point;
+    TcGuiEvent event;
+    memset(&event, 0, sizeof(event));
+    point.x = (int32_t)(int16_t)(lparam & 0xffff);
+    point.y = (int32_t)(int16_t)((lparam >> 16) & 0xffff);
+    if (window->hwnd)
+        ScreenToClient(window->hwnd, &point);
+    event.kind = TC_GUI_EVENT_SCROLL;
+    event.x = point.x;
+    event.y = point.y;
+    if (horizontal)
+        event.scroll_x = (double)(int16_t)((wparam >> 16) & 0xffff) / (double)WHEEL_DELTA;
+    else
+        event.scroll_y = (double)(int16_t)((wparam >> 16) & 0xffff) / (double)WHEEL_DELTA;
+    tc_gui_event_push(window, event);
+}
 static LRESULT CALLBACK tc_gui_window_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
     TcGuiWindow *window = (TcGuiWindow *)(uintptr_t)GetWindowLongPtrA(hwnd, GWLP_USERDATA);
     if (message == WM_NCCREATE) {
@@ -810,6 +830,12 @@ static LRESULT CALLBACK tc_gui_window_proc(HWND hwnd, UINT message, WPARAM wpara
         return 0;
     case WM_MBUTTONUP:
         tc_gui_push_mouse(window, lparam, 3, 0);
+        return 0;
+    case WM_MOUSEWHEEL:
+        tc_gui_push_scroll(window, wparam, lparam, 0);
+        return 0;
+    case WM_MOUSEHWHEEL:
+        tc_gui_push_scroll(window, wparam, lparam, 1);
         return 0;
     case WM_PAINT: {
         PAINTSTRUCT paint;
@@ -976,7 +1002,7 @@ int32_t tc_gui_window_present(void *handle) {
 }
 int32_t tc_gui_window_post(void *handle, int32_t kind, int32_t key, int32_t x, int32_t y,
                            int32_t width, int32_t height, int32_t button, int32_t pressed,
-                           uint32_t codepoint) {
+                           uint32_t codepoint, double scroll_x, double scroll_y) {
     TcGuiEvent event;
     memset(&event, 0, sizeof(event));
     event.kind = kind;
@@ -988,11 +1014,14 @@ int32_t tc_gui_window_post(void *handle, int32_t kind, int32_t key, int32_t x, i
     event.button = button;
     event.pressed = pressed;
     event.codepoint = codepoint;
+    event.scroll_x = scroll_x;
+    event.scroll_y = scroll_y;
     return tc_gui_event_push((TcGuiWindow *)handle, event);
 }
 void tc_gui_window_next(void *handle, int32_t timeout, int32_t *kind, int32_t *key, int32_t *x,
                         int32_t *y, int32_t *width, int32_t *height, int32_t *button,
-                        int32_t *pressed, uint32_t *codepoint) {
+                        int32_t *pressed, uint32_t *codepoint, double *scroll_x,
+                        double *scroll_y) {
     TcGuiWindow *window = (TcGuiWindow *)handle;
     TcGuiEvent event;
     memset(&event, 0, sizeof(event));
@@ -1039,6 +1068,8 @@ ready:
     if (button) *button = event.button;
     if (pressed) *pressed = event.pressed;
     if (codepoint) *codepoint = event.codepoint;
+    if (scroll_x) *scroll_x = event.scroll_x;
+    if (scroll_y) *scroll_y = event.scroll_y;
 }
 void tc_gui_window_close(void *handle) {
     TcGuiWindow *window = (TcGuiWindow *)handle;
