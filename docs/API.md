@@ -10,6 +10,7 @@ Las reglas de propiedad y vida útil se explican en LANGUAGE.md y CONCURRENCY.md
 - [std.fs](api/fs.md)
 - [std.grpc](api/grpc.md)
 - [std.io](api/io.md)
+- [std.input](api/input.md)
 - [std.math](api/math.md)
 - [std.memory](api/memory.md)
 - [std.net](api/net.md)

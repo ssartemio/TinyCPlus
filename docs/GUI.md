@@ -41,7 +41,18 @@ on Windows.
 2. reuse Row/Column layout rules for graphical Label/Button/TextBox;
 3. add macOS and Linux native backends without changing Surface/Canvas semantics;
 4. add richer font backends later without changing the basic Surface contract;
-5. converge GUI/TUI event constants where that improves reuse.
+5. keep GUI/TUI event payloads interoperable while preserving their existing kind values.
+
+## Shared input keys
+
+GUI and TUI use one runtime ABI for special keys. The public `std.input`
+module exposes `InputKey.Left`, `Right`, `Up`, `Down`, `Home`, `End`,
+`Delete`, `PageUp` and `PageDown`. Their established numeric values
+(`1001..1009`) remain unchanged.
+
+Event `kind` values remain subsystem-specific: GUI has distinct text and close
+events while TUI has timer events. Keeping those values separate avoids a
+breaking change while still sharing the useful key identity contract.
 
 
 ## Primitive widgets

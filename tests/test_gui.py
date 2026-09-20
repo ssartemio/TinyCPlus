@@ -156,3 +156,42 @@ int main() {
 ''')
 p = run('run', coexist_source)
 assert p.returncode == 0, (p.stdout, p.stderr)
+
+
+input_source = folder / 'input_compat.tc'
+input_source.write_text(r'''
+import std.input;
+import std.gui;
+import std.tui;
+
+int main() {
+    assert(InputKey.Left == 1001);
+    assert(InputKey.Right == 1002);
+    assert(InputKey.Delete == 1007);
+    assert(InputKey.PageDown == 1009);
+
+    GuiEvent graphical;
+    graphical.kind = 1;
+    graphical.key = InputKey.Left;
+    assert(GuiInput.key(graphical, InputKey.Left));
+
+    var terminal, error = Window.create(width: 10, height: 3, headless: true);
+    if (error != 0)
+        return error;
+    defer terminal.destroy();
+
+    Widget input = Ui.textBox("x");
+    terminal.setContent(input);
+    terminal.focus(input);
+
+    UiEvent event;
+    event.kind = 1;
+    event.key = InputKey.End;
+    assert(terminal.dispatch(event) == 0);
+    event.key = InputKey.Left;
+    assert(terminal.dispatch(event) == 0);
+    return 0;
+}
+''')
+p = run('run', input_source)
+assert p.returncode == 0, (p.stdout, p.stderr)
