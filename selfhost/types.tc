@@ -1,0 +1,408 @@
+module types;
+import std.string;
+import std.collections;
+import ast;
+
+/// The type table: a port of compiler/types.c. Types are interned in one list (newest first)
+/// that the parser also reads to decide whether an identifier starts a type, so the order and
+/// the ids in which entries are created matter as much as their contents.
+/// `tiny --emit-types` prints the table and tests/test_selfhost.py compares it with this one.
+
+string primitiveName(TypeKind kind)
+{
+    switch (kind)
+    {
+        case TypeKind.Void: return "void";
+        case TypeKind.Bool: return "bool";
+        case TypeKind.I8: return "i8";
+        case TypeKind.U8: return "u8";
+        case TypeKind.I16: return "i16";
+        case TypeKind.U16: return "u16";
+        case TypeKind.I32: return "i32";
+        case TypeKind.U32: return "u32";
+        case TypeKind.I64: return "i64";
+        case TypeKind.U64: return "u64";
+        case TypeKind.Float: return "float";
+        case TypeKind.Double: return "double";
+        case TypeKind.Char: return "char";
+        case TypeKind.String: return "string";
+        case TypeKind.Null: return "null";
+        default: return "var";
+    }
+}
+
+string primitiveCName(TypeKind kind)
+{
+    switch (kind)
+    {
+        case TypeKind.Void: return "void";
+        case TypeKind.Bool: return "bool";
+        case TypeKind.I8: return "int8_t";
+        case TypeKind.U8: return "uint8_t";
+        case TypeKind.I16: return "int16_t";
+        case TypeKind.U16: return "uint16_t";
+        case TypeKind.I32: return "int32_t";
+        case TypeKind.U32: return "uint32_t";
+        case TypeKind.I64: return "int64_t";
+        case TypeKind.U64: return "uint64_t";
+        case TypeKind.Float: return "float";
+        case TypeKind.Double: return "double";
+        case TypeKind.Char: return "char";
+        case TypeKind.String: return "TinyString";
+        case TypeKind.Null: return "void *";
+        default: return "void";
+    }
+}
+
+/// Every entry, newest first, takes the next id from the counter it shares with the nodes.
+Type* addType(Context* c, TypeKind kind)
+{
+    Type* t = new Type();
+    t.kind = kind;
+    c.nextId++;
+    t.id = c.nextId;
+    t.next = c.types;
+    c.types = t;
+    return t;
+}
+
+Type* typePrimitive(Context* c, TypeKind kind)
+{
+    Type* t = c.builtin[cast<int>(kind)];
+    if (t != null) return t;
+    t = addType(c, kind);
+    t.name = primitiveName(kind);
+    t.cname = primitiveCName(kind);
+    c.builtin[cast<int>(kind)] = t;
+    return t;
+}
+
+/// A field-for-field copy, as `*t = *base` in C.
+void copyType(Type* to, Type* from)
+{
+    to.kind = from.kind;
+    to.name = from.name;
+    to.cname = from.cname;
+    to.base = from.base;
+    to.items = from.items;
+    to.count = from.count;
+    to.id = from.id;
+    to.qualified = from.qualified;
+    to.callconv = from.callconv;
+    to.decl = from.decl;
+    to.alias = from.alias;
+    to.next = from.next;
+}
+
+/// The type a name refers to: a primitive (or an alias of one), the size_t view of u64, or a
+/// named class/enum type that is created on first mention.
+Type* typeNamed(Context* c, string name)
+{
+    switch (name)
+    {
+        case "void": return typePrimitive(c, TypeKind.Void);
+        case "bool": return typePrimitive(c, TypeKind.Bool);
+        case "i8": return typePrimitive(c, TypeKind.I8);
+        case "u8": return typePrimitive(c, TypeKind.U8);
+        case "i16": return typePrimitive(c, TypeKind.I16);
+        case "u16": return typePrimitive(c, TypeKind.U16);
+        case "i32": return typePrimitive(c, TypeKind.I32);
+        case "u32": return typePrimitive(c, TypeKind.U32);
+        case "i64": return typePrimitive(c, TypeKind.I64);
+        case "u64": return typePrimitive(c, TypeKind.U64);
+        case "float": return typePrimitive(c, TypeKind.Float);
+        case "double": return typePrimitive(c, TypeKind.Double);
+        case "char": return typePrimitive(c, TypeKind.Char);
+        case "string": return typePrimitive(c, TypeKind.String);
+        case "null": return typePrimitive(c, TypeKind.Null);
+        default:
+        {
+        }
+    }
+    if (name == "size_t")
+    {
+        for (Type* t = c.types; t != null; t = t.next)
+            if (t.kind == TypeKind.U64 && t.name == "size_t") return t;
+        // size_t keeps u64 semantics but must keep the host C spelling at ABI boundaries. Stage 0
+        // creates a spelling-only copy of u64 without consuming another type id.
+        Type* base = typePrimitive(c, TypeKind.U64);
+        Type* copy = new Type();
+        copyType(copy, base);
+        copy.name = "size_t";
+        copy.cname = "size_t";
+        copy.next = c.types;
+        c.types = copy;
+        return copy;
+    }
+    switch (name)
+    {
+        case "int", "Error": return typePrimitive(c, TypeKind.I32);
+        case "uint": return typePrimitive(c, TypeKind.U32);
+        case "byte": return typePrimitive(c, TypeKind.U8);
+        case "short": return typePrimitive(c, TypeKind.I16);
+        case "long": return typePrimitive(c, TypeKind.I64);
+        case "ulong": return typePrimitive(c, TypeKind.U64);
+        case "StringView": return typePrimitive(c, TypeKind.String);
+        case "var": return typePrimitive(c, TypeKind.Auto);
+        default:
+        {
+        }
+    }
+    for (Type* t = c.types; t != null; t = t.next)
+        if ((t.kind == TypeKind.Named || t.kind == TypeKind.Enum) && t.items == null && t.name == name) return t;
+    Type* created = addType(c, TypeKind.Named);
+    created.name = name;
+    created.cname = join("tc_", name, "");
+    return created;
+}
+
+/// Pointer, fixed array or slice of base, interned by (kind, base, count).
+Type* typeDerive(Context* c, TypeKind kind, Type* base, u64 count)
+{
+    for (Type* t = c.types; t != null; t = t.next)
+        if (t.kind == kind && t.base == base && t.count == count) return t;
+    Type* created = addType(c, kind);
+    created.base = base;
+    created.count = count;
+    var text = StringBuilder.create();
+    var cname = StringBuilder.create();
+    if (kind == TypeKind.Ptr)
+    {
+        text.append(base.name);
+        text.appendChar('*');
+        cname.append(base.cname);
+        cname.append(" *");
+    }
+    else if (kind == TypeKind.Array)
+    {
+        text.append(base.name);
+        text.appendChar('[');
+        text.appendUnsigned(count);
+        text.appendChar(']');
+        cname.append("tc_array_");
+        cname.appendInt(created.id);
+    }
+    else
+    {
+        text.append("Slice<");
+        text.append(base.name);
+        text.appendChar('>');
+        cname.append("tc_slice_");
+        cname.appendInt(created.id);
+    }
+    OwnedString name = text.toOwned();
+    OwnedString cnameText = cname.toOwned();
+    text.destroy();
+    cname.destroy();
+    created.name = name.view();
+    created.cname = cnameText.view();
+    return created;
+}
+
+bool itemsEqual(TypeLink* x, TypeLink* y)
+{
+    while (x != null && y != null)
+    {
+        if (!typeEqual(x.type, y.type)) return false;
+        x = x.next;
+        y = y.next;
+    }
+    return x == null && y == null;
+}
+
+bool typeEqual(Type* a, Type* b)
+{
+    if (a == b) return true;
+    if (a == null || b == null || a.kind != b.kind || a.qualified != b.qualified) return false;
+    if (a.kind == TypeKind.Ptr || a.kind == TypeKind.Array || a.kind == TypeKind.Slice)
+        return a.count == b.count && typeEqual(a.base, b.base);
+    if (a.kind == TypeKind.Enum) return a.name == b.name;
+    if (a.kind == TypeKind.Tuple || a.kind == TypeKind.Func || a.kind == TypeKind.Closure)
+    {
+        if (a.callconv != b.callconv) return false;
+        if (!typeEqual(a.base, b.base)) return false;
+        return itemsEqual(a.items, b.items);
+    }
+    if (a.kind == TypeKind.Named)
+    {
+        if (a.name != b.name) return false;
+        return itemsEqual(a.items, b.items);
+    }
+    return true;
+}
+
+Type* typeTuple(Context* c, TypeLink* items)
+{
+    Type probe;
+    probe.kind = TypeKind.Tuple;
+    probe.items = items;
+    for (Type* t = c.types; t != null; t = t.next)
+        if (typeEqual(t, &probe)) return t;
+    Type* created = addType(c, TypeKind.Tuple);
+    created.items = items;
+    var text = StringBuilder.create();
+    text.append("tc_tuple_");
+    text.appendInt(created.id);
+    OwnedString name = text.toOwned();
+    text.destroy();
+    created.cname = name.view();
+    created.name = created.cname;
+    return created;
+}
+
+/// A generic instance such as Box<int>; also the starting point for func<...> types, which the
+/// parser then retags as Func or Closure.
+Type* typeGeneric(Context* c, string name, TypeLink* items)
+{
+    for (Type* t = c.types; t != null; t = t.next)
+    {
+        if (t.kind != TypeKind.Named || t.items == null || t.name != name) continue;
+        TypeLink* a = t.items;
+        TypeLink* b = items;
+        while (a != null && b != null && typeEqual(a.type, b.type))
+        {
+            a = a.next;
+            b = b.next;
+        }
+        if (a == null && b == null) return t;
+    }
+    Type* created = addType(c, TypeKind.Named);
+    created.name = name;
+    created.items = items;
+    var text = StringBuilder.create();
+    text.append("tc_");
+    text.append(name);
+    text.appendChar('_');
+    text.appendInt(created.id);
+    OwnedString cname = text.toOwned();
+    text.destroy();
+    created.cname = cname.view();
+    return created;
+}
+
+/// const T is a distinct entry (a copy of T marked qualified), created once per base.
+Type* typeConst(Context* c, Type* base)
+{
+    if (base.qualified) return base;
+    string wanted = join("const ", base.name, "");
+    for (Type* t = c.types; t != null; t = t.next)
+        if (t.qualified && t.kind == base.kind && t.base == base.base && t.name == wanted) return t;
+    Type* created = addType(c, base.kind);
+    int id = created.id;
+    Type* next = created.next;
+    copyType(created, base);
+    created.id = id;
+    created.next = next;
+    created.qualified = true;
+    created.name = wanted;
+    created.cname = join("const ", base.cname, "");
+    return created;
+}
+
+string typeKindName(TypeKind kind)
+{
+    switch (kind)
+    {
+        case TypeKind.Void: return "Void";
+        case TypeKind.Bool: return "Bool";
+        case TypeKind.I8: return "I8";
+        case TypeKind.U8: return "U8";
+        case TypeKind.I16: return "I16";
+        case TypeKind.U16: return "U16";
+        case TypeKind.I32: return "I32";
+        case TypeKind.U32: return "U32";
+        case TypeKind.I64: return "I64";
+        case TypeKind.U64: return "U64";
+        case TypeKind.Float: return "Float";
+        case TypeKind.Double: return "Double";
+        case TypeKind.Char: return "Char";
+        case TypeKind.String: return "String";
+        case TypeKind.Null: return "Null";
+        case TypeKind.Ptr: return "Ptr";
+        case TypeKind.Array: return "Array";
+        case TypeKind.Slice: return "Slice";
+        case TypeKind.Tuple: return "Tuple";
+        case TypeKind.Func: return "Func";
+        case TypeKind.Closure: return "Closure";
+        case TypeKind.Named: return "Named";
+        case TypeKind.Enum: return "Enum";
+        case TypeKind.Auto: return "Auto";
+    }
+}
+
+void appendReference(StringBuilder* out, Array<Type*>* oldestFirst, Type* t)
+{
+    if (t == null)
+    {
+        out.appendChar('-');
+        return;
+    }
+    for (u64 i = 0; i < oldestFirst.length; i++)
+    {
+        if (oldestFirst.get(i) == t)
+        {
+            out.appendUnsigned(i);
+            return;
+        }
+    }
+    out.appendChar('?');
+}
+
+void appendName(StringBuilder* out, string text)
+{
+    if (text.length == 0) out.appendChar('-');
+    else out.append(text);
+}
+
+/// The text of `tiny --emit-types`: the table in creation order, one line per entry, with
+/// references to other entries given as positions in that order.
+void dumpTypes(Context* c, StringBuilder* out)
+{
+    var newestFirst = Array<Type*>.create();
+    defer newestFirst.destroy();
+    for (Type* t = c.types; t != null; t = t.next) newestFirst.push(t);
+    var list = Array<Type*>.create();
+    defer list.destroy();
+    for (u64 k = newestFirst.length; k > 0; k--) list.push(newestFirst.get(k - 1));
+    for (u64 i = 0; i < list.length; i++)
+    {
+        Type* t = list.get(i);
+        out.appendUnsigned(i);
+        out.append(" id=");
+        out.appendInt(t.id);
+        out.appendChar(' ');
+        out.append(typeKindName(t.kind));
+        out.append(" name=");
+        appendName(out, t.name);
+        out.append(" cname=");
+        appendName(out, t.cname);
+        out.append(" base=");
+        appendReference(out, &list, t.base);
+        out.append(" items=[");
+        for (TypeLink* item = t.items; item != null; item = item.next)
+        {
+            appendReference(out, &list, item.type);
+            if (item.next != null) out.appendChar(',');
+        }
+        out.append("] count=");
+        out.appendUnsigned(t.count);
+        out.append(" qualified=");
+        if (t.qualified) out.appendChar('1');
+        else out.appendChar('0');
+        out.append(" callconv=");
+        out.appendInt(t.callconv);
+        out.append(" decl=");
+        if (t.decl == null) out.appendChar('-');
+        else
+        {
+            appendName(out, t.decl.name);
+            out.appendChar('@');
+            out.appendInt(t.decl.line);
+            out.appendChar(':');
+            out.appendInt(t.decl.column);
+        }
+        out.append(" alias=");
+        appendReference(out, &list, t.alias);
+        out.appendChar('\n');
+    }
+}

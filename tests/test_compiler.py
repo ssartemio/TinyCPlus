@@ -245,9 +245,11 @@ with nullcontext(run_folder) as folder:
         assert untyped.returncode==0 and 'Binary + @1:19\n' in untyped.stdout and ' : ' not in untyped.stdout
         p=invoke('typed_ast_error','int main(){int x="text";}','--emit-typed-ast')
         assert p.returncode==1 and p.stdout=='' and 'expected i32, found string' in p.stderr
+        p=invoke('types','(int,string) f(int[3] a,const int* p){return 1,"x";}','--emit-types')
+        assert p.returncode==0 and ' Array name=i32[3] ' in p.stdout and ' Tuple name=tc_tuple_' in p.stdout and ' Ptr name=const i32* ' in p.stdout and p.stdout.startswith('0 id=')
         p=invoke('lowering','int main(){defer println(8);return 0;}','--emit-c')
         assert p.returncode==0 and '#line 1 ' in p.stdout and p.stdout.index('tc_print_integer')<p.stdout.index('return tc_tmp')
-        count+=5
+        count+=6
     except Exception as e: errors.append(('inspection',str(e)))
 
 for name,error in errors: print('FAIL',name,error)

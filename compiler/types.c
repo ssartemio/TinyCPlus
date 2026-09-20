@@ -181,3 +181,59 @@ int type_numeric(Type *t) {
 int type_integer(Type *t) {
     return type_numeric(t) && t->kind != TY_FLOAT && t->kind != TY_DOUBLE;
 }
+/* --emit-types: the type table in creation order, one line per entry. References to other types
+   are positions in that order. It exposes the state the parser builds while it reads a file (ids
+   shared with syntax nodes, interning, declarations), which the self-hosted compiler must
+   reproduce exactly. */
+static long type_position(Type **list, size_t n, const Type *t) {
+    size_t i;
+    for (i = 0; i < n; i++)
+        if (list[i] == t)
+            return (long)i;
+    return -1;
+}
+static void print_reference(FILE *out, Type **list, size_t n, const Type *t) {
+    if (!t)
+        fputc('-', out);
+    else
+        fprintf(out, "%ld", type_position(list, n, t));
+}
+void dump_types(Context *c, FILE *out) {
+    static const char *kinds[] = {"Void",  "Bool",  "I8",    "U8",      "I16",   "U16",
+                                  "I32",   "U32",   "I64",   "U64",     "Float", "Double",
+                                  "Char",  "String", "Null", "Ptr",     "Array", "Slice",
+                                  "Tuple", "Func",  "Closure", "Named", "Enum",  "Auto"};
+    Type *t, **list;
+    size_t n = 0, i;
+    TypeLink *item;
+    for (t = c->types; t; t = t->next)
+        n++;
+    list = (Type **)malloc((n ? n : 1) * sizeof(Type *));
+    if (!list)
+        return;
+    for (i = n, t = c->types; t; t = t->next)
+        list[--i] = t;
+    for (i = 0; i < n; i++) {
+        t = list[i];
+        fprintf(out, "%zu id=%d %s name=%s cname=%s base=", i, t->id, kinds[t->kind],
+                t->name ? t->name : "-", t->cname ? t->cname : "-");
+        print_reference(out, list, n, t->base);
+        fputs(" items=[", out);
+        for (item = t->items; item; item = item->next) {
+            print_reference(out, list, n, item->type);
+            if (item->next)
+                fputc(',', out);
+        }
+        fprintf(out, "] count=%zu qualified=%d callconv=%d decl=", t->count, t->qualified,
+                t->callconv);
+        if (t->decl)
+            fprintf(out, "%s@%d:%d", t->decl->name ? t->decl->name : "-", t->decl->loc.line,
+                    t->decl->loc.col);
+        else
+            fputc('-', out);
+        fputs(" alias=", out);
+        print_reference(out, list, n, t->alias);
+        fputc('\n', out);
+    }
+    free(list);
+}

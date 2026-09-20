@@ -17,6 +17,7 @@ static void usage(FILE *f) {
           "  --emit-c             Print readable generated C\n"
           "  --emit-ast           Print syntax tree\n"
           "  --emit-typed-ast     Print syntax tree annotated with semantic types\n"
+          "  --emit-types         Print the type table after parsing\n"
           "  --emit-tokens        Print lexer tokens\n"
           "  --emit-asm           Generate assembler with --cc gcc/clang\n"
           "  --cc PATH            Use an external C compiler instead of libtcc\n"
@@ -53,12 +54,15 @@ int tc_compile(const char *path, const char *output, int mode, int bounds, const
             dump_tokens(c, stdout);
             result = 0;
         } else {
-            if (mode == 4)
+            if (mode == 4 || mode == 14)
                 parse(c);
             else
                 load_program(c, path, root);
             if (mode == 4) {
                 dump_ast(c->program, stdout, 0);
+                result = 0;
+            } else if (mode == 14) {
+                dump_types(c, stdout);
                 result = 0;
             } else {
                 expand_generics(c);
@@ -172,6 +176,8 @@ int main(int argc, char **argv) {
             mode = 4;
         else if (!strcmp(a, "--emit-typed-ast"))
             mode = 13;
+        else if (!strcmp(a, "--emit-types"))
+            mode = 14;
         else if (!strcmp(a, "--emit-asm"))
             mode = 7;
         else if (!strcmp(a, "--no-bounds-check"))
