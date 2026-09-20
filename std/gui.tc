@@ -165,7 +165,7 @@ class GuiDraw {
         surface.fillRect(area.x, area.y, area.width, area.height, fill);
         surface.rect(area.x, area.y, area.width, area.height, foreground);
         GuiRect inner = area.inset(2);
-        label(surface, inner, text, foreground, 1, true);
+        GuiDraw.label(surface, inner, text, foreground, 1, true);
     }
 }
 
