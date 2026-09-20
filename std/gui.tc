@@ -195,7 +195,25 @@ class DoubleBuffer {
 }
 
 
-/// kind: 1 key, 2 text, 3 mouse, 4 resize, 5 close, 6 custom.
+enum GuiEventKind {
+    None = 0,
+    Key = 1,
+    Text = 2,
+    Mouse = 3,
+    Resize = 4,
+    Close = 5,
+    Custom = 6
+}
+
+enum GuiMouseButton {
+    None = 0,
+    Left = 1,
+    Right = 2,
+    Middle = 3
+}
+
+/// Event payload uses integer fields at the C ABI boundary.
+/// Use GuiEventKind and GuiMouseButton instead of numeric literals.
 class GuiEvent {
     int kind;
     int key;
@@ -271,18 +289,18 @@ class GuiTextBox {
 
 class GuiInput {
     static bool clicked(GuiEvent event, GuiRect area) {
-        return event.kind == 3 && event.button == 1 && event.pressed == 0 &&
+        return event.kind == GuiEventKind.Mouse && event.button == GuiMouseButton.Left && event.pressed == 0 &&
                area.contains(event.x, event.y);
     }
     static bool pressed(GuiEvent event, GuiRect area) {
-        return event.kind == 3 && event.button == 1 && event.pressed != 0 &&
+        return event.kind == GuiEventKind.Mouse && event.button == GuiMouseButton.Left && event.pressed != 0 &&
                area.contains(event.x, event.y);
     }
     static bool key(GuiEvent event, int key) {
-        return event.kind == 1 && event.key == key;
+        return event.kind == GuiEventKind.Key && event.key == key;
     }
     static bool text(GuiEvent event) {
-        return event.kind == 2;
+        return event.kind == GuiEventKind.Text;
     }
 }
 
@@ -299,7 +317,7 @@ class GuiButton {
     }
 
     bool handleEvent(GuiEvent event, GuiRect area, bool focused = false) {
-        if (event.kind == 3 && event.button == 1) {
+        if (event.kind == GuiEventKind.Mouse && event.button == GuiMouseButton.Left) {
             if (event.pressed != 0) {
                 down = area.contains(event.x, event.y);
                 return false;
@@ -308,7 +326,7 @@ class GuiButton {
             down = false;
             return clicked;
         }
-        if (focused && event.kind == 1 && (event.key == 13 || event.key == 32))
+        if (focused && event.kind == GuiEventKind.Key && (event.key == 13 || event.key == 32))
             return true;
         return false;
     }
@@ -359,7 +377,7 @@ class GuiFocus {
     }
 
     bool handleEvent(GuiEvent event) {
-        if (event.kind == 1 && event.key == 9) {
+        if (event.kind == GuiEventKind.Key && event.key == 9) {
             next();
             return true;
         }
