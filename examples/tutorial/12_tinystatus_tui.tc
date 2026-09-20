@@ -99,8 +99,8 @@ int main()
     int spins = 0;
 
     while (!request.ready() && spins < 5000) {
+        // Headless CI updates the cell buffer but does not emit ANSI.
         window.draw();
-        window.refresh();
 
         var event =
             window.nextEvent(timeout: 1);
