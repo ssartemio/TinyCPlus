@@ -326,7 +326,6 @@ int main(void) {
             void *sequence;
             void *key_event;
             void *mouse_event;
-            void *scroll_event;
             point.x = 7;
             point.y = 9;
             empty = ((void *(*)(void *, TcCocoaSel, const char *))tc_cocoa.msg_send)
@@ -394,17 +393,12 @@ int main(void) {
             assert(native_event.kind == TC_GUI_EVENT_MOUSE && native_event.button == 1);
             assert(native_event.x == 7 && native_event.pressed == 0);
 
-            scroll_event =
-                ((void *(*)(void *, TcCocoaSel, uint64_t, TcCocoaPoint, uint64_t, double, long,
-                             void *, long, long, double))tc_cocoa.msg_send)
-                (event_class, tc_cocoa_sel("mouseEventWithType:location:modifierFlags:timestamp:windowNumber:context:eventNumber:clickCount:pressure:"),
-                 22, point, 0, 0.0, (long)number, NULL, 2, 0, 0.0);
-            assert(scroll_event);
-            tc_cocoa_process_event(scroll_event);
+            tc_cocoa_push_scroll(native, point, 0.5, -1.25);
             memset(&native_event, 0, sizeof(native_event));
             assert(tc_gui_event_pop(native, &native_event));
             assert(native_event.kind == TC_GUI_EVENT_SCROLL);
             assert(native_event.x == 7);
+            assert(native_event.scroll_x == 0.5 && native_event.scroll_y == -1.25);
         }
 
         tc_gui_window_close(native);
