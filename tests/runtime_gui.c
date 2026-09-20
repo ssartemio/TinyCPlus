@@ -79,6 +79,7 @@ int main(void) {
 
     window = (TcGuiWindow *)tc_gui_window_create(5, 4, TC_STRING("headless"), 1, &error);
     assert(window && error == 0 && tc_gui_window_open(window));
+    assert(tc_gui_window_backing_scale(window) == 1.0);
     tc_gui_surface_clear(tc_gui_window_surface(window), green);
     assert(tc_gui_window_present(window) == 20);
     assert(tc_gui_window_post(window, TC_GUI_EVENT_CUSTOM, 42, 1, 2, 3, 4, 5, 1, 'Z') == 0);
@@ -206,6 +207,7 @@ int main(void) {
         TcGuiEvent native_event;
         native = (TcGuiWindow *)tc_gui_window_create(120, 80, TC_STRING("TinyC+ Cocoa CI"), 0, &error);
         assert(native && error == 0 && native->native_window && native->native_view);
+        assert(tc_gui_window_backing_scale(native) >= 1.0);
         gui_native_drain(native);
 
         tc_gui_surface_clear(tc_gui_window_surface(native), blue);

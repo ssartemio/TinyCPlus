@@ -159,3 +159,16 @@ Current limits:
   framebuffer; higher-DPI scaling policy is still intentionally undefined;
 - Cocoa is not auto-selected: explicit backend selection keeps headless builds
   deterministic.
+
+
+## HiDPI policy
+
+GUI geometry remains expressed in logical units. `GuiWindow.width()`,
+`height()` and its borrowed `Surface` use that logical coordinate space;
+the runtime does not silently allocate a larger Retina framebuffer.
+
+`GuiWindow.backingScale()` exposes the native logical-to-device scale when a
+backend provides one. Cocoa returns `NSWindow.backingScaleFactor`; headless
+and backends without an explicit device-scale policy currently return `1.0`.
+Applications that need pixel-density-aware assets can use this value without
+changing ordinary layout code.

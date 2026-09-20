@@ -6,6 +6,7 @@ int main() {
         return error;
     defer window.destroy();
 
+    assert(window.backingScale() >= 1.0);
     Surface canvas = window.surface();
     canvas.clear(Pixel.rgba(22, 30, 42));
     GuiDraw.label(canvas, GuiRect(10, 12, 160, 24), "TINYC+ COCOA",

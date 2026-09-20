@@ -23,6 +23,7 @@ Core operations:
 static (Surface, Error) create(int width, int height);
 int width();
 int height();
+double backingScale();
 void clear(uint color);
 uint getPixel(int x, int y);
 void setPixel(int x, int y, uint color);
@@ -145,3 +146,11 @@ void destroy();
 `handleEvent()` consumes normalized key/text events. Navigation currently
 covers left/right/home/end/delete/backspace. `text()` transfers ownership of
 the returned copy to the caller.
+
+
+### HiDPI
+
+Window and Surface dimensions are logical units. `backingScale()` reports the
+native logical-to-device scale where available; Cocoa maps it to
+`NSWindow.backingScaleFactor`. The runtime does not implicitly resize the
+framebuffer based on that factor.

@@ -107,6 +107,16 @@ static uint64_t tc_cocoa_u64(void *object, const char *selector) {
 static TcCocoaBool tc_cocoa_bool(void *object, const char *selector) {
     return ((TcCocoaBool (*)(void *, TcCocoaSel))tc_cocoa.msg_send)(object, tc_cocoa_sel(selector));
 }
+static double tc_cocoa_double(void *object, const char *selector) {
+    return ((double (*)(void *, TcCocoaSel))tc_cocoa.msg_send)(object, tc_cocoa_sel(selector));
+}
+static double tc_gui_cocoa_backing_scale(TcGuiWindow *window) {
+    double scale;
+    if (!window || !window->native_window)
+        return 1.0;
+    scale = tc_cocoa_double(window->native_window, "backingScaleFactor");
+    return scale > 0.0 ? scale : 1.0;
+}
 static TcCocoaPoint tc_cocoa_point(void *object, const char *selector) {
     return ((TcCocoaPoint (*)(void *, TcCocoaSel))tc_cocoa.msg_send)(object, tc_cocoa_sel(selector));
 }

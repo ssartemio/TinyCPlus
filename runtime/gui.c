@@ -928,6 +928,16 @@ int32_t tc_gui_window_height(void *handle) {
     TcGuiWindow *window = (TcGuiWindow *)handle;
     return window ? window->buffer->back.height : 0;
 }
+double tc_gui_window_backing_scale(void *handle) {
+    TcGuiWindow *window = (TcGuiWindow *)handle;
+    if (!window || window->headless)
+        return 1.0;
+#ifdef TC_GUI_COCOA_BACKEND
+    return tc_gui_cocoa_backing_scale(window);
+#else
+    return 1.0;
+#endif
+}
 int32_t tc_gui_window_open(void *handle) {
     TcGuiWindow *window = (TcGuiWindow *)handle;
     return window && window->open;
