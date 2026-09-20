@@ -124,3 +124,35 @@ assert p.returncode == 0, (p.stdout, p.stderr)
 form_source = ROOT / 'examples' / 'gui_form.tc'
 p = run('check', form_source)
 assert p.returncode == 0, (p.stdout, p.stderr)
+
+
+coexist_source = folder / 'coexist.tc'
+coexist_source.write_text(r'''
+import std.tui;
+import std.gui;
+
+int main() {
+    var terminal, terminalError = Window.create(width: 20, height: 5, headless: true);
+    if (terminalError != 0)
+        return terminalError;
+    defer terminal.destroy();
+
+    Widget label = Ui.label("TUI");
+    terminal.setContent(label);
+    terminal.draw();
+
+    var graphical, guiError = GuiWindow.create(width: 20, height: 10, title: "GUI", headless: true);
+    if (guiError != 0)
+        return guiError;
+    defer graphical.destroy();
+
+    Surface canvas = graphical.surface();
+    canvas.clear(Pixel.rgba(1, 2, 3));
+    GuiDraw.label(canvas, GuiRect(0, 0, 20, 10), "GUI", Pixel.rgba(255, 255, 255),
+                  centered: true);
+    assert(graphical.present() > 0);
+    return 0;
+}
+''')
+p = run('run', coexist_source)
+assert p.returncode == 0, (p.stdout, p.stderr)
