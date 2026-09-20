@@ -42,3 +42,18 @@ on Windows.
 3. add macOS and Linux native backends without changing Surface/Canvas semantics;
 4. add richer font backends later without changing the basic Surface contract;
 5. converge GUI/TUI event constants where that improves reuse.
+
+
+## Primitive widgets
+
+The first graphical widgets are intentionally immediate-mode:
+
+- `GuiRect` and `GuiLayout.row/column` provide allocation-free geometry;
+- `GuiDraw.label` and `GuiDraw.button` render directly to a `Surface`;
+- `GuiTextBox` is the first stateful control and reuses the existing UTF-8
+  `GapBuffer` from TinyEdit.
+
+`GuiTextBox` owns its editing buffer, returns text as an explicit
+`OwnedString`, accepts normalized `GuiEvent` key/text input and draws a
+single-line field with caret. Long content uses a small horizontal viewport so
+the caret remains visible. This is deliberately not a second text engine.
