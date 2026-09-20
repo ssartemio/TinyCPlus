@@ -647,6 +647,8 @@ typedef struct TcGuiWindow {
     void *native_gc;
     unsigned long native_delete;
     void *native_image;
+    void *native_im;
+    void *native_ic;
 #elif defined(TC_GUI_COCOA_BACKEND)
     void *native_app;
     void *native_window;

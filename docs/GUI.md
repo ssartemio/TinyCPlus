@@ -116,7 +116,7 @@ native X11 program there.
 Current limits:
 
 - X11 uses the default TrueColor visual with standard RGB masks;
-- text input uses `XLookupString`; full XIM/IME composition is future work;
+- text input uses XIM/XIC with `Xutf8LookupString` when available and falls back to `XLookupString`; advanced IME preedit UI is still future work;
 - Wayland is not implemented yet;
 - X11 is not auto-selected from `DISPLAY`; explicit selection keeps builds
   deterministic and avoids making desktop development packages mandatory.

@@ -6,6 +6,7 @@
 #include <X11/keysym.h>
 #include <sys/select.h>
 #include <unistd.h>
+#include <locale.h>
 
 static Display *tc_gui_x11_display(TcGuiWindow *window) {
     return (Display *)window->native_display;
@@ -16,6 +17,17 @@ static Window tc_gui_x11_window(TcGuiWindow *window) {
 static GC tc_gui_x11_gc(TcGuiWindow *window) {
     return (GC)window->native_gc;
 }
+static XIM tc_gui_x11_im(TcGuiWindow *window) {
+    return (XIM)window->native_im;
+}
+static XIC tc_gui_x11_ic(TcGuiWindow *window) {
+    return (XIC)window->native_ic;
+}
+static int tc_gui_x11_host_lsb(void) {
+    const uint16_t value = 1;
+    return *(const uint8_t *)&value == 1;
+}
+
 static void tc_gui_x11_drop_image(TcGuiWindow *window) {
     XImage *image = (XImage *)window->native_image;
     if (!image)
@@ -39,6 +51,12 @@ static int tc_gui_x11_make_image(TcGuiWindow *window) {
                          32, front->stride * (int)sizeof(TcGuiPixel));
     if (!image)
         return 9;
+    if (image->bits_per_pixel != 32 ||
+        image->byte_order != (tc_gui_x11_host_lsb() ? LSBFirst : MSBFirst)) {
+        image->data = NULL;
+        XDestroyImage(image);
+        return 9;
+    }
     window->native_image = image;
     return 0;
 }
@@ -61,33 +79,44 @@ static int32_t tc_gui_x11_key(KeySym key) {
         return key <= 0xff ? (int32_t)key : 0;
     }
 }
-static uint32_t tc_gui_x11_utf8(const char *data, int length) {
+static uint32_t tc_gui_x11_utf8_next(const char *data, int length, int *offset) {
     const unsigned char *s = (const unsigned char *)data;
     uint32_t cp;
-    int need, i;
-    if (length <= 0)
+    int start = *offset, need, i;
+    if (start >= length)
         return 0;
-    if (s[0] < 0x80)
-        return s[0];
-    if (s[0] >= 0xc2 && s[0] <= 0xdf) {
-        cp = s[0] & 0x1fu;
-        need = 1;
-    } else if (s[0] >= 0xe0 && s[0] <= 0xef) {
-        cp = s[0] & 0x0fu;
-        need = 2;
-    } else if (s[0] >= 0xf0 && s[0] <= 0xf4) {
-        cp = s[0] & 0x07u;
-        need = 3;
-    } else
-        return 0xfffdu;
-    if (length < need + 1)
-        return 0xfffdu;
-    for (i = 1; i <= need; i++) {
-        if ((s[i] & 0xc0u) != 0x80u)
-            return 0xfffdu;
-        cp = (cp << 6) | (s[i] & 0x3fu);
+    if (s[start] < 0x80) {
+        *offset = start + 1;
+        return s[start];
     }
-    return cp <= 0x10ffffu && !(cp >= 0xd800u && cp <= 0xdfffu) ? cp : 0xfffdu;
+    if (s[start] >= 0xc2 && s[start] <= 0xdf) {
+        cp = s[start] & 0x1fu;
+        need = 1;
+    } else if (s[start] >= 0xe0 && s[start] <= 0xef) {
+        cp = s[start] & 0x0fu;
+        need = 2;
+    } else if (s[start] >= 0xf0 && s[start] <= 0xf4) {
+        cp = s[start] & 0x07u;
+        need = 3;
+    } else {
+        *offset = start + 1;
+        return 0xfffdu;
+    }
+    if (start + need >= length) {
+        *offset = length;
+        return 0xfffdu;
+    }
+    for (i = 1; i <= need; i++) {
+        if ((s[start + i] & 0xc0u) != 0x80u) {
+            *offset = start + i;
+            return 0xfffdu;
+        }
+        cp = (cp << 6) | (s[start + i] & 0x3fu);
+    }
+    *offset = start + need + 1;
+    if (cp > 0x10ffffu || (cp >= 0xd800u && cp <= 0xdfffu))
+        return 0xfffdu;
+    return cp;
 }
 static void tc_gui_x11_repaint(TcGuiWindow *window, int full) {
     Display *display = tc_gui_x11_display(window);
@@ -108,22 +137,50 @@ static void tc_gui_x11_repaint(TcGuiWindow *window, int full) {
     XFlush(display);
     tc_gui_surface_damage_clear(front);
 }
+static void tc_gui_x11_push_text(TcGuiWindow *window, const char *bytes, int length) {
+    int offset = 0;
+    while (offset < length) {
+        TcGuiEvent event;
+        uint32_t codepoint = tc_gui_x11_utf8_next(bytes, length, &offset);
+        if (!codepoint)
+            break;
+        memset(&event, 0, sizeof(event));
+        event.kind = TC_GUI_EVENT_TEXT;
+        event.codepoint = codepoint;
+        tc_gui_event_push(window, event);
+    }
+}
+
 static void tc_gui_x11_push_key(TcGuiWindow *window, XKeyEvent *key) {
-    char bytes[16];
+    char stack[64];
+    char *bytes = stack;
+    int capacity = (int)sizeof(stack);
+    int length = 0;
     KeySym symbol = NoSymbol;
-    int length = XLookupString(key, bytes, (int)sizeof(bytes), &symbol, NULL);
     TcGuiEvent event;
+    XIC ic = tc_gui_x11_ic(window);
+    if (ic) {
+        Status status = XLookupNone;
+        length = Xutf8LookupString(ic, key, bytes, capacity, &symbol, &status);
+        if (status == XBufferOverflow && length > capacity) {
+            bytes = (char *)malloc((size_t)length + 1);
+            if (bytes) {
+                capacity = length + 1;
+                length = Xutf8LookupString(ic, key, bytes, capacity, &symbol, &status);
+            } else
+                length = 0;
+        }
+    } else
+        length = XLookupString(key, bytes, capacity, &symbol, NULL);
+
     memset(&event, 0, sizeof(event));
     event.kind = TC_GUI_EVENT_KEY;
     event.key = tc_gui_x11_key(symbol);
     tc_gui_event_push(window, event);
-    if (length > 0) {
-        memset(&event, 0, sizeof(event));
-        event.kind = TC_GUI_EVENT_TEXT;
-        event.codepoint = tc_gui_x11_utf8(bytes, length);
-        if (event.codepoint)
-            tc_gui_event_push(window, event);
-    }
+    if (length > 0)
+        tc_gui_x11_push_text(window, bytes, length);
+    if (bytes != stack)
+        free(bytes);
 }
 static void tc_gui_x11_process(TcGuiWindow *window, XEvent *native) {
     Display *display = tc_gui_x11_display(window);
@@ -146,6 +203,14 @@ static void tc_gui_x11_process(TcGuiWindow *window, XEvent *native) {
             event.height = native->xconfigure.height;
             tc_gui_event_push(window, event);
         }
+        break;
+    case FocusIn:
+        if (tc_gui_x11_ic(window))
+            XSetICFocus(tc_gui_x11_ic(window));
+        break;
+    case FocusOut:
+        if (tc_gui_x11_ic(window))
+            XUnsetICFocus(tc_gui_x11_ic(window));
         break;
     case KeyPress:
         tc_gui_x11_push_key(window, &native->xkey);
@@ -228,11 +293,31 @@ static int tc_gui_x11_create(TcGuiWindow *window, TinyString title) {
     XStoreName(display, native, caption);
     free(caption);
     XSelectInput(display, native, ExposureMask | KeyPressMask | ButtonPressMask |
-                                  ButtonReleaseMask | PointerMotionMask | StructureNotifyMask);
+                                  ButtonReleaseMask | PointerMotionMask | StructureNotifyMask |
+                                  FocusChangeMask);
     wm_delete = XInternAtom(display, "WM_DELETE_WINDOW", False);
     window->native_delete = (unsigned long)wm_delete;
     XSetWMProtocols(display, native, &wm_delete, 1);
+    setlocale(LC_CTYPE, "");
+    if (XSupportsLocale()) {
+        XSetLocaleModifiers("");
+        window->native_im = XOpenIM(display, NULL, NULL, NULL);
+        if (window->native_im)
+            window->native_ic = XCreateIC(tc_gui_x11_im(window),
+                                           XNInputStyle, XIMPreeditNothing | XIMStatusNothing,
+                                           XNClientWindow, native,
+                                           XNFocusWindow, native,
+                                           NULL);
+    }
     if (tc_gui_x11_make_image(window) != 0) {
+        if (window->native_ic) {
+            XDestroyIC(tc_gui_x11_ic(window));
+            window->native_ic = NULL;
+        }
+        if (window->native_im) {
+            XCloseIM(tc_gui_x11_im(window));
+            window->native_im = NULL;
+        }
         XFreeGC(display, gc);
         XDestroyWindow(display, native);
         XCloseDisplay(display);
@@ -303,6 +388,14 @@ static void tc_gui_x11_destroy(TcGuiWindow *window) {
     if (window->native_window)
         XDestroyWindow(display, tc_gui_x11_window(window));
     tc_gui_x11_drop_image(window);
+    if (window->native_ic) {
+        XDestroyIC(tc_gui_x11_ic(window));
+        window->native_ic = NULL;
+    }
+    if (window->native_im) {
+        XCloseIM(tc_gui_x11_im(window));
+        window->native_im = NULL;
+    }
     if (window->native_gc)
         XFreeGC(display, tc_gui_x11_gc(window));
     XCloseDisplay(display);

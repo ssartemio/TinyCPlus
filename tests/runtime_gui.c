@@ -144,6 +144,14 @@ int main(void) {
 
 #ifdef TC_GUI_X11_BACKEND
     {
+        const char utf8[] = {'A', (char)0xc3, (char)0xa9, (char)0xe2, (char)0x82, (char)0xac};
+        int offset = 0;
+        assert(tc_gui_x11_utf8_next(utf8, (int)sizeof(utf8), &offset) == 'A');
+        assert(tc_gui_x11_utf8_next(utf8, (int)sizeof(utf8), &offset) == 0x00e9u);
+        assert(tc_gui_x11_utf8_next(utf8, (int)sizeof(utf8), &offset) == 0x20acu);
+        assert(offset == (int)sizeof(utf8));
+    }
+    {
         TcGuiWindow *native;
         TcGuiEvent native_event;
         Display *display;
@@ -191,11 +199,42 @@ int main(void) {
         assert(native_event.kind == TC_GUI_EVENT_MOUSE && native_event.button == 1);
         assert(native_event.x == 7 && native_event.y == 9 && native_event.pressed == 0);
 
-        tc_gui_window_close(native);
+        XResizeWindow(display, xwindow, 120, 72);
+        XFlush(display);
         memset(&native_event, 0, sizeof(native_event));
-        tc_gui_window_next(native, 0, &native_event.kind, &native_event.key, &native_event.x,
+        tc_gui_window_next(native, 500, &native_event.kind, &native_event.key, &native_event.x,
                            &native_event.y, &native_event.width, &native_event.height,
                            &native_event.button, &native_event.pressed, &native_event.codepoint);
+        while (native_event.kind != TC_GUI_EVENT_RESIZE && native_event.kind != TC_GUI_EVENT_NONE) {
+            memset(&native_event, 0, sizeof(native_event));
+            tc_gui_window_next(native, 500, &native_event.kind, &native_event.key, &native_event.x,
+                               &native_event.y, &native_event.width, &native_event.height,
+                               &native_event.button, &native_event.pressed, &native_event.codepoint);
+        }
+        assert(native_event.kind == TC_GUI_EVENT_RESIZE);
+        assert(native_event.width == 120 && native_event.height == 72);
+        assert(tc_gui_window_width(native) == 120 && tc_gui_window_height(native) == 72);
+
+        memset(&sent, 0, sizeof(sent));
+        sent.xclient.type = ClientMessage;
+        sent.xclient.display = display;
+        sent.xclient.window = xwindow;
+        sent.xclient.message_type = XInternAtom(display, "WM_PROTOCOLS", False);
+        sent.xclient.format = 32;
+        sent.xclient.data.l[0] = (long)native->native_delete;
+        sent.xclient.data.l[1] = CurrentTime;
+        assert(XSendEvent(display, xwindow, False, NoEventMask, &sent));
+        XFlush(display);
+        memset(&native_event, 0, sizeof(native_event));
+        tc_gui_window_next(native, 500, &native_event.kind, &native_event.key, &native_event.x,
+                           &native_event.y, &native_event.width, &native_event.height,
+                           &native_event.button, &native_event.pressed, &native_event.codepoint);
+        while (native_event.kind != TC_GUI_EVENT_CLOSE && native_event.kind != TC_GUI_EVENT_NONE) {
+            memset(&native_event, 0, sizeof(native_event));
+            tc_gui_window_next(native, 500, &native_event.kind, &native_event.key, &native_event.x,
+                               &native_event.y, &native_event.width, &native_event.height,
+                               &native_event.button, &native_event.pressed, &native_event.codepoint);
+        }
         assert(native_event.kind == TC_GUI_EVENT_CLOSE && !tc_gui_window_open(native));
         tc_gui_window_destroy(native);
     }
