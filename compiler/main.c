@@ -19,7 +19,7 @@ static void usage(FILE *f) {
           "  --emit-tokens        Print lexer tokens\n"
           "  --emit-asm           Generate assembler with --cc gcc/clang\n"
           "  --cc PATH            Use an external C compiler instead of libtcc\n"
-          "  --gui-backend NAME   GUI backend: headless or x11 (Linux)\n"
+          "  --gui-backend NAME   GUI backend: headless, x11 (Linux), cocoa (macOS)\n"
           "  --c-source PATH      Compile and link a C source or object file\n"
           "  -I PATH / -L PATH    Add C include / library search paths\n"
           "  -l NAME              Link a C library\n"

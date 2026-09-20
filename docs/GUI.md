@@ -4,7 +4,7 @@ Status: experimental post-1.0 work on `feature/gui-foundation`.
 
 The renderer remains deterministic and in-memory on every supported platform.
 `GuiWindow` adds a platform-neutral window/event abstraction. Headless windows
-work everywhere; Windows uses Win32/GDI and Linux can opt into the native X11 backend.
+work everywhere; Windows uses Win32/GDI, Linux can opt into X11, and macOS can opt into Cocoa.
 
 ## Contract
 
@@ -21,8 +21,9 @@ work everywhere; Windows uses Win32/GDI and Linux can opt into the native X11 ba
 - Windows native windows use Win32/GDI;
 - Linux native windows are available with `--gui-backend x11`;
 - Linux headless remains the default, so X11 is not a build dependency for ordinary TinyC+;
-- macOS still uses headless windows;
-- Win32 and X11 present the same `0xAARRGGBB` front buffer.
+- macOS native windows are available with `--gui-backend cocoa`;
+- headless remains the default on Linux/macOS;
+- Win32, X11 and Cocoa present the same `0xAARRGGBB` front buffer.
 
 ## Core API
 
@@ -42,7 +43,7 @@ on Windows.
 
 1. validate the Win32 native path interactively in addition to CI compilation;
 2. reuse Row/Column layout rules for graphical Label/Button/TextBox;
-3. add a macOS native backend and evaluate a Wayland backend without changing Surface/Canvas semantics;
+3. evaluate a Wayland backend and define a cross-platform HiDPI policy without changing Surface/Canvas semantics;
 4. add richer font backends later without changing the basic Surface contract;
 5. keep GUI/TUI event payloads interoperable while preserving their existing kind values.
 
@@ -119,3 +120,55 @@ Current limits:
 - Wayland is not implemented yet;
 - X11 is not auto-selected from `DISPLAY`; explicit selection keeps builds
   deterministic and avoids making desktop development packages mandatory.
+
+
+## macOS Cocoa backend
+
+The Cocoa backend is also opt-in:
+
+```sh
+tiny run examples/gui_window.tc --gui-backend cocoa
+tiny run examples/gui_window.tc --cc clang --gui-backend cocoa
+```
+
+The implementation remains C11. It does not compile Objective-C source: the
+runtime loads `libobjc`, AppKit and CoreGraphics dynamically, registers a
+small `NSView` subclass through the Objective-C runtime, and sends messages
+through a typed `objc_msgSend` bridge. This keeps the compiler and generated
+program on the same C/libtcc path used elsewhere.
+
+The backend currently provides:
+
+- native `NSApplication` / `NSWindow` creation and explicit lifecycle;
+- drawing of the existing TinyC+ front buffer through CoreGraphics;
+- the same `GuiEvent` queue used by headless/Win32/X11;
+- normalized special keys through `std.input`;
+- text events from `NSEvent.characters`;
+- mouse motion/button normalization;
+- close detection and timeout-based AppKit event polling.
+
+The dedicated macOS CI job executes the Cocoa runtime directly, then runs a
+native TinyC+ Cocoa program with both Clang and libtcc. It also constructs
+native `NSEvent` objects to verify special-key, text and mouse translation.
+
+Current limits:
+
+- Cocoa windows are resizable and rebuild their framebuffer/CGImage on `windowDidResize:`;
+- advanced IME/composition semantics are not yet modeled beyond AppKit's text value;
+- rendering uses a cached CoreGraphics image backed directly by the TinyC+
+  framebuffer; higher-DPI scaling policy is still intentionally undefined;
+- Cocoa is not auto-selected: explicit backend selection keeps headless builds
+  deterministic.
+
+
+## HiDPI policy
+
+GUI geometry remains expressed in logical units. `GuiWindow.width()`,
+`height()` and its borrowed `Surface` use that logical coordinate space;
+the runtime does not silently allocate a larger Retina framebuffer.
+
+`GuiWindow.backingScale()` exposes the native logical-to-device scale when a
+backend provides one. Cocoa returns `NSWindow.backingScaleFactor`; headless
+and backends without an explicit device-scale policy currently return `1.0`.
+Applications that need pixel-density-aware assets can use this value without
+changing ordinary layout code.

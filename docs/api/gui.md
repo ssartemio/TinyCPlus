@@ -23,6 +23,7 @@ Core operations:
 static (Surface, Error) create(int width, int height);
 int width();
 int height();
+double backingScale();
 void clear(uint color);
 uint getPixel(int x, int y);
 void setPixel(int x, int y, uint color);
@@ -116,7 +117,14 @@ tiny run app.tc --gui-backend x11
 Without that option Linux keeps the dependency-free headless implementation.
 The X11 backend uses the same `Surface` and event API, links `libX11` only for
 the selected build, and is exercised under Xvfb with both GCC and libtcc.
-macOS currently remains headless.
+macOS can select the native Cocoa bridge explicitly:
+
+```sh
+tiny run app.tc --gui-backend cocoa
+```
+
+The Cocoa bridge is implemented in pure C by loading the Objective-C runtime,
+AppKit and CoreGraphics dynamically, so it also works with libtcc. Cocoa resize notifications rebuild the TinyC+ framebuffer and emit `GuiEvent.resize`; an explicit HiDPI scaling policy is still future work.
 
 
 ## GuiTextBox
@@ -138,3 +146,11 @@ void destroy();
 `handleEvent()` consumes normalized key/text events. Navigation currently
 covers left/right/home/end/delete/backspace. `text()` transfers ownership of
 the returned copy to the caller.
+
+
+### HiDPI
+
+Window and Surface dimensions are logical units. `backingScale()` reports the
+native logical-to-device scale where available; Cocoa maps it to
+`NSWindow.backingScaleFactor`. The runtime does not implicitly resize the
+framebuffer based on that factor.

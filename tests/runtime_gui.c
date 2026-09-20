@@ -2,7 +2,7 @@
 #include <assert.h>
 #include <stdio.h>
 
-#if defined(_WIN32) || defined(TC_GUI_X11_BACKEND)
+#if defined(_WIN32) || defined(TC_GUI_X11_BACKEND) || defined(TC_GUI_COCOA_BACKEND)
 static void gui_native_drain(TcGuiWindow *window) {
     TcGuiEvent event;
     do {
@@ -79,6 +79,7 @@ int main(void) {
 
     window = (TcGuiWindow *)tc_gui_window_create(5, 4, TC_STRING("headless"), 1, &error);
     assert(window && error == 0 && tc_gui_window_open(window));
+    assert(tc_gui_window_backing_scale(window) == 1.0);
     tc_gui_surface_clear(tc_gui_window_surface(window), green);
     assert(tc_gui_window_present(window) == 20);
     assert(tc_gui_window_post(window, TC_GUI_EVENT_CUSTOM, 42, 1, 2, 3, 4, 5, 1, 'Z') == 0);
@@ -234,6 +235,127 @@ int main(void) {
                                &native_event.y, &native_event.width, &native_event.height,
                                &native_event.button, &native_event.pressed, &native_event.codepoint);
         }
+        assert(native_event.kind == TC_GUI_EVENT_CLOSE && !tc_gui_window_open(native));
+        tc_gui_window_destroy(native);
+    }
+#endif
+
+#ifdef TC_GUI_COCOA_BACKEND
+    {
+        TcGuiWindow *native;
+        TcGuiEvent native_event;
+        native = (TcGuiWindow *)tc_gui_window_create(120, 80, TC_STRING("TinyC+ Cocoa CI"), 0, &error);
+        assert(native && error == 0 && native->native_window && native->native_view);
+        assert(tc_gui_window_backing_scale(native) >= 1.0);
+        gui_native_drain(native);
+
+        tc_gui_surface_clear(tc_gui_window_surface(native), blue);
+        assert(tc_gui_window_present(native) == tc_gui_window_width(native) * tc_gui_window_height(native));
+
+        {
+            TcCocoaSize size;
+            size.width = 140;
+            size.height = 90;
+            ((void (*)(void *, TcCocoaSel, TcCocoaSize))tc_cocoa.msg_send)
+                (native->native_window, tc_cocoa_sel("setContentSize:"), size);
+            memset(&native_event, 0, sizeof(native_event));
+            tc_gui_window_next(native, 0, &native_event.kind, &native_event.key, &native_event.x,
+                               &native_event.y, &native_event.width, &native_event.height,
+                               &native_event.button, &native_event.pressed, &native_event.codepoint);
+            assert(native_event.kind == TC_GUI_EVENT_RESIZE);
+            assert(native_event.width == 140 && native_event.height == 90);
+            assert(tc_gui_window_width(native) == 140 && tc_gui_window_height(native) == 90);
+        }
+
+        assert(tc_gui_window_post(native, TC_GUI_EVENT_CUSTOM, 91, 0, 0, 0, 0, 0, 0, 0) == 0);
+        memset(&native_event, 0, sizeof(native_event));
+        tc_gui_window_next(native, 0, &native_event.kind, &native_event.key, &native_event.x,
+                           &native_event.y, &native_event.width, &native_event.height,
+                           &native_event.button, &native_event.pressed, &native_event.codepoint);
+        assert(native_event.kind == TC_GUI_EVENT_CUSTOM && native_event.key == 91);
+
+        {
+            void *event_class = (void *)tc_cocoa.get_class("NSEvent");
+            uint64_t number = tc_cocoa_u64(native->native_window, "windowNumber");
+            TcCocoaPoint point;
+            void *empty;
+            void *letter;
+            void *sequence;
+            void *key_event;
+            void *mouse_event;
+            point.x = 7;
+            point.y = 9;
+            empty = ((void *(*)(void *, TcCocoaSel, const char *))tc_cocoa.msg_send)
+                ((void *)tc_cocoa.get_class("NSString"), tc_cocoa_sel("stringWithUTF8String:"), "");
+            letter = ((void *(*)(void *, TcCocoaSel, const char *))tc_cocoa.msg_send)
+                ((void *)tc_cocoa.get_class("NSString"), tc_cocoa_sel("stringWithUTF8String:"), "a");
+            sequence = ((void *(*)(void *, TcCocoaSel, const char *))tc_cocoa.msg_send)
+                ((void *)tc_cocoa.get_class("NSString"), tc_cocoa_sel("stringWithUTF8String:"),
+                 "A\xc3\xa9\xe2\x82\xac");
+
+            key_event =
+                ((void *(*)(void *, TcCocoaSel, uint64_t, TcCocoaPoint, uint64_t, double, long,
+                             void *, void *, void *, TcCocoaBool, unsigned short))tc_cocoa.msg_send)
+                (event_class, tc_cocoa_sel("keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:"),
+                 10, point, 0, 0.0, (long)number, NULL, empty, empty, 0, 123);
+            assert(key_event);
+            tc_cocoa_process_event(key_event);
+            memset(&native_event, 0, sizeof(native_event));
+            assert(tc_gui_event_pop(native, &native_event));
+            assert(native_event.kind == TC_GUI_EVENT_KEY && native_event.key == TC_KEY_LEFT);
+
+            key_event =
+                ((void *(*)(void *, TcCocoaSel, uint64_t, TcCocoaPoint, uint64_t, double, long,
+                             void *, void *, void *, TcCocoaBool, unsigned short))tc_cocoa.msg_send)
+                (event_class, tc_cocoa_sel("keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:"),
+                 10, point, 0, 0.0, (long)number, NULL, letter, letter, 0, 0);
+            assert(key_event);
+            tc_cocoa_process_event(key_event);
+            memset(&native_event, 0, sizeof(native_event));
+            assert(tc_gui_event_pop(native, &native_event));
+            assert(native_event.kind == TC_GUI_EVENT_KEY);
+            memset(&native_event, 0, sizeof(native_event));
+            assert(tc_gui_event_pop(native, &native_event));
+            assert(native_event.kind == TC_GUI_EVENT_TEXT && native_event.codepoint == 'a');
+
+            key_event =
+                ((void *(*)(void *, TcCocoaSel, uint64_t, TcCocoaPoint, uint64_t, double, long,
+                             void *, void *, void *, TcCocoaBool, unsigned short))tc_cocoa.msg_send)
+                (event_class, tc_cocoa_sel("keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:"),
+                 10, point, 0, 0.0, (long)number, NULL, sequence, sequence, 0, 0);
+            assert(key_event);
+            tc_cocoa_process_event(key_event);
+            memset(&native_event, 0, sizeof(native_event));
+            assert(tc_gui_event_pop(native, &native_event));
+            assert(native_event.kind == TC_GUI_EVENT_KEY);
+            memset(&native_event, 0, sizeof(native_event));
+            assert(tc_gui_event_pop(native, &native_event));
+            assert(native_event.kind == TC_GUI_EVENT_TEXT && native_event.codepoint == 'A');
+            memset(&native_event, 0, sizeof(native_event));
+            assert(tc_gui_event_pop(native, &native_event));
+            assert(native_event.kind == TC_GUI_EVENT_TEXT && native_event.codepoint == 0x00e9u);
+            memset(&native_event, 0, sizeof(native_event));
+            assert(tc_gui_event_pop(native, &native_event));
+            assert(native_event.kind == TC_GUI_EVENT_TEXT && native_event.codepoint == 0x20acu);
+
+            mouse_event =
+                ((void *(*)(void *, TcCocoaSel, uint64_t, TcCocoaPoint, uint64_t, double, long,
+                             void *, long, long, double))tc_cocoa.msg_send)
+                (event_class, tc_cocoa_sel("mouseEventWithType:location:modifierFlags:timestamp:windowNumber:context:eventNumber:clickCount:pressure:"),
+                 2, point, 0, 0.0, (long)number, NULL, 1, 1, 0.0);
+            assert(mouse_event);
+            tc_cocoa_process_event(mouse_event);
+            memset(&native_event, 0, sizeof(native_event));
+            assert(tc_gui_event_pop(native, &native_event));
+            assert(native_event.kind == TC_GUI_EVENT_MOUSE && native_event.button == 1);
+            assert(native_event.x == 7 && native_event.pressed == 0);
+        }
+
+        tc_gui_window_close(native);
+        memset(&native_event, 0, sizeof(native_event));
+        tc_gui_window_next(native, 0, &native_event.kind, &native_event.key, &native_event.x,
+                           &native_event.y, &native_event.width, &native_event.height,
+                           &native_event.button, &native_event.pressed, &native_event.codepoint);
         assert(native_event.kind == TC_GUI_EVENT_CLOSE && !tc_gui_window_open(native));
         tc_gui_window_destroy(native);
     }

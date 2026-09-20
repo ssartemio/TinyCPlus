@@ -29,6 +29,7 @@ extern C {
     void* tc_gui_window_create(int width, int height, string title, int headless, Error* error);
     int tc_gui_window_width(void* window);
     int tc_gui_window_height(void* window);
+    double tc_gui_window_backing_scale(void* window);
     int tc_gui_window_open(void* window);
     void* tc_gui_window_surface(void* window);
     int tc_gui_window_present(void* window);
@@ -219,6 +220,7 @@ class GuiWindow {
     }
     int width() { return tc_gui_window_width(handle); }
     int height() { return tc_gui_window_height(handle); }
+    double backingScale() { return tc_gui_window_backing_scale(handle); }
     bool isOpen() { return tc_gui_window_open(handle) != 0; }
     Surface surface() { Surface surface(tc_gui_window_surface(handle)); return surface; }
     int present() { return tc_gui_window_present(handle); }
