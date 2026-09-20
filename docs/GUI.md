@@ -4,7 +4,7 @@ Status: experimental post-1.0 work on `feature/gui-foundation`.
 
 The renderer remains deterministic and in-memory on every supported platform.
 `GuiWindow` adds a platform-neutral window/event abstraction. Headless windows
-work everywhere; Windows additionally has the first native backend using Win32/GDI.
+work everywhere; Windows uses Win32/GDI and Linux uses X11; the renderer and event API remain shared.
 
 ## Contract
 
@@ -18,7 +18,7 @@ work everywhere; Windows additionally has the first native backend using Win32/G
 - built-in dependency-free 5x7 bitmap text is available for ASCII-oriented UI;
 - lowercase letters map to uppercase glyphs in this first font;
 - unsupported Unicode codepoints currently render as `?`;
-- native windows currently exist only on Win32; Linux/macOS use headless windows;
+- native windows exist on Win32 and Linux/X11; macOS currently uses headless windows;
 - Win32 presentation uses GDI and the same 0xAARRGGBB front buffer.
 
 ## Core API
@@ -39,7 +39,7 @@ on Windows.
 
 1. validate the Win32 native path interactively in addition to CI compilation;
 2. reuse Row/Column layout rules for graphical Label/Button/TextBox;
-3. add macOS and Linux native backends without changing Surface/Canvas semantics;
+3. add the macOS native backend without changing Surface/Canvas semantics;
 4. add richer font backends later without changing the basic Surface contract;
 5. keep GUI/TUI event payloads interoperable while preserving their existing kind values.
 
@@ -80,3 +80,19 @@ keyboard activation through Enter/Space when focused. Its label is a borrowed
 `next()/previous()/set()`, and consumes Tab to advance. Mouse hit-testing
 remains explicit, which keeps layout and ownership visible instead of introducing
 a hidden widget tree.
+
+
+## Linux/X11 backend
+
+On Linux, non-headless `GuiWindow` uses Xlib. GUI programs link `libX11`
+only when `std.gui` is used. Presentation keeps the existing software
+`0xAARRGGBB` front buffer and uploads the minimal damage rectangle with
+`XPutImage`.
+
+X11 events are normalized into the existing `GuiEvent` contract:
+keyboard special keys use `std.input`, printable key input also emits text,
+mouse motion/button events keep pixel coordinates, `ConfigureNotify` resizes
+the double buffer, and `WM_DELETE_WINDOW` becomes a close event.
+
+CI installs `libx11-dev` and executes the native path under Xvfb on both
+Ubuntu x86-64 and ARM64.

@@ -641,6 +641,8 @@ typedef struct TcGuiWindow {
 #ifdef _WIN32
     HWND hwnd;
     uint32_t surrogate;
+#else
+    void *platform;
 #endif
 } TcGuiWindow;
 
@@ -821,6 +823,9 @@ static int tc_gui_register_window(void) {
     return tc_gui_window_atom != 0 || GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
 }
 #endif
+#ifdef __linux__
+#include "gui_x11.c"
+#endif
 
 void *tc_gui_window_create(int32_t width, int32_t height, TinyString title, int32_t headless,
                            int32_t *error) {
@@ -871,6 +876,12 @@ void *tc_gui_window_create(int32_t width, int32_t height, TinyString title, int3
         ShowWindow(window->hwnd, SW_SHOW);
         UpdateWindow(window->hwnd);
     }
+#elif defined(__linux__)
+    if (!window->headless && !tc_gui_x11_create(window, width, height, title, error)) {
+        tc_gui_buffer_destroy(window->buffer);
+        free(window);
+        return NULL;
+    }
 #else
     (void)title;
     if (!window->headless) {
@@ -916,6 +927,9 @@ int32_t tc_gui_window_present(void *handle) {
         InvalidateRect(window->hwnd, &area, FALSE);
         UpdateWindow(window->hwnd);
     }
+#elif defined(__linux__)
+    if (!window->headless && changed)
+        tc_gui_x11_present(window);
 #endif
     return changed;
 }
@@ -959,6 +973,10 @@ void tc_gui_window_next(void *handle, int32_t timeout, int32_t *kind, int32_t *k
             MsgWaitForMultipleObjects(0, NULL, FALSE, 10, QS_ALLINPUT);
         }
     } else
+#elif defined(__linux__)
+    if (window && !window->headless)
+        tc_gui_x11_next(window, timeout, &event);
+    else
 #endif
     if (window)
         tc_gui_event_pop(window, &event);
@@ -983,6 +1001,9 @@ void tc_gui_window_close(void *handle) {
 #ifdef _WIN32
     if (!window->headless && window->hwnd)
         PostMessageA(window->hwnd, WM_CLOSE, 0, 0);
+#elif defined(__linux__)
+    if (!window->headless)
+        tc_gui_x11_close(window);
 #endif
 }
 void tc_gui_window_destroy(void *handle) {
@@ -992,6 +1013,9 @@ void tc_gui_window_destroy(void *handle) {
 #ifdef _WIN32
     if (window->hwnd)
         DestroyWindow(window->hwnd);
+#elif defined(__linux__)
+    if (!window->headless)
+        tc_gui_x11_destroy(window);
 #endif
     tc_gui_buffer_destroy(window->buffer);
     free(window);

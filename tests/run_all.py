@@ -52,6 +52,8 @@ for cc in compilers:
         flags = ['-std=c11', '-I'+str(ROOT/'runtime')]
         if os.name != 'nt':
             flags += ['-D_POSIX_C_SOURCE=200809L', '-pthread', '-lm']
+            if name == 'gui' and sys.platform.startswith('linux'):
+                flags += ['-lX11']
         elif name == 'network':
             flags += ['-lws2_32']
         elif name == 'gui':
