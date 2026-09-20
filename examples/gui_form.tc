@@ -1,0 +1,38 @@
+import std.gui;
+
+int main() {
+    var window, error = GuiWindow.create(width: 640, height: 360, title: "TinyC+ form");
+    if (error != 0)
+        return error;
+    defer window.destroy();
+
+    GuiTextBox input = GuiTextBox.create("type here");
+    defer input.destroy();
+
+    bool focused = true;
+    while (window.isOpen()) {
+        GuiEvent event = window.nextEvent(timeout: 16);
+        if (event.kind == 5)
+            break;
+
+        GuiRect field = GuiRect(40, 70, 360, 28);
+        GuiRect closeButton = GuiRect(40, 116, 120, 30);
+
+        if (event.kind == 3 && event.button == 1 && event.pressed == 0)
+            focused = field.contains(event.x, event.y);
+        if (focused)
+            input.handleEvent(event);
+        if (GuiInput.clicked(event, closeButton))
+            window.close();
+
+        Surface canvas = window.surface();
+        canvas.clear(Pixel.rgba(18, 24, 32));
+        GuiDraw.label(canvas, GuiRect(40, 32, 360, 24), "TINY C+ FORM",
+                      Pixel.rgba(230, 237, 243));
+        input.draw(canvas, field, focused: focused);
+        GuiDraw.button(canvas, closeButton, "CLOSE",
+                       pressed: GuiInput.pressed(event, closeButton));
+        window.present();
+    }
+    return 0;
+}
