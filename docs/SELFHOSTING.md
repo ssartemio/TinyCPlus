@@ -25,12 +25,14 @@ compilador de C.
 | `--emit-typed-ast` en la etapa 0 | hecho | determinista, anotado con tipos y con el mismo error semántico que `check` |
 | Lexer (`selfhost/lexer.tc`) | hecho: mismo stdout, stderr y código de salida que `--emit-tokens` | `tests/test_selfhost.py` |
 | Parser (`selfhost/parser.tc`) | hecho: mismo árbol, mismos errores y mismo código de salida que `--emit-ast` | `tests/test_selfhost.py` |
+| Modelo de tipos (`selfhost/ast.tc`, `selfhost/types.tc`) | hecho: la tabla de tipos que construye el parser, con los mismos ids, es idéntica a la de `--emit-types` | `tests/test_selfhost.py` |
+| Carga de módulos y genéricos | pendiente | por añadir a la etapa 0 |
 | Semántica | pendiente | `--emit-typed-ast` |
 | Generación de C | pendiente | `--emit-c` y las pruebas existentes |
 
 `tests/test_selfhost.py` compila la etapa 1 con la etapa 0 y exige el mismo stdout,
-stderr y código de salida en cada fase portada. Compara, con `--emit-tokens` y
-`--emit-ast`:
+stderr y código de salida en cada fase portada. Compara, con `--emit-tokens`,
+`--emit-ast` y `--emit-types`:
 
 - todos los `.tc` del repositorio;
 - 64 casos límite del lexer (errores léxicos, literales, BOM, NUL, el límite de tokens);
@@ -76,9 +78,15 @@ faltaban, y se añadieron hasta que todas fallaron.
   genérica) y con eso decide si `Foo x;` es una declaración. La etapa 1 reproduce
   esa tabla como un conjunto de nombres, y los duplicados de tipo (`duplicate type`)
   se detectan por el nombre canónico (`int` e `i32` son el mismo tipo).
-- La etapa 1 guarda los tipos tal como están escritos (`TypeRef`) en lugar de
-  internarlos; la resolución llegará con la fase semántica. Única diferencia
-  conocida: la etapa 0 también registra los tipos tupla como `tc_tuple_<id>`.
+- Los tipos son los de verdad: se internan en una tabla compartida (`types.tc`) y
+  toman ids del mismo contador que los nodos, como en la etapa 0. Eso importa: un
+  tipo tupla se llama `tc_tuple_<id>` y uno de array `tc_array_<id>`, así que los
+  nombres dependen de cuántos nodos se crearon antes. Un `const T` es una copia
+  aparte, `size_t` copia a `u64` sin consumir id y un `func<…>` reutiliza el tipo
+  `Function` y lo reetiqueta; todo eso se reproduce y se comprueba.
+- `--emit-types` (etapa 0) imprime esa tabla en orden de creación. Existe para poder
+  exigir que el modelo de tipos sea idéntico antes de construir el análisis
+  semántico encima.
 - Detalles que hay que copiar tal cual: `>>` se parte reescribiendo el token a `>`;
   las longitudes de array y los valores de `enum` se leen con la semántica de
   `strtoull` en base 0 (`089` vale 0); y el límite de anidamiento es 256.

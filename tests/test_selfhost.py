@@ -1,8 +1,9 @@
 """Differential tests between stage 0 (compiler/, C) and stage 1 (selfhost/, TinyC+).
 
 Stage 1 is built with stage 0 and must behave exactly like it: same stdout, same stderr and
-the same exit status. Today that covers the lexer (`--emit-tokens`) and the parser
-(`--emit-ast`); each later phase adds an entry to PHASES. The typed syntax tree that stage 0
+the same exit status. Today that covers the lexer (`--emit-tokens`) and the parser, both its
+tree (`--emit-ast`) and the type table it builds (`--emit-types`); each later phase adds an
+entry to PHASES. The typed syntax tree that stage 0
 prints (`--emit-typed-ast`) is checked here too, because it is the reference the semantic
 phase will be compared against.
 """
@@ -44,7 +45,9 @@ assert code == 0, err.decode(errors='replace')
 failures = []
 
 # Each phase that stage 1 has ported is the stage 0 flag that prints that phase's output.
-PHASES = ['--emit-tokens', '--emit-ast']
+# The parser leaves two observable results: the tree and the type table it built on the way.
+PARSE_PHASES = ['--emit-ast', '--emit-types']
+PHASES = ['--emit-tokens'] + PARSE_PHASES
 
 
 def compare(label, path, phase_flag):
@@ -209,6 +212,33 @@ PARSER_CASES = [
     ('p_func_type_registers_function_alone', 'func<int()> f; void g(){Function;}'),
     ('p_closure_type_registers_function_alone', 'closure<void()> c; void g(){Function;}'),
     ('p_generic_type_registers_name_alone', 'Box<int> b; void g(){Box;}'),
+    ('p_tuple_id_is_a_type_name', '(int,int) a; void f(){tc_tuple_3 x;}'),
+    ('p_tuple_id_off_by_one', '(int,int) a; void f(){tc_tuple_4 x;}'),
+    ('p_tuple_interned', '(int,int) a; (int,int) b; (int,string) c; (int,string) d; ((int,int),int) e; ((int,int),int) f;'),
+    ('p_tuple_qualified_const', 'const (int,int) a; (int,int) b;'),
+    ('p_ids_shift_with_nodes', 'void f(){int a=1+2+3+4;int b=a*2;} (int,int) t; int[3] arr;'),
+    ('p_ids_array_names', 'int[3] a; int[4] b; int[3] c; int*[3] d; Foo[2] e;'),
+    ('p_ids_after_statements', 'void f(){g(1,2,3);h(4);} int[5] late; (int,Error) pair;'),
+    ('p_types_const_interned', 'const int a; const int b; const int* c; const Foo d; const Foo e; Foo f; const const int g;'),
+    ('p_types_const_before_class', 'const Foo a; class Foo{int x;} const Foo b;'),
+    ('p_types_size_t', 'size_t a; u64 b; size_t c; const size_t d; size_t* e; size_t[2] f;'),
+    ('p_types_size_t_after_u64', 'u64 a; size_t b; u64 c;'),
+    ('p_types_pointers_interned', 'int* a; int* b; int** c; int** d; Foo* e; Foo* f;'),
+    ('p_types_slices', 'Slice<int> a; Slice<int> b; Slice<Foo> c; Slice<Slice<int>> d;'),
+    ('p_types_generic_interned', 'Box<int> a; Box<int> b; Box<string> c; Box<Box<int>> d; Box<Box<int>> e; Map<int,Box<int>> f;'),
+    ('p_types_generic_then_plain', 'Box<int> a; Box b; class Box<T>{T v;}'),
+    ('p_types_func_never_shared', 'func<int(int)> a; func<int(int)> b; closure<int(int)> c; func<void()> d; func<void()> e;'),
+    ('p_types_func_return_types', 'func<Foo*(const Bar,(int,int))> a; func<func<int()>()> b;'),
+    ('p_types_alias_share_primitive', 'int a; i32 b; Error c; uint d; u32 e; byte f; u8 g; short h; long i; ulong j; StringView k; string l;'),
+    ('p_types_var_and_auto', 'void f(){var a=1;const var b=2;var* c;}'),
+    ('p_types_qualified_names', 'lib.Point a; lib.Point b; lib.sub.Thing c; lib.Point* d;'),
+    ('p_types_enum_and_class_registered', 'enum E{A} class C{} interface I{} struct S{} extension X{} E e; C c; I i; S s; X x;'),
+    ('p_types_generic_params_are_types', 'class Box<T,U>{T a;U b;} T free; U* other;'),
+    ('p_types_function_param_generics', 'T id<T>(T x){return x;} T* p;'),
+    ('p_types_extern_cnames', 'extern C{struct FILE{int x;} enum Mode{A,B} int puts(const char* s);} FILE* f; Mode m;'),
+    ('p_types_enum_cnames', 'enum Color{Red,Green} extern C{enum Kind{X=1,Y}}'),
+    ('p_types_lambda_auto', 'void f(){var g=x=>x;var h=(a,b)=>a;var k=(int a,Foo b)=>a;}'),
+    ('p_types_ctor_dtor_void', 'class A{A(){} ~A(){}}'),
     ('p_precedence_relational_then_shift', 'int f(){return a<b<<c>d>>e;}'),
     ('p_precedence_shift_then_relational', 'int f(){return a<<b<c>>d>e;}'),
     ('p_tuple_types', '(int,string) t; (int,Error) f(){return 1,0;} ((int,int),int) n;'),
@@ -375,7 +405,8 @@ PARSER_CASES.append(('p_precedence_matrix_prefix', 'void f(){%s}' % ''.join(
 for name, text in PARSER_CASES:
     source = folder / (name + '.tc')
     source.write_bytes(text.encode('utf-8'))
-    compare('parser case ' + name, source.relative_to(ROOT).as_posix(), '--emit-ast')
+    for flag in PARSE_PHASES:
+        compare('parser case %s %s' % (name, flag), source.relative_to(ROOT).as_posix(), flag)
 
 # Every prefix of a program that uses most of the grammar: each cut is a different syntax error
 # or a shorter valid program, so this walks the "unexpected end of file" paths systematically.
@@ -397,7 +428,8 @@ cuts = sorted(set(m.end() for m in re.finditer(rb'\s+|\w+|.', rich, re.S)))
 for cut in cuts:
     source = folder / ('prefix%d.tc' % cut)
     source.write_bytes(rich[:cut])
-    compare('rich prefix %d' % cut, source.relative_to(ROOT).as_posix(), '--emit-ast')
+    for flag in PARSE_PHASES:
+        compare('rich prefix %d %s' % (cut, flag), source.relative_to(ROOT).as_posix(), flag)
 
 # Mutations of real sources: delete, insert, swap or duplicate tokens, or truncate. They produce
 # plausible-looking programs that break in every corner of the grammar.
@@ -429,7 +461,8 @@ for index in range(opts.mutations):
             pieces[i] = mutation_rng.choice(POOL)
     source = folder / ('mutation%d.tc' % index)
     source.write_bytes(b''.join(pieces))
-    compare('mutation %d of %s' % (index, base.relative_to(ROOT).as_posix()), source.relative_to(ROOT).as_posix(), '--emit-ast')
+    for flag in PARSE_PHASES:
+        compare('mutation %d of %s %s' % (index, base.relative_to(ROOT).as_posix(), flag), source.relative_to(ROOT).as_posix(), flag)
 
 # ---- 4. the CLI contract that both stages share ---------------------------------------------
 code, out, err = run([stage1])
