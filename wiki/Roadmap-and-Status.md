@@ -22,6 +22,19 @@ La rama `main` cubre el roadmap funcional hasta 1.0:
 La matriz multiplataforma requerida quedó verde. La etiqueta RC permanece hasta
 completar la integración/release formal.
 
+## Después de rc.1
+
+Incorporado en `main` tras la etapa 1.0, con pruebas propias:
+
+- `switch` (enteros, `char`, `bool`, enums y strings; sin caída; exhaustivo en
+  enums sin `default`) y el builtin `hash()`;
+- `Map<K,V>` en `std.collections`;
+- `StringBuilder`, `String.fromDouble`, `Console.writeError` y `Process.spawn`;
+- finales de línea LF y bootstrap POSIX que no modifica el paquete Windows.
+
+Los `bin/*.exe` versionados son de rc.1 y no lo incluyen: reconstruya con
+`python build.py`. El detalle está en [docs/STATUS.md](https://github.com/ssartemio/TinyCPlus/blob/main/docs/STATUS.md).
+
 ## Límites contractuales de 1.0
 
 Memoria manual.

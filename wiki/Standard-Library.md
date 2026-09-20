@@ -8,13 +8,13 @@ La stdlib sigue la filosofía de “núcleo pequeño + módulos explícitos”.
 |---|---|
 | std.core | funciones base |
 | std.memory | memoria manual |
-| std.string | strings y OwnedString |
-| std.collections | Array<T> |
-| std.io | I/O básico |
+| std.string | strings, OwnedString y StringBuilder |
+| std.collections | Array<T> y Map<K,V> |
+| std.io | I/O básico, incluido stderr (`Console.writeError`) |
 | std.fs | archivos |
 | std.time | tiempo/timers |
 | std.math | matemáticas |
-| std.process | argumentos/proceso |
+| std.process | argumentos, `Process.run` (con shell) y `Process.spawn` (sin shell) |
 | std.concurrent | threads/tasks/channels |
 | std.net | TCP/UDP/DNS |
 | std.protobuf | wire format Protobuf |

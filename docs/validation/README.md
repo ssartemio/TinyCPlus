@@ -25,3 +25,8 @@ La validación multiplataforma posterior está registrada en
 [ci-2026-09-19.md](ci-2026-09-19.md): la matriz GitHub Actions pasó en
 Windows x64/GCC, Ubuntu x86-64/GCC, Ubuntu ARM64/GCC, macOS ARM64/Clang y
 Ubuntu/Clang con ASan/UBSan.
+
+Los informes de este directorio describen la entrega rc.1 (15–19 de septiembre
+de 2026). No cubren lo añadido después (`switch`, `hash()`, `Map<K,V>`,
+`StringBuilder`, `Process.spawn`, finales de línea LF): esos cambios se integraron
+con la misma matriz de CI, cuyo estado actual está en la pestaña Actions.

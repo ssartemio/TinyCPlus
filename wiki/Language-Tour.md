@@ -82,6 +82,44 @@ for (index, value in values) {
 }
 ```
 
+## Switch
+
+`switch` compara un entero, `char`, `bool`, enum o string contra etiquetas
+constantes. Los casos **no caen** al siguiente: no hace falta (ni se permite) un
+`break` directo.
+
+```c
+enum Kind { Fn, Var, Type }
+
+string describe(Kind kind)
+{
+    switch (kind)
+    {
+        case Kind.Fn:
+            return "función";
+        case Kind.Var, Kind.Type:
+            return "dato";
+    }
+}
+
+string size(int n)
+{
+    switch (n)
+    {
+        case 0:
+            return "vacío";
+        case 1, 2, 3:
+            return "pocos";
+        default:
+            return "muchos";
+    }
+}
+```
+
+Sobre un enum sin `default` hay que cubrir todos los valores; si falta uno, el
+compilador dice cuál. `continue` dentro de un caso actúa sobre el bucle que lo
+contiene.
+
 ## Slices
 
 ```c

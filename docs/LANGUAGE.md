@@ -48,8 +48,10 @@ caso. Se rechazan etiquetas duplicadas (también `16` y `0x10`) y más de un
 `default`. Sobre un enum sin `default`, el switch debe cubrir todos sus valores;
 un valor fuera de rango obtenido con `cast` termina el programa con un mensaje.
 Un switch con `default` o exhaustivo cuenta como retorno en todas las rutas
-cuando todos sus casos retornan. `case` y `default` no son palabras reservadas
-fuera de un switch.
+cuando todos sus casos retornan. `case` y `default` no son palabras reservadas:
+abren una etiqueta solo cuando lo que sigue puede continuarla (`default:`, o
+`case` seguido de un literal, un nombre o `-`). Dentro de un caso, `default = 3;`
+sigue siendo una asignación a una variable con ese nombre.
 
 Se evalúan operandos y argumentos de izquierda a derecha; `&&`/`||` cortocircuitan.
 Los argumentos nombrados se evalúan en orden escrito y después se reordenan
@@ -163,7 +165,8 @@ genéricos; los errores se detectan al instanciar. `Array<T>` ofrece reserve,
 push, pop, get, set, clear, destroy e indexación con bounds.
 
 `hash(value)` devuelve un `u64` para enteros, `char`, `bool`, enums, punteros y
-strings (por contenido). Una función de usuario llamada `hash` tiene prioridad.
+strings (por contenido). Una función, una variable o un método de la clase en la
+que se llama, con el nombre `hash`, tiene prioridad sobre el builtin.
 `Map<K,V>` de `std.collections` es una tabla hash propietaria con esas mismas
 claves; se comparan con `==`:
 
