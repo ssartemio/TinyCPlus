@@ -1,5 +1,6 @@
 module std.gui;
 import std.string;
+import std.input;
 
 /// Packed pixel format is 0xAARRGGBB. Surfaces own their pixel memory explicitly.
 extern C {

@@ -470,17 +470,6 @@ enum {
     TC_GUI_EVENT_CLOSE = 5,
     TC_GUI_EVENT_CUSTOM = 6
 };
-enum {
-    TC_GUI_KEY_LEFT = 1001,
-    TC_GUI_KEY_RIGHT,
-    TC_GUI_KEY_UP,
-    TC_GUI_KEY_DOWN,
-    TC_GUI_KEY_HOME,
-    TC_GUI_KEY_END,
-    TC_GUI_KEY_DELETE,
-    TC_GUI_KEY_PAGE_UP,
-    TC_GUI_KEY_PAGE_DOWN
-};
 
 static int tc_gui_encode_utf8(uint32_t cp, char bytes[4]) {
     if (cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff))
@@ -535,15 +524,15 @@ int32_t tc_gui_textbox_event(void *handle, int32_t kind, int32_t key, uint32_t c
     }
     if (kind != TC_GUI_EVENT_KEY)
         return 0;
-    if (key == TC_GUI_KEY_LEFT)
+    if (key == TC_KEY_LEFT)
         tc_gap_left(buffer);
-    else if (key == TC_GUI_KEY_RIGHT)
+    else if (key == TC_KEY_RIGHT)
         tc_gap_right(buffer);
-    else if (key == TC_GUI_KEY_HOME)
+    else if (key == TC_KEY_HOME)
         tc_gap_home(buffer);
-    else if (key == TC_GUI_KEY_END)
+    else if (key == TC_KEY_END)
         tc_gap_end(buffer);
-    else if (key == TC_GUI_KEY_DELETE)
+    else if (key == TC_KEY_DELETE)
         tc_gap_delete(buffer);
     else if (key == 8 || key == 127)
         tc_gap_backspace(buffer);
@@ -674,15 +663,15 @@ static int32_t tc_gui_mouse_y(LPARAM value) {
 }
 static int32_t tc_gui_key_code(WPARAM key) {
     switch (key) {
-    case VK_LEFT: return TC_GUI_KEY_LEFT;
-    case VK_RIGHT: return TC_GUI_KEY_RIGHT;
-    case VK_UP: return TC_GUI_KEY_UP;
-    case VK_DOWN: return TC_GUI_KEY_DOWN;
-    case VK_HOME: return TC_GUI_KEY_HOME;
-    case VK_END: return TC_GUI_KEY_END;
-    case VK_DELETE: return TC_GUI_KEY_DELETE;
-    case VK_PRIOR: return TC_GUI_KEY_PAGE_UP;
-    case VK_NEXT: return TC_GUI_KEY_PAGE_DOWN;
+    case VK_LEFT: return TC_KEY_LEFT;
+    case VK_RIGHT: return TC_KEY_RIGHT;
+    case VK_UP: return TC_KEY_UP;
+    case VK_DOWN: return TC_KEY_DOWN;
+    case VK_HOME: return TC_KEY_HOME;
+    case VK_END: return TC_KEY_END;
+    case VK_DELETE: return TC_KEY_DELETE;
+    case VK_PRIOR: return TC_KEY_PAGE_UP;
+    case VK_NEXT: return TC_KEY_PAGE_DOWN;
     default: return (int32_t)key;
     }
 }

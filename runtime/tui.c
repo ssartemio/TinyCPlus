@@ -12,17 +12,6 @@
 
 enum { TC_UI_KEY = 1, TC_UI_RESIZE = 2, TC_UI_TIMER = 3, TC_UI_MOUSE = 4, TC_UI_CUSTOM = 5 };
 enum {
-    TC_KEY_LEFT = 1001,
-    TC_KEY_RIGHT,
-    TC_KEY_UP,
-    TC_KEY_DOWN,
-    TC_KEY_HOME,
-    TC_KEY_END,
-    TC_KEY_DELETE,
-    TC_KEY_PAGE_UP,
-    TC_KEY_PAGE_DOWN
-};
-enum {
     TC_WIDGET_LABEL = 1,
     TC_WIDGET_BUTTON,
     TC_WIDGET_TEXTBOX,
