@@ -4,7 +4,7 @@ Status: experimental post-1.0 work on `feature/gui-foundation`.
 
 The renderer remains deterministic and in-memory on every supported platform.
 `GuiWindow` adds a platform-neutral window/event abstraction. Headless windows
-work everywhere; Windows additionally has the first native backend using Win32/GDI.
+work everywhere; Windows uses Win32/GDI and Linux can opt into the native X11 backend.
 
 ## Contract
 
@@ -18,8 +18,11 @@ work everywhere; Windows additionally has the first native backend using Win32/G
 - built-in dependency-free 5x7 bitmap text is available for ASCII-oriented UI;
 - lowercase letters map to uppercase glyphs in this first font;
 - unsupported Unicode codepoints currently render as `?`;
-- native windows currently exist only on Win32; Linux/macOS use headless windows;
-- Win32 presentation uses GDI and the same 0xAARRGGBB front buffer.
+- Windows native windows use Win32/GDI;
+- Linux native windows are available with `--gui-backend x11`;
+- Linux headless remains the default, so X11 is not a build dependency for ordinary TinyC+;
+- macOS still uses headless windows;
+- Win32 and X11 present the same `0xAARRGGBB` front buffer.
 
 ## Core API
 
@@ -39,7 +42,7 @@ on Windows.
 
 1. validate the Win32 native path interactively in addition to CI compilation;
 2. reuse Row/Column layout rules for graphical Label/Button/TextBox;
-3. add macOS and Linux native backends without changing Surface/Canvas semantics;
+3. add a macOS native backend and evaluate a Wayland backend without changing Surface/Canvas semantics;
 4. add richer font backends later without changing the basic Surface contract;
 5. keep GUI/TUI event payloads interoperable while preserving their existing kind values.
 
@@ -80,3 +83,39 @@ keyboard activation through Enter/Space when focused. Its label is a borrowed
 `next()/previous()/set()`, and consumes Tab to advance. Mouse hit-testing
 remains explicit, which keeps layout and ownership visible instead of introducing
 a hidden widget tree.
+
+
+## Linux X11 backend
+
+The X11 backend is deliberately opt-in:
+
+```sh
+tiny run examples/gui_window.tc --gui-backend x11
+tiny run examples/gui_window.tc --cc gcc --gui-backend x11
+```
+
+Compilation enables `TC_GUI_X11_BACKEND` and links `libX11` only for that
+invocation. Headless GUI programs continue to compile without X11 headers or
+libraries.
+
+The backend currently provides:
+
+- native window creation and close protocol handling;
+- the same double-buffered `Surface` used by Win32/headless;
+- partial damaged-region presentation through `XPutImage`;
+- resize events with buffer recreation;
+- special-key normalization through `std.input`;
+- key/text, pointer motion and three-button mouse events;
+- timeout-based event waiting through the X connection file descriptor.
+
+CI installs `libx11-dev` only in the dedicated X11 job and runs the native
+tests under Xvfb. Both the external GCC backend and libtcc execute a TinyC+
+native X11 program there.
+
+Current limits:
+
+- X11 uses the default TrueColor visual with standard RGB masks;
+- text input uses `XLookupString`; full XIM/IME composition is future work;
+- Wayland is not implemented yet;
+- X11 is not auto-selected from `DISPLAY`; explicit selection keeps builds
+  deterministic and avoids making desktop development packages mandatory.
