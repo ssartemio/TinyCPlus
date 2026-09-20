@@ -481,7 +481,15 @@ enum {
     TC_GUI_EVENT_MOUSE = 3,
     TC_GUI_EVENT_RESIZE = 4,
     TC_GUI_EVENT_CLOSE = 5,
-    TC_GUI_EVENT_CUSTOM = 6
+    TC_GUI_EVENT_CUSTOM = 6,
+    TC_GUI_EVENT_SCROLL = 7
+};
+enum {
+    TC_GUI_MOD_SHIFT = 1,
+    TC_GUI_MOD_CONTROL = 2,
+    TC_GUI_MOD_ALT = 4,
+    TC_GUI_MOD_SUPER = 8,
+    TC_GUI_MOD_CAPS_LOCK = 16
 };
 
 static int tc_gui_encode_utf8(uint32_t cp, char bytes[4]) {
@@ -631,6 +639,8 @@ int32_t tc_gui_buffer_resize(void *handle, int32_t width, int32_t height) {
 typedef struct TcGuiEvent {
     int32_t kind, key, x, y, width, height, button, pressed;
     uint32_t codepoint;
+    double scroll_x, scroll_y;
+    int32_t modifiers;
 } TcGuiEvent;
 
 typedef struct TcGuiWindow {
@@ -641,6 +651,23 @@ typedef struct TcGuiWindow {
 #ifdef _WIN32
     HWND hwnd;
     uint32_t surrogate;
+#elif defined(TC_GUI_X11_BACKEND)
+    void *native_display;
+    unsigned long native_window;
+    void *native_gc;
+    unsigned long native_delete;
+    void *native_image;
+    void *native_im;
+    void *native_ic;
+#elif defined(TC_GUI_COCOA_BACKEND)
+    void *native_app;
+    void *native_window;
+    void *native_view;
+    void *native_delegate;
+    void *native_pool;
+    void *native_image;
+    void *native_provider;
+    void *native_color_space;
 #endif
 } TcGuiWindow;
 
@@ -663,6 +690,14 @@ static int tc_gui_event_pop(TcGuiWindow *window, TcGuiEvent *event) {
     window->event_read = (window->event_read + 1u) % 64u;
     return 1;
 }
+
+#ifdef TC_GUI_X11_BACKEND
+#include "gui_x11.inc"
+#endif
+
+#ifdef TC_GUI_COCOA_BACKEND
+#include "gui_cocoa.inc"
+#endif
 
 #ifdef _WIN32
 static const char tc_gui_window_class[] = "TinyCPlusGuiWindow";
@@ -688,6 +723,15 @@ static int32_t tc_gui_key_code(WPARAM key) {
     default: return (int32_t)key;
     }
 }
+static int32_t tc_gui_win_modifiers(void) {
+    int32_t modifiers = 0;
+    if (GetKeyState(VK_SHIFT) & 0x8000) modifiers |= TC_GUI_MOD_SHIFT;
+    if (GetKeyState(VK_CONTROL) & 0x8000) modifiers |= TC_GUI_MOD_CONTROL;
+    if (GetKeyState(VK_MENU) & 0x8000) modifiers |= TC_GUI_MOD_ALT;
+    if ((GetKeyState(VK_LWIN) | GetKeyState(VK_RWIN)) & 0x8000) modifiers |= TC_GUI_MOD_SUPER;
+    if (GetKeyState(VK_CAPITAL) & 1) modifiers |= TC_GUI_MOD_CAPS_LOCK;
+    return modifiers;
+}
 static void tc_gui_push_mouse(TcGuiWindow *window, LPARAM value, int button, int pressed) {
     TcGuiEvent event;
     memset(&event, 0, sizeof(event));
@@ -696,6 +740,26 @@ static void tc_gui_push_mouse(TcGuiWindow *window, LPARAM value, int button, int
     event.y = tc_gui_mouse_y(value);
     event.button = button;
     event.pressed = pressed;
+    event.modifiers = tc_gui_win_modifiers();
+    tc_gui_event_push(window, event);
+}
+static void tc_gui_push_scroll(TcGuiWindow *window, WPARAM wparam, LPARAM lparam,
+                               int horizontal) {
+    POINT point;
+    TcGuiEvent event;
+    memset(&event, 0, sizeof(event));
+    point.x = (int32_t)(int16_t)(lparam & 0xffff);
+    point.y = (int32_t)(int16_t)((lparam >> 16) & 0xffff);
+    if (window->hwnd)
+        ScreenToClient(window->hwnd, &point);
+    event.kind = TC_GUI_EVENT_SCROLL;
+    event.x = point.x;
+    event.y = point.y;
+    if (horizontal)
+        event.scroll_x = (double)(int16_t)((wparam >> 16) & 0xffff) / (double)WHEEL_DELTA;
+    else
+        event.scroll_y = (double)(int16_t)((wparam >> 16) & 0xffff) / (double)WHEEL_DELTA;
+    event.modifiers = tc_gui_win_modifiers();
     tc_gui_event_push(window, event);
 }
 static LRESULT CALLBACK tc_gui_window_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
@@ -742,6 +806,7 @@ static LRESULT CALLBACK tc_gui_window_proc(HWND hwnd, UINT message, WPARAM wpara
         memset(&event, 0, sizeof(event));
         event.kind = TC_GUI_EVENT_KEY;
         event.key = tc_gui_key_code(wparam);
+        event.modifiers = tc_gui_win_modifiers();
         tc_gui_event_push(window, event);
         return 0;
     }
@@ -761,6 +826,7 @@ static LRESULT CALLBACK tc_gui_window_proc(HWND hwnd, UINT message, WPARAM wpara
             memset(&event, 0, sizeof(event));
             event.kind = TC_GUI_EVENT_TEXT;
             event.codepoint = cp;
+            event.modifiers = tc_gui_win_modifiers();
             tc_gui_event_push(window, event);
         }
         return 0;
@@ -785,6 +851,12 @@ static LRESULT CALLBACK tc_gui_window_proc(HWND hwnd, UINT message, WPARAM wpara
         return 0;
     case WM_MBUTTONUP:
         tc_gui_push_mouse(window, lparam, 3, 0);
+        return 0;
+    case WM_MOUSEWHEEL:
+        tc_gui_push_scroll(window, wparam, lparam, 0);
+        return 0;
+    case WM_MOUSEHWHEEL:
+        tc_gui_push_scroll(window, wparam, lparam, 1);
         return 0;
     case WM_PAINT: {
         PAINTSTRUCT paint;
@@ -871,6 +943,20 @@ void *tc_gui_window_create(int32_t width, int32_t height, TinyString title, int3
         ShowWindow(window->hwnd, SW_SHOW);
         UpdateWindow(window->hwnd);
     }
+#elif defined(TC_GUI_X11_BACKEND)
+    if (!window->headless && tc_gui_x11_create(window, title) != 0) {
+        if (error) *error = 9;
+        tc_gui_buffer_destroy(window->buffer);
+        free(window);
+        return NULL;
+    }
+#elif defined(TC_GUI_COCOA_BACKEND)
+    if (!window->headless && tc_gui_cocoa_create(window, title) != 0) {
+        if (error) *error = 9;
+        tc_gui_buffer_destroy(window->buffer);
+        free(window);
+        return NULL;
+    }
 #else
     (void)title;
     if (!window->headless) {
@@ -890,6 +976,16 @@ int32_t tc_gui_window_width(void *handle) {
 int32_t tc_gui_window_height(void *handle) {
     TcGuiWindow *window = (TcGuiWindow *)handle;
     return window ? window->buffer->back.height : 0;
+}
+double tc_gui_window_backing_scale(void *handle) {
+    TcGuiWindow *window = (TcGuiWindow *)handle;
+    if (!window || window->headless)
+        return 1.0;
+#ifdef TC_GUI_COCOA_BACKEND
+    return tc_gui_cocoa_backing_scale(window);
+#else
+    return 1.0;
+#endif
 }
 int32_t tc_gui_window_open(void *handle) {
     TcGuiWindow *window = (TcGuiWindow *)handle;
@@ -916,12 +1012,19 @@ int32_t tc_gui_window_present(void *handle) {
         InvalidateRect(window->hwnd, &area, FALSE);
         UpdateWindow(window->hwnd);
     }
+#elif defined(TC_GUI_X11_BACKEND)
+    if (!window->headless && window->native_window && changed)
+        tc_gui_x11_present(window, 0);
+#elif defined(TC_GUI_COCOA_BACKEND)
+    if (!window->headless && window->native_window && changed)
+        tc_gui_cocoa_present(window);
 #endif
     return changed;
 }
 int32_t tc_gui_window_post(void *handle, int32_t kind, int32_t key, int32_t x, int32_t y,
                            int32_t width, int32_t height, int32_t button, int32_t pressed,
-                           uint32_t codepoint) {
+                           uint32_t codepoint, double scroll_x, double scroll_y,
+                           int32_t modifiers) {
     TcGuiEvent event;
     memset(&event, 0, sizeof(event));
     event.kind = kind;
@@ -933,11 +1036,15 @@ int32_t tc_gui_window_post(void *handle, int32_t kind, int32_t key, int32_t x, i
     event.button = button;
     event.pressed = pressed;
     event.codepoint = codepoint;
+    event.scroll_x = scroll_x;
+    event.scroll_y = scroll_y;
+    event.modifiers = modifiers;
     return tc_gui_event_push((TcGuiWindow *)handle, event);
 }
 void tc_gui_window_next(void *handle, int32_t timeout, int32_t *kind, int32_t *key, int32_t *x,
                         int32_t *y, int32_t *width, int32_t *height, int32_t *button,
-                        int32_t *pressed, uint32_t *codepoint) {
+                        int32_t *pressed, uint32_t *codepoint, double *scroll_x,
+                        double *scroll_y, int32_t *modifiers) {
     TcGuiWindow *window = (TcGuiWindow *)handle;
     TcGuiEvent event;
     memset(&event, 0, sizeof(event));
@@ -959,6 +1066,16 @@ void tc_gui_window_next(void *handle, int32_t timeout, int32_t *kind, int32_t *k
             MsgWaitForMultipleObjects(0, NULL, FALSE, 10, QS_ALLINPUT);
         }
     } else
+#elif defined(TC_GUI_X11_BACKEND)
+    if (window && !window->headless) {
+        tc_gui_x11_wait(window, timeout);
+        tc_gui_event_pop(window, &event);
+    } else
+#elif defined(TC_GUI_COCOA_BACKEND)
+    if (window && !window->headless) {
+        tc_gui_cocoa_wait(window, timeout);
+        tc_gui_event_pop(window, &event);
+    } else
 #endif
     if (window)
         tc_gui_event_pop(window, &event);
@@ -974,15 +1091,30 @@ ready:
     if (button) *button = event.button;
     if (pressed) *pressed = event.pressed;
     if (codepoint) *codepoint = event.codepoint;
+    if (scroll_x) *scroll_x = event.scroll_x;
+    if (scroll_y) *scroll_y = event.scroll_y;
+    if (modifiers) *modifiers = event.modifiers;
 }
 void tc_gui_window_close(void *handle) {
     TcGuiWindow *window = (TcGuiWindow *)handle;
     if (!window)
         return;
-    window->open = 0;
 #ifdef _WIN32
+    window->open = 0;
     if (!window->headless && window->hwnd)
         PostMessageA(window->hwnd, WM_CLOSE, 0, 0);
+#elif defined(TC_GUI_X11_BACKEND)
+    if (!window->headless)
+        tc_gui_x11_close(window);
+    else
+        window->open = 0;
+#elif defined(TC_GUI_COCOA_BACKEND)
+    if (!window->headless)
+        tc_gui_cocoa_close(window);
+    else
+        window->open = 0;
+#else
+    window->open = 0;
 #endif
 }
 void tc_gui_window_destroy(void *handle) {
@@ -992,6 +1124,12 @@ void tc_gui_window_destroy(void *handle) {
 #ifdef _WIN32
     if (window->hwnd)
         DestroyWindow(window->hwnd);
+#elif defined(TC_GUI_X11_BACKEND)
+    if (!window->headless)
+        tc_gui_x11_destroy(window);
+#elif defined(TC_GUI_COCOA_BACKEND)
+    if (!window->headless)
+        tc_gui_cocoa_destroy(window);
 #endif
     tc_gui_buffer_destroy(window->buffer);
     free(window);

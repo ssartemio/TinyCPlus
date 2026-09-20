@@ -1,0 +1,18 @@
+import std.gui;
+
+int main() {
+    var window, error = GuiWindow.create(width: 160, height: 100, title: "TinyC+ X11");
+    if (error != 0)
+        return error;
+    defer window.destroy();
+
+    Surface canvas = window.surface();
+    canvas.clear(Pixel.rgba(20, 28, 38));
+    GuiDraw.button(canvas, GuiRect(20, 20, 120, 32), "X11");
+    assert(window.present() > 0);
+
+    window.close();
+    GuiEvent event = window.nextEvent(timeout: 0);
+    assert(event.kind == GuiEventKind.Close);
+    return 0;
+}

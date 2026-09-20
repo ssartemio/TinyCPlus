@@ -29,11 +29,12 @@ extern C {
     void* tc_gui_window_create(int width, int height, string title, int headless, Error* error);
     int tc_gui_window_width(void* window);
     int tc_gui_window_height(void* window);
+    double tc_gui_window_backing_scale(void* window);
     int tc_gui_window_open(void* window);
     void* tc_gui_window_surface(void* window);
     int tc_gui_window_present(void* window);
-    Error tc_gui_window_post(void* window, int kind, int key, int x, int y, int width, int height, int button, int pressed, uint codepoint);
-    void tc_gui_window_next(void* window, int timeout, int* kind, int* key, int* x, int* y, int* width, int* height, int* button, int* pressed, uint* codepoint);
+    Error tc_gui_window_post(void* window, int kind, int key, int x, int y, int width, int height, int button, int pressed, uint codepoint, double scrollX, double scrollY, int modifiers);
+    void tc_gui_window_next(void* window, int timeout, int* kind, int* key, int* x, int* y, int* width, int* height, int* button, int* pressed, uint* codepoint, double* scrollX, double* scrollY, int* modifiers);
     void tc_gui_window_close(void* window);
     void tc_gui_window_destroy(void* window);
     void* tc_gui_textbox_create(string initial);
@@ -219,7 +220,34 @@ class DoubleBuffer {
 }
 
 
-/// kind: 1 key, 2 text, 3 mouse, 4 resize, 5 close, 6 custom.
+enum GuiEventKind {
+    None = 0,
+    Key = 1,
+    Text = 2,
+    Mouse = 3,
+    Resize = 4,
+    Close = 5,
+    Custom = 6,
+    Scroll = 7
+}
+
+enum GuiMouseButton {
+    None = 0,
+    Left = 1,
+    Right = 2,
+    Middle = 3
+}
+
+enum GuiModifier {
+    Shift = 1,
+    Control = 2,
+    Alt = 4,
+    Super = 8,
+    CapsLock = 16
+}
+
+/// Event payload uses integer fields at the C ABI boundary.
+/// Use GuiEventKind and GuiMouseButton instead of numeric literals.
 class GuiEvent {
     int kind;
     int key;
@@ -230,6 +258,9 @@ class GuiEvent {
     int button;
     int pressed;
     uint codepoint;
+    double scrollX;
+    double scrollY;
+    int modifiers;
 }
 
 /// Owns a double-buffered native/headless drawing target.
@@ -244,18 +275,20 @@ class GuiWindow {
     }
     int width() { return tc_gui_window_width(handle); }
     int height() { return tc_gui_window_height(handle); }
+    double backingScale() { return tc_gui_window_backing_scale(handle); }
     bool isOpen() { return tc_gui_window_open(handle) != 0; }
     Surface surface() { Surface surface(tc_gui_window_surface(handle)); return surface; }
     int present() { return tc_gui_window_present(handle); }
     Error post(GuiEvent event) {
         return tc_gui_window_post(handle, event.kind, event.key, event.x, event.y, event.width,
-                                  event.height, event.button, event.pressed, event.codepoint);
+                                  event.height, event.button, event.pressed, event.codepoint,
+                                  event.scrollX, event.scrollY, event.modifiers);
     }
     GuiEvent nextEvent(int timeout = 16) {
         GuiEvent event;
         tc_gui_window_next(handle, timeout, &event.kind, &event.key, &event.x, &event.y,
                            &event.width, &event.height, &event.button, &event.pressed,
-                           &event.codepoint);
+                           &event.codepoint, &event.scrollX, &event.scrollY, &event.modifiers);
         return event;
     }
     void close() { tc_gui_window_close(handle); }
@@ -294,18 +327,24 @@ class GuiTextBox {
 
 class GuiInput {
     static bool clicked(GuiEvent event, GuiRect area) {
-        return event.kind == 3 && event.button == 1 && event.pressed == 0 &&
+        return event.kind == GuiEventKind.Mouse && event.button == GuiMouseButton.Left && event.pressed == 0 &&
                area.contains(event.x, event.y);
     }
     static bool pressed(GuiEvent event, GuiRect area) {
-        return event.kind == 3 && event.button == 1 && event.pressed != 0 &&
+        return event.kind == GuiEventKind.Mouse && event.button == GuiMouseButton.Left && event.pressed != 0 &&
                area.contains(event.x, event.y);
     }
     static bool key(GuiEvent event, int key) {
-        return event.kind == 1 && event.key == key;
+        return event.kind == GuiEventKind.Key && event.key == key;
     }
     static bool text(GuiEvent event) {
-        return event.kind == 2;
+        return event.kind == GuiEventKind.Text;
+    }
+    static bool scroll(GuiEvent event) {
+        return event.kind == GuiEventKind.Scroll;
+    }
+    static bool hasModifier(GuiEvent event, int modifier) {
+        return (event.modifiers & modifier) != 0;
     }
 }
 
@@ -322,7 +361,7 @@ class GuiButton {
     }
 
     bool handleEvent(GuiEvent event, GuiRect area, bool focused = false) {
-        if (event.kind == 3 && event.button == 1) {
+        if (event.kind == GuiEventKind.Mouse && event.button == GuiMouseButton.Left) {
             if (event.pressed != 0) {
                 down = area.contains(event.x, event.y);
                 return false;
@@ -331,7 +370,7 @@ class GuiButton {
             down = false;
             return clicked;
         }
-        if (focused && event.kind == 1 && (event.key == 13 || event.key == 32))
+        if (focused && event.kind == GuiEventKind.Key && (event.key == 13 || event.key == 32))
             return true;
         return false;
     }
@@ -382,7 +421,7 @@ class GuiFocus {
     }
 
     bool handleEvent(GuiEvent event) {
-        if (event.kind == 1 && event.key == 9) {
+        if (event.kind == GuiEventKind.Key && event.key == 9) {
             next();
             return true;
         }
@@ -404,7 +443,7 @@ class GuiCheckbox {
     }
 
     bool handleEvent(GuiEvent event, GuiRect area, bool focused = false) {
-        if (event.kind == 3 && event.button == 1) {
+        if (event.kind == GuiEventKind.Mouse && event.button == GuiMouseButton.Left) {
             if (event.pressed != 0) {
                 down = area.contains(event.x, event.y);
                 return false;
@@ -415,7 +454,7 @@ class GuiCheckbox {
                 checked = !checked;
             return clicked;
         }
-        if (focused && event.kind == 1 && (event.key == 13 || event.key == 32)) {
+        if (focused && event.kind == GuiEventKind.Key && (event.key == 13 || event.key == 32)) {
             checked = !checked;
             return true;
         }

@@ -23,6 +23,7 @@ Core operations:
 static (Surface, Error) create(int width, int height);
 int width();
 int height();
+double backingScale();
 void clear(uint color);
 uint getPixel(int x, int y);
 void setPixel(int x, int y, uint color);
@@ -73,18 +74,46 @@ static void button(Surface surface, GuiRect area, string text, bool pressed = fa
 
 ## GuiEvent
 
-Event kinds:
+Event kinds are exposed as `GuiEventKind`:
 
 ```text
-1 key
-2 text
-3 mouse
-4 resize
-5 close
-6 custom
+None   = 0
+Key    = 1
+Text   = 2
+Mouse  = 3
+Resize = 4
+Close  = 5
+Custom = 6
+Scroll = 7
 ```
 
-Fields include key/codepoint, mouse coordinates/button state, and resize width/height.
+Mouse buttons use `GuiMouseButton.None/Left/Right/Middle` (0/1/2/3).
+
+## Modifier flags
+
+`GuiEvent.modifiers` is a portable bitmask:
+
+```text
+GuiModifier.Shift    = 1
+GuiModifier.Control  = 2
+GuiModifier.Alt      = 4
+GuiModifier.Super    = 8
+GuiModifier.CapsLock = 16
+```
+
+Use `GuiInput.hasModifier(event, GuiModifier.Control)` instead of testing bits
+directly when application code only needs a predicate. Native key, text, mouse
+and scroll events carry the modifier state captured for that event.
+
+`GuiEventKind.Scroll` carries `double scrollX` and `double scrollY`.
+Positive X scrolls to the right and positive Y scrolls upward. Coordinates
+`x/y` identify the pointer position when the backend provides it. Win32
+normalizes wheel deltas by `WHEEL_DELTA`, X11 maps wheel buttons to ±1 steps,
+and Cocoa preserves native trackpad/wheel precision.
+
+The event kind/button fields remain integers at the C ABI boundary, so the enums
+add readability without changing their layout. Other fields include key/codepoint,
+mouse coordinates/button state, and resize width/height.
 
 ## GuiWindow
 
@@ -106,9 +135,24 @@ void destroy();
 
 `surface()` returns a borrowed back buffer and must not be destroyed separately.
 
-Headless windows are portable and used in CI. Native windows currently use the
-Win32/GDI backend on Windows; non-headless creation on other systems returns an
-unsupported-backend error until their native backends are implemented.
+Headless windows are portable and used throughout CI. Windows uses Win32/GDI.
+Linux can compile the native X11 implementation explicitly:
+
+```sh
+tiny run app.tc --gui-backend x11
+```
+
+Without that option Linux keeps the dependency-free headless implementation.
+The X11 backend uses the same `Surface` and event API, links `libX11` only for
+the selected build, and is exercised under Xvfb with both GCC and libtcc.
+macOS can select the native Cocoa bridge explicitly:
+
+```sh
+tiny run app.tc --gui-backend cocoa
+```
+
+The Cocoa bridge is implemented in pure C by loading the Objective-C runtime,
+AppKit and CoreGraphics dynamically, so it also works with libtcc. Cocoa resize notifications rebuild the TinyC+ framebuffer and emit `GuiEvent.resize`; an explicit HiDPI scaling policy is still future work.
 
 
 ## GuiTextBox
@@ -130,6 +174,14 @@ void destroy();
 `handleEvent()` consumes normalized key/text events. Navigation currently
 covers left/right/home/end/delete/backspace. `text()` transfers ownership of
 the returned copy to the caller.
+
+
+### HiDPI
+
+Window and Surface dimensions are logical units. `backingScale()` reports the
+native logical-to-device scale where available; Cocoa maps it to
+`NSWindow.backingScaleFactor`. The runtime does not implicitly resize the
+framebuffer based on that factor.
 
 
 ## GuiCheckbox
