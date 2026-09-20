@@ -109,3 +109,24 @@ void destroy();
 Headless windows are portable and used in CI. Native windows currently use the
 Win32/GDI backend on Windows; non-headless creation on other systems returns an
 unsupported-backend error until their native backends are implemented.
+
+
+## GuiTextBox
+
+Owned single-line editor backed by the same UTF-8 gap buffer used by TinyEdit.
+
+```c
+static GuiTextBox create(string initial = "");
+OwnedString text();
+bool dirty();
+void markClean();
+Error handleEvent(GuiEvent event);
+void draw(Surface surface, GuiRect area, bool focused = false,
+          uint foreground = 15134195, uint background = 1054752,
+          uint border = 8421504);
+void destroy();
+```
+
+`handleEvent()` consumes normalized key/text events. Navigation currently
+covers left/right/home/end/delete/backspace. `text()` transfers ownership of
+the returned copy to the caller.
