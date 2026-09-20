@@ -106,9 +106,9 @@ void destroy();
 
 `surface()` returns a borrowed back buffer and must not be destroyed separately.
 
-Headless windows are portable and used in CI. Native windows currently use the
-Win32/GDI backend on Windows; non-headless creation on other systems returns an
-unsupported-backend error until their native backends are implemented.
+Headless windows remain portable. Native windows use Win32/GDI on Windows.
+macOS has an experimental Cocoa/CoreGraphics backend compiled through the system
+Clang toolchain; other unsupported systems still reject non-headless creation.
 
 
 ## GuiTextBox

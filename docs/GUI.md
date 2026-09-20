@@ -18,7 +18,7 @@ work everywhere; Windows additionally has the first native backend using Win32/G
 - built-in dependency-free 5x7 bitmap text is available for ASCII-oriented UI;
 - lowercase letters map to uppercase glyphs in this first font;
 - unsupported Unicode codepoints currently render as `?`;
-- native windows currently exist only on Win32; Linux/macOS use headless windows;
+- native windows use Win32/GDI on Windows; macOS has an experimental Cocoa backend; Linux remains headless in this branch;
 - Win32 presentation uses GDI and the same 0xAARRGGBB front buffer.
 
 ## Core API
@@ -39,7 +39,7 @@ on Windows.
 
 1. validate the Win32 native path interactively in addition to CI compilation;
 2. reuse Row/Column layout rules for graphical Label/Button/TextBox;
-3. add macOS and Linux native backends without changing Surface/Canvas semantics;
+3. validate Cocoa interactively and add the Linux native backend without changing Surface/Canvas semantics;
 4. add richer font backends later without changing the basic Surface contract;
 5. keep GUI/TUI event payloads interoperable while preserving their existing kind values.
 
@@ -80,3 +80,18 @@ keyboard activation through Enter/Space when focused. Its label is a borrowed
 `next()/previous()/set()`, and consumes Tab to advance. Mouse hit-testing
 remains explicit, which keeps layout and ownership visible instead of introducing
 a hidden widget tree.
+
+
+## macOS/Cocoa backend
+
+The experimental macOS backend is implemented from C11 through the Objective-C
+runtime plus CoreGraphics; the TinyC+ frontend itself does not become
+Objective-C. `Surface`, widgets and `GuiEvent` remain unchanged.
+
+Native Cocoa GUI builds temporarily use the external system C compiler
+(Clang) instead of libtcc because the current libtcc integration does not model
+Apple framework linking. Non-GUI programs and headless GUI tests retain the
+existing TinyCC path.
+
+CI compiles and links the Cocoa backend and executes its headless path. A real
+WindowServer smoke remains an interactive qualification item.

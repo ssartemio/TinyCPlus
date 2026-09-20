@@ -272,6 +272,11 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
     int result = 1;
     char *sources[128];
     int source_count = 0, j;
+    int allow_libtcc = 1;
+#ifdef __APPLE__
+    if (c->uses_gui)
+        allow_libtcc = 0;
+#endif
     if (c->repl_mode && repl_cells >= 128) {
         fputs("tiny repl: 128 compiled cells reached; use :reset\n", stderr);
         return 1;
@@ -291,7 +296,7 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
     }
     for (j = 0; j < extra_counts[0]; j++)
         sources[source_count++] = (char *)extra_options[0][j];
-    if (!cc && !assembly && load_tcc(c, root, &api, &handle)) {
+    if (!cc && !assembly && allow_libtcc && load_tcc(c, root, &api, &handle)) {
         TCCState *s = api.create();
         const char *libroot = tc_format(c, "%s/third_party/tcc", root);
         char *default_args[] = {"tiny-program", NULL};
@@ -403,6 +408,10 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
         args[k++] = "-std=c11";
 #ifndef _WIN32
         args[k++] = "-D_POSIX_C_SOURCE=200809L";
+#ifdef __APPLE__
+        if (c->uses_gui)
+            args[k++] = "-DTC_GUI_COCOA";
+#endif
 #endif
         if (assembly)
             args[k++] = "-S";
@@ -451,6 +460,15 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
 #ifndef _WIN32
         args[k++] = "-lm";
         args[k++] = "-pthread";
+#ifdef __APPLE__
+        if (c->uses_gui) {
+            args[k++] = "-framework";
+            args[k++] = "Cocoa";
+            args[k++] = "-framework";
+            args[k++] = "CoreGraphics";
+            args[k++] = "-lobjc";
+        }
+#endif
 #endif
         args[k] = NULL;
         result = tc_process(args);
