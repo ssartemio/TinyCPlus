@@ -27,3 +27,31 @@ value = p.stdout.strip()
 assert value.isdigit() and int(value) != 0, p.stdout
 
 print('GUI TinyC+ integration verified: module import, lowering, native execution')
+
+
+window_source = folder / 'window.tc'
+window_source.write_text(r'''
+import std.gui;
+int main() {
+    var window, error = GuiWindow.create(width: 12, height: 8, title: "CI", headless: true);
+    if (error != 0)
+        return error;
+    defer window.destroy();
+    Surface canvas = window.surface();
+    canvas.clear(Pixel.rgba(1, 2, 3));
+    int changed = window.present();
+    assert(changed == 96);
+    GuiEvent event;
+    event.kind = 6;
+    event.key = 77;
+    assert(window.post(event) == 0);
+    GuiEvent received = window.nextEvent(timeout: 0);
+    assert(received.kind == 6);
+    assert(received.key == 77);
+    window.close();
+    assert(!window.isOpen());
+    return 0;
+}
+''')
+p = run('run', window_source)
+assert p.returncode == 0, (p.stdout, p.stderr)
