@@ -81,6 +81,49 @@ int main(void) {
     assert(!tc_gui_window_open(window));
     tc_gui_window_destroy(window);
 
+#ifdef _WIN32
+    {
+        TcGuiWindow *native;
+        TcGuiEvent native_event;
+        native = (TcGuiWindow *)tc_gui_window_create(64, 48, TC_STRING("TinyC+ CI"), 0, &error);
+        assert(native && error == 0 && native->hwnd && tc_gui_window_open(native));
+        ShowWindow(native->hwnd, SW_HIDE);
+
+        tc_gui_surface_clear(tc_gui_window_surface(native), blue);
+        assert(tc_gui_window_present(native) == 64 * 48);
+
+        memset(&native_event, 0, sizeof(native_event));
+        PostMessageA(native->hwnd, WM_KEYDOWN, VK_LEFT, 0);
+        tc_gui_window_next(native, 250, &native_event.kind, &native_event.key, &native_event.x,
+                           &native_event.y, &native_event.width, &native_event.height,
+                           &native_event.button, &native_event.pressed, &native_event.codepoint);
+        assert(native_event.kind == TC_GUI_EVENT_KEY && native_event.key == TC_KEY_LEFT);
+
+        memset(&native_event, 0, sizeof(native_event));
+        PostMessageA(native->hwnd, WM_CHAR, 'A', 0);
+        tc_gui_window_next(native, 250, &native_event.kind, &native_event.key, &native_event.x,
+                           &native_event.y, &native_event.width, &native_event.height,
+                           &native_event.button, &native_event.pressed, &native_event.codepoint);
+        assert(native_event.kind == TC_GUI_EVENT_TEXT && native_event.codepoint == 'A');
+
+        memset(&native_event, 0, sizeof(native_event));
+        PostMessageA(native->hwnd, WM_LBUTTONUP, 0, MAKELPARAM(7, 9));
+        tc_gui_window_next(native, 250, &native_event.kind, &native_event.key, &native_event.x,
+                           &native_event.y, &native_event.width, &native_event.height,
+                           &native_event.button, &native_event.pressed, &native_event.codepoint);
+        assert(native_event.kind == TC_GUI_EVENT_MOUSE && native_event.button == 1);
+        assert(native_event.x == 7 && native_event.y == 9 && native_event.pressed == 0);
+
+        tc_gui_window_close(native);
+        memset(&native_event, 0, sizeof(native_event));
+        tc_gui_window_next(native, 250, &native_event.kind, &native_event.key, &native_event.x,
+                           &native_event.y, &native_event.width, &native_event.height,
+                           &native_event.button, &native_event.pressed, &native_event.codepoint);
+        assert(native_event.kind == TC_GUI_EVENT_CLOSE && !tc_gui_window_open(native));
+        tc_gui_window_destroy(native);
+    }
+#endif
+
     textbox = tc_gui_textbox_create(TC_STRING("abc"));
     assert(textbox);
     assert(tc_gui_textbox_event(textbox, TC_GUI_EVENT_TEXT, 0, 'X') == 0);
