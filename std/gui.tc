@@ -264,3 +264,21 @@ class GuiTextBox {
     }
     void destroy() { tc_gui_textbox_destroy(handle); handle = null; }
 }
+
+
+class GuiInput {
+    static bool clicked(GuiEvent event, GuiRect area) {
+        return event.kind == 3 && event.button == 1 && event.pressed == 0 &&
+               area.contains(event.x, event.y);
+    }
+    static bool pressed(GuiEvent event, GuiRect area) {
+        return event.kind == 3 && event.button == 1 && event.pressed != 0 &&
+               area.contains(event.x, event.y);
+    }
+    static bool key(GuiEvent event, int key) {
+        return event.kind == 1 && event.key == key;
+    }
+    static bool text(GuiEvent event) {
+        return event.kind == 2;
+    }
+}
