@@ -84,3 +84,38 @@ int main() {
 ''')
 p = run('run', layout_source)
 assert p.returncode == 0, (p.stdout, p.stderr)
+
+
+textbox_source = folder / 'textbox.tc'
+textbox_source.write_text(r'''
+import std.gui;
+int main() {
+    var surface, error = Surface.create(120, 30);
+    if (error != 0)
+        return error;
+    defer surface.destroy();
+
+    GuiTextBox box = GuiTextBox.create("abc");
+    defer box.destroy();
+
+    GuiEvent text;
+    text.kind = 2;
+    text.codepoint = 88;
+    assert(box.handleEvent(text) == 0);
+    assert(box.dirty());
+
+    OwnedString value = box.text();
+    defer value.destroy();
+    assert(value.view() == "Xabc");
+
+    GuiRect area = GuiRect(2, 2, 100, 18);
+    surface.clear(Pixel.rgba(16, 24, 32));
+    box.draw(surface, area, focused: true);
+    assert(surface.checksum() != 0);
+    box.markClean();
+    assert(!box.dirty());
+    return 0;
+}
+''')
+p = run('run', textbox_source)
+assert p.returncode == 0, (p.stdout, p.stderr)
