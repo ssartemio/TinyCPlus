@@ -42,11 +42,11 @@ int main() {
     int changed = window.present();
     assert(changed == 96);
     GuiEvent event;
-    event.kind = 6;
+    event.kind = GuiEventKind.Custom;
     event.key = 77;
     assert(window.post(event) == 0);
     GuiEvent received = window.nextEvent(timeout: 0);
-    assert(received.kind == 6);
+    assert(received.kind == GuiEventKind.Custom);
     assert(received.key == 77);
     window.close();
     assert(!window.isOpen());
@@ -99,7 +99,7 @@ int main() {
     defer box.destroy();
 
     GuiEvent text;
-    text.kind = 2;
+    text.kind = GuiEventKind.Text;
     text.codepoint = 88;
     assert(box.handleEvent(text) == 0);
     assert(box.dirty());
@@ -165,13 +165,16 @@ import std.gui;
 import std.tui;
 
 int main() {
+    assert(GuiEventKind.Key == 1);
+    assert(GuiEventKind.Close == 5);
+    assert(GuiMouseButton.Left == 1);
     assert(InputKey.Left == 1001);
     assert(InputKey.Right == 1002);
     assert(InputKey.Delete == 1007);
     assert(InputKey.PageDown == 1009);
 
     GuiEvent graphical;
-    graphical.kind = 1;
+    graphical.kind = GuiEventKind.Key;
     graphical.key = InputKey.Left;
     assert(GuiInput.key(graphical, InputKey.Left));
 
@@ -185,7 +188,7 @@ int main() {
     terminal.focus(input);
 
     UiEvent event;
-    event.kind = 1;
+    event.kind = GuiEventKind.Key;
     event.key = InputKey.End;
     assert(terminal.dispatch(event) == 0);
     event.key = InputKey.Left;
@@ -206,7 +209,7 @@ int main() {
     assert(focus.isFocused(0));
 
     GuiEvent tab;
-    tab.kind = 1;
+    tab.kind = GuiEventKind.Key;
     tab.key = 9;
     assert(focus.handleEvent(tab));
     assert(focus.isFocused(1));
@@ -217,8 +220,8 @@ int main() {
     GuiRect area = GuiRect(10, 10, 80, 24);
 
     GuiEvent press;
-    press.kind = 3;
-    press.button = 1;
+    press.kind = GuiEventKind.Mouse;
+    press.button = GuiMouseButton.Left;
     press.pressed = 1;
     press.x = 20;
     press.y = 15;
@@ -231,7 +234,7 @@ int main() {
     assert(!button.down);
 
     GuiEvent enter;
-    enter.kind = 1;
+    enter.kind = GuiEventKind.Key;
     enter.key = 13;
     assert(button.handleEvent(enter, area, focused: true));
     assert(!button.handleEvent(enter, area, focused: false));
