@@ -12,7 +12,7 @@
     for (value in values)
         total += value;
 
-    return (total / values.length, 0);
+    return (total / cast<int>(values.length), 0);
 }
 
 int main()
