@@ -189,3 +189,21 @@ Backend normalization:
 
 This keeps application scrolling logic portable while retaining high-resolution
 input where the native backend provides it.
+
+
+## Modifier keys
+
+`GuiEvent.modifiers` carries a portable bitmask for Shift, Control, Alt,
+Super/Command/Windows and Caps Lock. Values are exposed through
+`GuiModifier` and can be tested with `GuiInput.hasModifier()`.
+
+Normalization:
+
+- Win32 reads the keyboard state for key, text, mouse and wheel messages;
+- X11 maps `ShiftMask`, `ControlMask`, `Mod1Mask`, `Mod4Mask` and
+  `LockMask`;
+- Cocoa maps NSEvent Shift, Control, Option, Command and Caps Lock flags;
+- headless/custom events preserve caller-provided modifier bits.
+
+This makes shortcuts such as Ctrl+S or Shift+click portable without changing
+the underlying integer event ABI.
