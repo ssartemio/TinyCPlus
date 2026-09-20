@@ -17,6 +17,18 @@ static int eat(Context *c, const char *s) {
 static int keyword(Context *c, const char *s) {
     return peek(c)->kind == TK_ID && at(c, s);
 }
+/* case and default stay ordinary identifiers: they open a label only when what follows can
+   continue one (a literal, a name or '-' after case; ':' after default). So `default = 3;`
+   inside a case body is still an assignment to a variable called default. */
+static int case_label(Context *c, const char *word) {
+    Token *next;
+    if (!keyword(c, word) || c->pos + 1 >= c->ntokens)
+        return 0;
+    next = &c->tokens[c->pos + 1];
+    if (!strcmp(word, "default"))
+        return next->kind == TK_OP && !strcmp(next->text, ":");
+    return next->kind != TK_OP || !strcmp(next->text, "-");
+}
 static Token *take(Context *c) {
     Token *t = peek(c);
     if (t->kind == TK_EOF)
@@ -496,12 +508,12 @@ static Node *stmt(Context *c) {
             if (label->kind == TK_EOF)
                 tc_error(c, t->loc, "unterminated switch");
             item = node(c, N_CASE, label->loc);
-            if (keyword(c, "case")) {
+            if (case_label(c, "case")) {
                 take(c);
                 do {
                     append(&item->args, expr(c, 1));
                 } while (eat(c, ","));
-            } else if (keyword(c, "default")) {
+            } else if (case_label(c, "default")) {
                 take(c);
                 if (has_default)
                     tc_error(c, label->loc, "switch has more than one default");
@@ -511,7 +523,7 @@ static Node *stmt(Context *c) {
                 tc_error(c, label->loc, "expected 'case' or 'default' in switch");
             expect(c, ":");
             item->body = node(c, N_BLOCK, label->loc);
-            while (!keyword(c, "case") && !keyword(c, "default") &&
+            while (!case_label(c, "case") && !case_label(c, "default") &&
                    !(peek(c)->kind == TK_OP && at(c, "}"))) {
                 if (peek(c)->kind == TK_EOF)
                     tc_error(c, t->loc, "unterminated switch");
