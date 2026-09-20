@@ -22,6 +22,16 @@ extern C {
     void* tc_gui_buffer_front(void* buffer);
     void* tc_gui_buffer_back(void* buffer);
     int tc_gui_buffer_present(void* buffer);
+    void* tc_gui_window_create(int width, int height, string title, int headless, Error* error);
+    int tc_gui_window_width(void* window);
+    int tc_gui_window_height(void* window);
+    int tc_gui_window_open(void* window);
+    void* tc_gui_window_surface(void* window);
+    int tc_gui_window_present(void* window);
+    Error tc_gui_window_post(void* window, int kind, int key, int x, int y, int width, int height, int button, int pressed, uint codepoint);
+    void tc_gui_window_next(void* window, int timeout, int* kind, int* key, int* x, int* y, int* width, int* height, int* button, int* pressed, uint* codepoint);
+    void tc_gui_window_close(void* window);
+    void tc_gui_window_destroy(void* window);
 }
 
 class Pixel {
@@ -81,4 +91,48 @@ class DoubleBuffer {
     Surface back() { Surface surface(tc_gui_buffer_back(handle)); return surface; }
     int present() { return tc_gui_buffer_present(handle); }
     void destroy() { tc_gui_buffer_destroy(handle); handle = null; }
+}
+
+
+/// kind: 1 key, 2 text, 3 mouse, 4 resize, 5 close, 6 custom.
+class GuiEvent {
+    int kind;
+    int key;
+    int x;
+    int y;
+    int width;
+    int height;
+    int button;
+    int pressed;
+    uint codepoint;
+}
+
+/// Owns a double-buffered native/headless drawing target.
+/// surface() is borrowed and must not be destroyed separately.
+class GuiWindow {
+    void* handle;
+    static (GuiWindow, Error) create(int width = 800, int height = 600,
+                                     string title = "TinyC+", bool headless = false) {
+        Error error;
+        GuiWindow window(tc_gui_window_create(width, height, title, headless, &error));
+        return (window, error);
+    }
+    int width() { return tc_gui_window_width(handle); }
+    int height() { return tc_gui_window_height(handle); }
+    bool isOpen() { return tc_gui_window_open(handle) != 0; }
+    Surface surface() { Surface surface(tc_gui_window_surface(handle)); return surface; }
+    int present() { return tc_gui_window_present(handle); }
+    Error post(GuiEvent event) {
+        return tc_gui_window_post(handle, event.kind, event.key, event.x, event.y, event.width,
+                                  event.height, event.button, event.pressed, event.codepoint);
+    }
+    GuiEvent nextEvent(int timeout = 16) {
+        GuiEvent event;
+        tc_gui_window_next(handle, timeout, &event.kind, &event.key, &event.x, &event.y,
+                           &event.width, &event.height, &event.button, &event.pressed,
+                           &event.codepoint);
+        return event;
+    }
+    void close() { tc_gui_window_close(handle); }
+    void destroy() { tc_gui_window_destroy(handle); handle = null; }
 }
