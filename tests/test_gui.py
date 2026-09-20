@@ -15,7 +15,7 @@ source = ROOT / 'examples' / 'gui.tc'
 p = run('check', source)
 assert p.returncode == 0, (p.stdout, p.stderr)
 
-generated = folder / 'gui.c'
+generated = folder / 'emitted_gui.c'
 p = run('--emit-c', source, '-o', generated)
 assert p.returncode == 0, (p.stdout, p.stderr)
 text = generated.read_text(encoding='utf-8')
