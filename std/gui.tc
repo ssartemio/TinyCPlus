@@ -17,6 +17,8 @@ extern C {
     int tc_gui_surface_damage(void* surface, int* x, int* y, int* width, int* height);
     void tc_gui_surface_damage_clear(void* surface);
     u64 tc_gui_surface_checksum(void* surface);
+    int tc_gui_text_width(string text, int scale);
+    void tc_gui_text(void* surface, int x, int y, string text, uint color, int scale);
     void* tc_gui_buffer_create(int width, int height, Error* error);
     void tc_gui_buffer_destroy(void* buffer);
     void* tc_gui_buffer_front(void* buffer);
@@ -76,6 +78,10 @@ class Surface {
     }
     void clearDamage() { tc_gui_surface_damage_clear(handle); }
     u64 checksum() { return tc_gui_surface_checksum(handle); }
+    int textWidth(string text, int scale = 1) { return tc_gui_text_width(text, scale); }
+    void text(int x, int y, string text, uint color, int scale = 1) {
+        tc_gui_text(handle, x, y, text, color, scale);
+    }
     void destroy() { tc_gui_surface_destroy(handle); handle = null; }
 }
 
