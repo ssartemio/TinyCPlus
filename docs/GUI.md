@@ -95,3 +95,18 @@ existing TinyCC path.
 
 CI compiles and links the Cocoa backend and executes its headless path. A real
 WindowServer smoke remains an interactive qualification item.
+
+
+### Interactive Cocoa smoke
+
+CI compiles/links the Cocoa backend and executes its headless path. On a macOS
+desktop with an active WindowServer, the native smoke can be run explicitly:
+
+```bash
+clang -std=c11 -D_POSIX_C_SOURCE=200809L -DTC_GUI_COCOA tests/runtime_gui.c \
+  -lm -framework Cocoa -framework CoreGraphics -lobjc -o build/gui-cocoa
+TC_GUI_NATIVE_SMOKE=1 ./build/gui-cocoa
+```
+
+This creates a real `NSWindow`, paints the TinyC+ software surface, pumps the
+Cocoa event loop briefly, then verifies close and cleanup.

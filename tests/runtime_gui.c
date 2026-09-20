@@ -140,6 +140,29 @@ int main(void) {
         tc_gui_window_destroy(native);
     }
 #endif
+#if defined(__APPLE__) && defined(TC_GUI_COCOA)
+    if (getenv("TC_GUI_NATIVE_SMOKE")) {
+        TcGuiWindow *native;
+        TcGuiEvent native_event;
+        native = (TcGuiWindow *)tc_gui_window_create(320, 180, TC_STRING("TinyC+ Cocoa smoke"),
+                                                     0, &error);
+        assert(native && error == 0 && tc_gui_window_open(native));
+        tc_gui_surface_clear(tc_gui_window_surface(native), blue);
+        tc_gui_text(tc_gui_window_surface(native), 20, 20, TC_STRING("TINYC+ COCOA"),
+                    tc_gui_rgba(255, 255, 255, 255), 2);
+        assert(tc_gui_window_present(native) > 0);
+        tc_gui_window_next(native, 50, &native_event.kind, &native_event.key, &native_event.x,
+                           &native_event.y, &native_event.width, &native_event.height,
+                           &native_event.button, &native_event.pressed, &native_event.codepoint);
+        tc_gui_window_close(native);
+        memset(&native_event, 0, sizeof(native_event));
+        tc_gui_window_next(native, 0, &native_event.kind, &native_event.key, &native_event.x,
+                           &native_event.y, &native_event.width, &native_event.height,
+                           &native_event.button, &native_event.pressed, &native_event.codepoint);
+        assert(native_event.kind == TC_GUI_EVENT_CLOSE);
+        tc_gui_window_destroy(native);
+    }
+#endif
 
     textbox = tc_gui_textbox_create(TC_STRING("abc"));
     assert(textbox);
