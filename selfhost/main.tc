@@ -4,18 +4,20 @@ import std.fs;
 import std.io;
 import std.process;
 import lexer;
+import ast;
+import types;
 import parser;
 
 /// Stage 1 driver. It grows phase by phase (see docs/SELFHOSTING.md); today it reproduces
-/// `tiny --emit-tokens` and `tiny --emit-ast`.
+/// `tiny --emit-tokens`, `--emit-ast` and `--emit-types`.
 int main()
 {
-    if (Arguments.count() != 3 || (Arguments.get(1) != "--emit-tokens" && Arguments.get(1) != "--emit-ast"))
+    string mode = Arguments.get(1);
+    if (Arguments.count() != 3 || (mode != "--emit-tokens" && mode != "--emit-ast" && mode != "--emit-types"))
     {
-        Console.writeErrorLine("usage: tinyc1 --emit-tokens|--emit-ast source.tc");
+        Console.writeErrorLine("usage: tinyc1 --emit-tokens|--emit-ast|--emit-types source.tc");
         return 2;
     }
-    bool tokensOnly = Arguments.get(1) == "--emit-tokens";
     string path = Arguments.get(2);
     var source, error = File.readAll(path);
     if (error != 0)
@@ -35,13 +37,14 @@ int main()
 
     var output = StringBuilder.create();
     defer output.destroy();
-    if (tokensOnly) writeTokens(&scanner.tokens, &output);
+    if (mode == "--emit-tokens") writeTokens(&scanner.tokens, &output);
     else
     {
-        var reader = Parser.create(path, &scanner.tokens);
-        defer reader.destroy();
+        Context context;
+        var reader = Parser.create(path, &scanner.tokens, &context);
         Node* program = reader.parse();
-        dumpNode(program, &output, 0);
+        if (mode == "--emit-ast") dumpNode(program, &output, 0);
+        else dumpTypes(&context, &output);
     }
     print(output.view());
     return 0;

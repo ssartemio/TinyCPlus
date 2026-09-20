@@ -1,0 +1,200 @@
+module ast;
+import std.string;
+import std.collections;
+
+/// Syntax nodes, types and the state that the compiler phases share, as in compiler/tiny.h.
+///
+/// Nodes and types draw their ids from one counter (Context.nextId), exactly like stage 0. The
+/// ids are visible: a tuple type is named tc_tuple_<id> and array types tc_array_<id>, so the
+/// number of nodes created before them changes the names that later phases print.
+/// Nothing here is ever freed; the compiler is a short-lived batch process.
+
+enum NodeKind
+{
+    Program, FunctionDecl, Class, Interface, Extension, Property, Block,
+    VarDecl, ExprStmt, Return, If, While, For, Range,
+    Break, Continue, Defer, Delete, Int, Float, String,
+    Char, Bool, Null, Identifier, Binary, Unary, Call,
+    Index, Slice, Member, Init, Tuple, New, Cast,
+    Sizeof, Lambda, Await, Spawn, Module, Import, Enum,
+    Switch, Case
+}
+
+// Node flags, numbered as in compiler/tiny.h.
+const int flagExtern = 1;
+const int flagStatic = 2;
+const int flagAsync = 4;
+const int flagTest = 8;
+const int flagConst = 16;
+const int flagPost = 32;
+const int flagConstructor = 64;
+const int flagDestructor = 128;
+const int flagStdcall = 4096;
+
+enum TypeKind
+{
+    Void, Bool, I8, U8, I16, U16, I32, U32, I64, U64, Float, Double, Char, String, Null,
+    Ptr, Array, Slice, Tuple, Func, Closure, Named, Enum, Auto
+}
+
+class TypeLink
+{
+    Type* type;
+    TypeLink* next;
+}
+
+class Type
+{
+    TypeKind kind;
+    string name;
+    string cname;
+    Type* base;
+    TypeLink* items;
+    u64 count;
+    int id;
+    bool qualified;
+    int callconv;
+    Node* decl;
+    Type* alias;
+    Type* next;
+}
+
+/// Everything that stage 0 keeps in its Context and that the parser reads or writes.
+class Context
+{
+    int nextId;
+    /// Every type ever created, newest first (types are found by walking this list).
+    Type* types;
+    /// The primitive types, indexed by TypeKind, created on first use.
+    Type*[24] builtin;
+}
+
+class Node
+{
+    NodeKind kind;
+    int line;
+    int column;
+    int id;
+    string name;
+    string text;
+    string cname;
+    string label;
+    int flags;
+    Type* declType;
+    Type* type;
+    Node* a;
+    Node* b;
+    Node* c;
+    Node* body;
+    Node* params;
+    Node* args;
+    Node* next;
+    Node* owner;
+}
+
+/// node() in stage 0: every node takes the next id from the shared counter.
+Node* makeNode(Context* context, NodeKind kind, int line, int column)
+{
+    Node* n = new Node();
+    n.kind = kind;
+    n.line = line;
+    n.column = column;
+    context.nextId++;
+    n.id = context.nextId;
+    return n;
+}
+
+string nodeKindName(NodeKind kind)
+{
+    switch (kind)
+    {
+        case NodeKind.Program: return "Program";
+        case NodeKind.FunctionDecl: return "FunctionDecl";
+        case NodeKind.Class: return "Class";
+        case NodeKind.Interface: return "Interface";
+        case NodeKind.Extension: return "Extension";
+        case NodeKind.Property: return "Property";
+        case NodeKind.Block: return "Block";
+        case NodeKind.VarDecl: return "VarDecl";
+        case NodeKind.ExprStmt: return "ExprStmt";
+        case NodeKind.Return: return "Return";
+        case NodeKind.If: return "If";
+        case NodeKind.While: return "While";
+        case NodeKind.For: return "For";
+        case NodeKind.Range: return "Range";
+        case NodeKind.Break: return "Break";
+        case NodeKind.Continue: return "Continue";
+        case NodeKind.Defer: return "Defer";
+        case NodeKind.Delete: return "Delete";
+        case NodeKind.Int: return "Int";
+        case NodeKind.Float: return "Float";
+        case NodeKind.String: return "String";
+        case NodeKind.Char: return "Char";
+        case NodeKind.Bool: return "Bool";
+        case NodeKind.Null: return "Null";
+        case NodeKind.Identifier: return "Identifier";
+        case NodeKind.Binary: return "Binary";
+        case NodeKind.Unary: return "Unary";
+        case NodeKind.Call: return "Call";
+        case NodeKind.Index: return "Index";
+        case NodeKind.Slice: return "Slice";
+        case NodeKind.Member: return "Member";
+        case NodeKind.Init: return "Init";
+        case NodeKind.Tuple: return "Tuple";
+        case NodeKind.New: return "New";
+        case NodeKind.Cast: return "Cast";
+        case NodeKind.Sizeof: return "Sizeof";
+        case NodeKind.Lambda: return "Lambda";
+        case NodeKind.Await: return "Await";
+        case NodeKind.Spawn: return "Spawn";
+        case NodeKind.Module: return "Module";
+        case NodeKind.Import: return "Import";
+        case NodeKind.Enum: return "Enum";
+        case NodeKind.Switch: return "Switch";
+        case NodeKind.Case: return "Case";
+    }
+}
+
+/// Appends the tree exactly as --emit-ast prints it: kind, name, text and position on one
+/// line, then params, args, a, b, c and body indented two more spaces, then the next sibling.
+void dumpNode(Node* n, StringBuilder* out, int indent)
+{
+    while (n != null)
+    {
+        for (int i = 0; i < indent; i++) out.appendChar(' ');
+        out.append(nodeKindName(n.kind));
+        if (n.name.length > 0)
+        {
+            out.appendChar(' ');
+            out.append(n.name);
+        }
+        if (n.text.length > 0)
+        {
+            out.appendChar(' ');
+            out.append(n.text);
+        }
+        out.append(" @");
+        out.appendInt(n.line);
+        out.appendChar(':');
+        out.appendInt(n.column);
+        out.appendChar('\n');
+        if (n.params != null) dumpNode(n.params, out, indent + 2);
+        if (n.args != null) dumpNode(n.args, out, indent + 2);
+        if (n.a != null) dumpNode(n.a, out, indent + 2);
+        if (n.b != null) dumpNode(n.b, out, indent + 2);
+        if (n.c != null) dumpNode(n.c, out, indent + 2);
+        if (n.body != null) dumpNode(n.body, out, indent + 2);
+        n = n.next;
+    }
+}
+
+string join(string first, string second, string third)
+{
+    var text = StringBuilder.create();
+    text.append(first);
+    text.append(second);
+    text.append(third);
+    OwnedString owned = text.toOwned();
+    text.destroy();
+    return owned.view();
+}
