@@ -24,20 +24,38 @@ compilador de C.
 |---|---|---|
 | `--emit-typed-ast` en la etapa 0 | hecho | determinista, anotado con tipos y con el mismo error semántico que `check` |
 | Lexer (`selfhost/lexer.tc`) | hecho: mismo stdout, stderr y código de salida que `--emit-tokens` | `tests/test_selfhost.py` |
-| Parser | pendiente | `--emit-ast` |
+| Parser (`selfhost/parser.tc`) | hecho: mismo árbol, mismos errores y mismo código de salida que `--emit-ast` | `tests/test_selfhost.py` |
 | Semántica | pendiente | `--emit-typed-ast` |
 | Generación de C | pendiente | `--emit-c` y las pruebas existentes |
 
-`tests/test_selfhost.py` compila la etapa 1 con la etapa 0 y compara ambas sobre
-todos los `.tc` del repositorio, 64 casos límite escritos a mano (errores léxicos,
-literales, BOM, NUL, el límite de tokens) y entradas aleatorias con semilla fija.
+`tests/test_selfhost.py` compila la etapa 1 con la etapa 0 y exige el mismo stdout,
+stderr y código de salida en cada fase portada. Compara, con `--emit-tokens` y
+`--emit-ast`:
+
+- todos los `.tc` del repositorio;
+- 64 casos límite del lexer (errores léxicos, literales, BOM, NUL, el límite de tokens);
+- más de 180 casos del parser: ambigüedad entre tipos y expresiones, la división
+  de `>>` en genéricos, valores de `enum` y longitudes de array, `switch`, límites
+  de anidamiento en el borde exacto, la ventana de 128 tokens de las llamadas
+  genéricas, la matriz completa de precedencias y los errores de sintaxis;
+- todos los prefijos de un programa que usa casi toda la gramática (cada corte es
+  un error distinto o un programa más corto);
+- entradas aleatorias del lexer y mutaciones de los fuentes reales, con semilla fija
+  (`--fuzz N`, `--mutations N`; una pasada de 3.000 y 6.000 no encontró
+  diferencias).
+
 Se ejecuta dentro de `tests/run_all.py`. Para probarlo a mano:
 
 ```sh
 ./bin/tiny build selfhost/main.tc -o build/selfhost/tinyc1
-./build/selfhost/tinyc1 --emit-tokens examples/hello.tc
+./build/selfhost/tinyc1 --emit-ast examples/hello.tc
 python3 tests/test_selfhost.py
 ```
+
+Para saber si el arnés detecta divergencias, se le hicieron mutaciones deliberadas
+al port (una precedencia, el límite de anidamiento, un registro de tipos, el valor
+de un `enum`, la ventana de 128 tokens…). Las que sobrevivieron mostraron casos que
+faltaban, y se añadieron hasta que todas fallaron.
 
 ## Notas del port
 
@@ -50,7 +68,20 @@ python3 tests/test_selfhost.py
   tokens.
 - Una sola función `fail(archivo, línea, columna, mensaje)` emite cada diagnóstico
   y termina con `exit(1)`, como describe la estrategia de errores.
-- TinyC+ no tiene operador ternario: el port usa variables intermedias.
+- TinyC+ no tiene operador ternario ni `do … while`, y no permite llamar a un
+  método sobre un valor temporal (`f().g()`): el port usa `while (true)` con la
+  condición al final y variables intermedias.
+- El parser de la etapa 0 es sensible al contexto: recuerda qué nombres ha visto
+  como tipos (incluido `Function` tras un `func<…>` y el nombre de una llamada
+  genérica) y con eso decide si `Foo x;` es una declaración. La etapa 1 reproduce
+  esa tabla como un conjunto de nombres, y los duplicados de tipo (`duplicate type`)
+  se detectan por el nombre canónico (`int` e `i32` son el mismo tipo).
+- La etapa 1 guarda los tipos tal como están escritos (`TypeRef`) en lugar de
+  internarlos; la resolución llegará con la fase semántica. Única diferencia
+  conocida: la etapa 0 también registra los tipos tupla como `tc_tuple_<id>`.
+- Detalles que hay que copiar tal cual: `>>` se parte reescribiendo el token a `>`;
+  las longitudes de array y los valores de `enum` se leen con la semántica de
+  `strtoull` en base 0 (`089` vale 0); y el límite de anidamiento es 256.
 
 ## Reglas durante el port
 
