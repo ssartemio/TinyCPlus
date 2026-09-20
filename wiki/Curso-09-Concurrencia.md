@@ -122,3 +122,10 @@ mismo pool. Dentro de async, prefiera `await` cuando sea posible.
 
 [← Capítulo 8](Curso-08-Persistencia-y-Archivos) ·
 [Siguiente → Capítulo 10](Curso-10-Async-y-Networking)
+
+
+## Solución ejecutable
+
+[`examples/tutorial/09_concurrency.tc`](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/09_concurrency.tc)
+
+La CI ejecuta esta solución como parte de `tests/test_tutorial.py`.

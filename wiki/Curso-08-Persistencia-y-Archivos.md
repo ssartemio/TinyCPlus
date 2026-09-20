@@ -108,3 +108,10 @@ Slice<byte>       prestada sobre un buffer
 
 [← Capítulo 7](Curso-07-Modulos-y-FFI) ·
 [Siguiente → Capítulo 9](Curso-09-Concurrencia)
+
+
+## Solución ejecutable
+
+[`examples/tutorial/08_persistence_files.tc`](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/08_persistence_files.tc)
+
+La CI ejecuta esta solución como parte de `tests/test_tutorial.py`.

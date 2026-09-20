@@ -91,3 +91,10 @@ Se monomorfiza por tipos utilizados.
 
 [← Capítulo 4](Curso-04-Memoria-y-Recursos) ·
 [Siguiente → Capítulo 6](Curso-06-Colecciones-Closures-y-Streams)
+
+
+## Solución ejecutable
+
+[`examples/tutorial/05_objects_models.tc`](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/05_objects_models.tc)
+
+La CI ejecuta esta solución como parte de `tests/test_tutorial.py`.

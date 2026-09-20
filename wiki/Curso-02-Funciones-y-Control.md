@@ -53,3 +53,10 @@ for (int sample = 0; sample < 10; sample = sample + 1) {
 
 [← Capítulo 1](Curso-01-Primer-Programa) ·
 [Siguiente → Capítulo 3](Curso-03-Arrays-Slices-y-Errores)
+
+
+## Solución ejecutable
+
+[`examples/tutorial/02_functions_control.tc`](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/02_functions_control.tc)
+
+La CI ejecuta esta solución como parte de `tests/test_tutorial.py`.

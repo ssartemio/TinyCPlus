@@ -181,3 +181,10 @@ No hay reserva escondida para los frames.
 
 [← Capítulo 10](Curso-10-Async-y-Networking) ·
 [Siguiente → Capítulo 12](Curso-12-Dashboard-TUI)
+
+
+## Solución ejecutable
+
+[`examples/tutorial/11_tinystatus_server.tc`](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/11_tinystatus_server.tc)
+
+La CI ejecuta esta solución como parte de `tests/test_tutorial.py`.

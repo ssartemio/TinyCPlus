@@ -60,3 +60,10 @@ como mecanismo estándar.
 
 [← Capítulo 2](Curso-02-Funciones-y-Control) ·
 [Siguiente → Capítulo 4](Curso-04-Memoria-y-Recursos)
+
+
+## Solución ejecutable
+
+[`examples/tutorial/03_arrays_slices_errors.tc`](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/03_arrays_slices_errors.tc)
+
+La CI ejecuta esta solución como parte de `tests/test_tutorial.py`.

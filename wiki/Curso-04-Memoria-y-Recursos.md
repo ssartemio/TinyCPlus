@@ -69,3 +69,10 @@ Los defer normales se ejecutan LIFO al salir por `return`, `break` o
 
 [← Capítulo 3](Curso-03-Arrays-Slices-y-Errores) ·
 [Siguiente → Capítulo 5](Curso-05-Objetos-y-Modelos)
+
+
+## Solución ejecutable
+
+[`examples/tutorial/04_memory_resources.tc`](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/04_memory_resources.tc)
+
+La CI ejecuta esta solución como parte de `tests/test_tutorial.py`.

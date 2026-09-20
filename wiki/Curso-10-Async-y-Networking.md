@@ -140,3 +140,10 @@ límites y errores con mayor formalidad.
 
 [← Capítulo 9](Curso-09-Concurrencia) ·
 [Siguiente → Capítulo 11](Curso-11-Servidor-TinyStatus)
+
+
+## Solución ejecutable
+
+[`examples/tutorial/10_async_network.tc`](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/10_async_network.tc)
+
+La CI ejecuta esta solución como parte de `tests/test_tutorial.py`.

@@ -60,3 +60,10 @@ else
 runtime especial.
 
 [Siguiente → Capítulo 2](Curso-02-Funciones-y-Control)
+
+
+## Solución ejecutable
+
+[`examples/tutorial/01_first_program.tc`](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/01_first_program.tc)
+
+La CI ejecuta esta solución como parte de `tests/test_tutorial.py`.

@@ -114,3 +114,14 @@ Ese patrón es preferible para SQLite, TLS, codecs y librerías del sistema.
 
 [← Capítulo 6](Curso-06-Colecciones-Closures-y-Streams) ·
 [Siguiente → Capítulo 8](Curso-08-Persistencia-y-Archivos)
+
+
+## Solución ejecutable
+
+Proyecto multiarchivo:
+
+- [`main.tc`](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/07_modules/main.tc)
+- [`model.tc`](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/07_modules/model.tc)
+- [`checksum.c`](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/07_modules/checksum.c)
+
+También se ejecuta automáticamente en `tests/test_tutorial.py`.

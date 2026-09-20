@@ -273,3 +273,10 @@ ownership y pruebas explícitos.
 
 [← Capítulo 12](Curso-12-Dashboard-TUI) ·
 [Volver al índice](TinyCPlus-Desde-Cero)
+
+
+## Solución experimental ejecutable
+
+[`examples/tutorial/experimental/13_gui_dashboard.tc`](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/experimental/13_gui_dashboard.tc)
+
+Se mantiene fuera de la CI estable hasta que `std.gui` llegue a `main`.

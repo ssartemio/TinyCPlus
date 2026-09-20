@@ -36,3 +36,14 @@ Convención: `Error == 0` significa éxito. Los capítulos 1–12 usan capacidad
 estables de `main`; el 13 está marcado como experimental.
 
 [Empezar → Capítulo 1](Curso-01-Primer-Programa)
+
+
+## Soluciones ejecutables
+
+Las soluciones estables viven en
+[`examples/tutorial/`](https://github.com/ssartemio/TinyCPlus/tree/main/examples/tutorial)
+y forman parte de la CI mediante `tests/test_tutorial.py`.
+
+El capítulo 13 se conserva en
+[`examples/tutorial/experimental/`](https://github.com/ssartemio/TinyCPlus/tree/main/examples/tutorial/experimental)
+porque requiere `std.gui` post-1.0.

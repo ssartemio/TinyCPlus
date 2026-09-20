@@ -333,3 +333,10 @@ desarrollando post-1.0.
 
 [← Capítulo 11](Curso-11-Servidor-TinyStatus) ·
 [Siguiente → Capítulo 13: GUI experimental](Curso-13-GUI-Experimental)
+
+
+## Solución ejecutable
+
+[`examples/tutorial/12_tinystatus_tui.tc`](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/12_tinystatus_tui.tc)
+
+La CI ejecuta esta solución como parte de `tests/test_tutorial.py`.

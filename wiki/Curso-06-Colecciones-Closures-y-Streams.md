@@ -134,3 +134,10 @@ println(history.warnings());
 
 [← Capítulo 5](Curso-05-Objetos-y-Modelos) ·
 [Siguiente → Capítulo 7](Curso-07-Modulos-y-FFI)
+
+
+## Solución ejecutable
+
+[`examples/tutorial/06_collections_streams.tc`](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/06_collections_streams.tc)
+
+La CI ejecuta esta solución como parte de `tests/test_tutorial.py`.
