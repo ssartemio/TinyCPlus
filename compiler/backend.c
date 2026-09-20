@@ -36,21 +36,30 @@ int backend_option(int kind, const char *value) {
     return 0;
 }
 
-static int gui_x11_backend;
+enum { TC_GUI_BACKEND_HEADLESS, TC_GUI_BACKEND_X11, TC_GUI_BACKEND_COCOA };
+static int gui_backend;
 int backend_gui_backend(const char *value) {
     if (!strcmp(value, "headless")) {
-        gui_x11_backend = 0;
+        gui_backend = TC_GUI_BACKEND_HEADLESS;
         return 0;
     }
 #ifdef __linux__
     if (!strcmp(value, "x11")) {
-        gui_x11_backend = 1;
+        gui_backend = TC_GUI_BACKEND_X11;
+        return 0;
+    }
+#endif
+#ifdef __APPLE__
+    if (!strcmp(value, "cocoa")) {
+        gui_backend = TC_GUI_BACKEND_COCOA;
         return 0;
     }
 #endif
     fprintf(stderr, "tiny: unsupported GUI backend '%s'%s\n", value,
 #ifdef __linux__
             " (expected headless or x11)"
+#elif defined(__APPLE__)
+            " (expected headless or cocoa)"
 #else
             " (expected headless on this platform)"
 #endif
@@ -328,8 +337,12 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
         api.options(s, "-D_POSIX_C_SOURCE=200809L");
 #endif
 #ifdef __linux__
-        if (c->uses_gui && gui_x11_backend)
+        if (c->uses_gui && gui_backend == TC_GUI_BACKEND_X11)
             api.options(s, "-DTC_GUI_X11_BACKEND");
+#endif
+#ifdef __APPLE__
+        if (c->uses_gui && gui_backend == TC_GUI_BACKEND_COCOA)
+            api.options(s, "-DTC_GUI_COCOA_BACKEND");
 #endif
         api.include_path(s, tc_format(c, "%s/runtime", root));
         for (j = 0; j < extra_counts[1]; j++)
@@ -370,7 +383,7 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
             api.library(s, "m");
             api.library(s, "pthread");
 #ifdef __linux__
-            if (c->uses_gui && gui_x11_backend && api.library(s, "X11") < 0) {
+            if (c->uses_gui && gui_backend == TC_GUI_BACKEND_X11 && api.library(s, "X11") < 0) {
                 fputs("tiny: X11 backend requires libX11 development/runtime files\n", stderr);
                 api.destroy(s);
                 unload_tcc(handle);
@@ -439,8 +452,12 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
         args[k++] = "-D_POSIX_C_SOURCE=200809L";
 #endif
 #ifdef __linux__
-        if (c->uses_gui && gui_x11_backend)
+        if (c->uses_gui && gui_backend == TC_GUI_BACKEND_X11)
             args[k++] = "-DTC_GUI_X11_BACKEND";
+#endif
+#ifdef __APPLE__
+        if (c->uses_gui && gui_backend == TC_GUI_BACKEND_COCOA)
+            args[k++] = "-DTC_GUI_COCOA_BACKEND";
 #endif
         if (assembly)
             args[k++] = "-S";
@@ -490,7 +507,7 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
         args[k++] = "-lm";
         args[k++] = "-pthread";
 #ifdef __linux__
-        if (c->uses_gui && gui_x11_backend)
+        if (c->uses_gui && gui_backend == TC_GUI_BACKEND_X11)
             args[k++] = "-lX11";
 #endif
 #endif

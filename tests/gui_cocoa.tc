@@ -1,0 +1,20 @@
+import std.gui;
+
+int main() {
+    var window, error = GuiWindow.create(width: 180, height: 110, title: "TinyC+ Cocoa");
+    if (error != 0)
+        return error;
+    defer window.destroy();
+
+    Surface canvas = window.surface();
+    canvas.clear(Pixel.rgba(22, 30, 42));
+    GuiDraw.label(canvas, GuiRect(10, 12, 160, 24), "TINYC+ COCOA",
+                  Pixel.rgba(235, 240, 248), centered: true);
+    GuiDraw.button(canvas, GuiRect(40, 56, 100, 30), "OK");
+    assert(window.present() > 0);
+
+    window.close();
+    GuiEvent event = window.nextEvent(timeout: 0);
+    assert(event.kind == 5);
+    return 0;
+}

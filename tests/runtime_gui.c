@@ -2,7 +2,7 @@
 #include <assert.h>
 #include <stdio.h>
 
-#if defined(_WIN32) || defined(TC_GUI_X11_BACKEND)
+#if defined(_WIN32) || defined(TC_GUI_X11_BACKEND) || defined(TC_GUI_COCOA_BACKEND)
 static void gui_native_drain(TcGuiWindow *window) {
     TcGuiEvent event;
     do {
@@ -189,6 +189,34 @@ int main(void) {
                            &native_event.button, &native_event.pressed, &native_event.codepoint);
         assert(native_event.kind == TC_GUI_EVENT_MOUSE && native_event.button == 1);
         assert(native_event.x == 7 && native_event.y == 9 && native_event.pressed == 0);
+
+        tc_gui_window_close(native);
+        memset(&native_event, 0, sizeof(native_event));
+        tc_gui_window_next(native, 0, &native_event.kind, &native_event.key, &native_event.x,
+                           &native_event.y, &native_event.width, &native_event.height,
+                           &native_event.button, &native_event.pressed, &native_event.codepoint);
+        assert(native_event.kind == TC_GUI_EVENT_CLOSE && !tc_gui_window_open(native));
+        tc_gui_window_destroy(native);
+    }
+#endif
+
+#ifdef TC_GUI_COCOA_BACKEND
+    {
+        TcGuiWindow *native;
+        TcGuiEvent native_event;
+        native = (TcGuiWindow *)tc_gui_window_create(120, 80, TC_STRING("TinyC+ Cocoa CI"), 0, &error);
+        assert(native && error == 0 && native->native_window && native->native_view);
+        gui_native_drain(native);
+
+        tc_gui_surface_clear(tc_gui_window_surface(native), blue);
+        assert(tc_gui_window_present(native) == tc_gui_window_width(native) * tc_gui_window_height(native));
+
+        assert(tc_gui_window_post(native, TC_GUI_EVENT_CUSTOM, 91, 0, 0, 0, 0, 0, 0, 0) == 0);
+        memset(&native_event, 0, sizeof(native_event));
+        tc_gui_window_next(native, 0, &native_event.kind, &native_event.key, &native_event.x,
+                           &native_event.y, &native_event.width, &native_event.height,
+                           &native_event.button, &native_event.pressed, &native_event.codepoint);
+        assert(native_event.kind == TC_GUI_EVENT_CUSTOM && native_event.key == 91);
 
         tc_gui_window_close(native);
         memset(&native_event, 0, sizeof(native_event));
