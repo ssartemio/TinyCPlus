@@ -1,0 +1,185 @@
+// Requires the post-1.0 GUI work, e.g. feature/gui-widgets.
+import std.gui;
+import std.net;
+import std.string;
+
+async int serveOnce(TcpSocket listener)
+{
+    var socket = await listener.acceptAsync();
+    defer socket.close();
+
+    byte[1] request = {};
+    var received = await socket.readAsync(request[:]);
+
+    if (received != 1 || request[0] != 1)
+        return 2;
+
+    byte[3] response = {1, 72, 1};
+    var written = await socket.writeAsync(response[:]);
+
+    if (written != 3)
+        return 3;
+
+    return 0;
+}
+
+async int probe(string host, int port)
+{
+    var socket =
+        await TcpSocket.connectAsync(
+            host,
+            port,
+            timeout: 2000
+        );
+
+    defer socket.close();
+
+    byte[1] request = {1};
+    byte[3] response = {};
+
+    if (await socket.writeAsync(request[:], timeout: 2000) != 1)
+        return -1;
+
+    if (await socket.readAsync(response[:], timeout: 2000) != 3)
+        return -1;
+
+    if (response[0] != 1)
+        return -1;
+
+    return response[1];
+}
+
+int main()
+{
+    var listener, listenError =
+        TcpSocket.listen("127.0.0.1", 0);
+
+    assert(listenError == 0);
+    defer listener.close();
+
+    var server = serveOnce(listener);
+    defer server.destroy();
+
+    var window, windowError =
+        GuiWindow.create(
+            width: 480,
+            height: 240,
+            title: "TinyStatus",
+            headless: true
+        );
+
+    assert(windowError == 0);
+    defer window.destroy();
+
+    GuiButton refresh = GuiButton("REFRESH");
+    GuiCheckbox saveHistory = GuiCheckbox("SAVE HISTORY");
+    GuiProgressBar health = GuiProgressBar(100);
+
+    var status = String.copy("Connecting...");
+    defer status.destroy();
+
+    var request =
+        probe(
+            "127.0.0.1",
+            listener.port()
+        );
+    defer request.destroy();
+
+    while (!request.ready()) {
+        GuiEvent event =
+            window.nextEvent(timeout: 1);
+
+        Surface canvas = window.surface();
+
+        canvas.clear(Pixel.rgba(18, 24, 32));
+
+        GuiDraw.label(
+            canvas,
+            GuiRect(24, 20, 300, 24),
+            "TINYSTATUS",
+            Pixel.rgba(230, 237, 243)
+        );
+
+        GuiDraw.label(
+            canvas,
+            GuiRect(24, 60, 300, 24),
+            status.view(),
+            Pixel.rgba(230, 237, 243)
+        );
+
+        refresh.draw(
+            canvas,
+            GuiRect(24, 104, 120, 30)
+        );
+
+        saveHistory.draw(
+            canvas,
+            GuiRect(24, 150, 180, 24)
+        );
+
+        health.draw(
+            canvas,
+            GuiRect(220, 150, 220, 20)
+        );
+
+        window.present();
+    }
+
+    var score, networkError =
+        request.result();
+
+    assert(networkError == 0);
+    assert(score == 72);
+
+    health.set(score);
+
+    status.destroy();
+
+    var number = String.fromInt(score);
+    defer number.destroy();
+
+    status =
+        String.concat(
+            "Server score: ",
+            number.view()
+        );
+
+    Surface canvas = window.surface();
+    canvas.clear(Pixel.rgba(18, 24, 32));
+
+    GuiDraw.label(
+        canvas,
+        GuiRect(24, 20, 300, 24),
+        "TINYSTATUS",
+        Pixel.rgba(230, 237, 243)
+    );
+
+    GuiDraw.label(
+        canvas,
+        GuiRect(24, 60, 300, 24),
+        status.view(),
+        Pixel.rgba(230, 237, 243)
+    );
+
+    refresh.draw(
+        canvas,
+        GuiRect(24, 104, 120, 30)
+    );
+
+    saveHistory.draw(
+        canvas,
+        GuiRect(24, 150, 180, 24)
+    );
+
+    health.draw(
+        canvas,
+        GuiRect(220, 150, 220, 20)
+    );
+
+    assert(window.present() > 0);
+    assert(canvas.checksum() != 0);
+    assert(server.get() == 0);
+
+    println("gui dashboard ok");
+    return 0;
+}
