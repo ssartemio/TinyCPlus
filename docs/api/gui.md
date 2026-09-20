@@ -106,9 +106,13 @@ void destroy();
 
 `surface()` returns a borrowed back buffer and must not be destroyed separately.
 
-Headless windows are portable and used in CI. Native windows currently use the
-Win32/GDI backend on Windows; non-headless creation on other systems returns an
-unsupported-backend error until their native backends are implemented.
+Headless windows remain portable. Native windows use Win32/GDI on Windows and
+X11/Xlib on Linux; macOS currently returns an unsupported-backend error for
+non-headless creation.
+
+Linux GUI programs link against `libX11`. The implementation uploads the same
+software `0xAARRGGBB` front buffer with `XPutImage`, so `Surface`, damage
+tracking, widgets and the public event API do not depend on X11.
 
 
 ## GuiTextBox

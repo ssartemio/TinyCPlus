@@ -343,6 +343,10 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
 #ifndef _WIN32
             api.library(s, "m");
             api.library(s, "pthread");
+#ifdef __linux__
+            if (c->uses_gui)
+                api.library(s, "X11");
+#endif
 #endif
             result = run ? api.run(s, argc ? argc : 1, argc ? argv : default_args)
                          : api.output_file(s, output);
@@ -451,6 +455,10 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
 #ifndef _WIN32
         args[k++] = "-lm";
         args[k++] = "-pthread";
+#ifdef __linux__
+        if (c->uses_gui)
+            args[k++] = "-lX11";
+#endif
 #endif
         args[k] = NULL;
         result = tc_process(args);
