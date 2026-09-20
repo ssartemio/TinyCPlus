@@ -15,7 +15,9 @@ work everywhere; Windows additionally has the first native backend using Win32/G
 - borrowed surfaces returned by `DoubleBuffer.front()` / `back()` must not be destroyed;
 - no implicit allocation while drawing;
 - no alpha compositing yet: pixels are copied/replaced;
-- no font/text rasterization yet;
+- built-in dependency-free 5x7 bitmap text is available for ASCII-oriented UI;
+- lowercase letters map to uppercase glyphs in this first font;
+- unsupported Unicode codepoints currently render as `?`;
 - native windows currently exist only on Win32; Linux/macOS use headless windows;
 - Win32 presentation uses GDI and the same 0xAARRGGBB front buffer.
 
@@ -36,7 +38,7 @@ on Windows.
 ## Next steps
 
 1. validate the Win32 native path interactively in addition to CI compilation;
-2. add bitmap-font text;
-3. reuse Row/Column layout rules for graphical Label/Button/TextBox;
-4. add macOS and Linux native backends without changing Surface/Canvas semantics;
+2. reuse Row/Column layout rules for graphical Label/Button/TextBox;
+3. add macOS and Linux native backends without changing Surface/Canvas semantics;
+4. add richer font backends later without changing the basic Surface contract;
 5. converge GUI/TUI event constants where that improves reuse.
