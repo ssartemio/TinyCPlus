@@ -68,6 +68,25 @@ static void define_value(CG *g, const char *type, const char *name, const char *
     } else
         line(g, "%s %s = %s;", type, name, initial);
 }
+/* A generated statement may not exceed the line limit in line(), so a long chain of
+   comparisons is folded into an int flag, one `flag |= comparison;` statement each. Short
+   chains stay a single inline `a || b || c` expression. */
+#define TC_INLINE_TEST_LIMIT 2000
+static void test_add(CG *g, Buffer *test, const char **flag, const char *part) {
+    if (!*flag && test->len + strlen(part) + 4 > TC_INLINE_TEST_LIMIT) {
+        *flag = temp(g);
+        define_value(g, "int", *flag, "0");
+        if (test->len)
+            line(g, "%s |= %s;", *flag, test->data);
+    }
+    if (*flag)
+        line(g, "%s |= %s;", *flag, part);
+    else {
+        if (test->len)
+            buf_add(test, " || ");
+        buf_add(test, part);
+    }
+}
 static void async_finish(CG *g, const char *result, const char *error) {
     line(g, "tc_future_complete(tc_async->future, %s, %s);",
          result ? tc_format(g->c, "&(%s)", result) : "NULL", error);
@@ -716,35 +735,38 @@ static void statement(CG *g, Node *n) {
         break;
     case N_SWITCH: {
         Node *item, *v, *fallback = NULL, *last = NULL;
-        int first = 1, guard = n->a->type->kind == TY_ENUM;
-        const char *subject = value(g, n->a);
+        int first = 1, guard;
+        const char *subject = value(g, n->a), *all_flag = NULL;
         Buffer all = {0};
         for (item = n->body; item; item = item->next) {
-            Buffer test = {0};
-            if (item->text) {
+            if (item->text)
                 fallback = item;
-                guard = 0;
+            else
+                last = item;
+        }
+        guard = n->a->type->kind == TY_ENUM && !fallback;
+        for (item = n->body; item; item = item->next) {
+            Buffer test = {0};
+            const char *flag = NULL;
+            if (item->text)
                 continue;
-            }
-            last = item;
             for (v = item->args; v; v = v->next) {
                 const char *label = expression(g, v);
-                if (test.len)
-                    buf_add(&test, " || ");
-                if (n->a->type->kind == TY_STRING)
-                    buf_printf(&test, "tc_string_equal(%s, %s)", subject, label);
-                else
-                    buf_printf(&test, "(%s) == (%s)", subject, label);
+                const char *part = n->a->type->kind == TY_STRING
+                                       ? tc_format(c, "tc_string_equal(%s, %s)", subject, label)
+                                       : tc_format(c, "(%s) == (%s)", subject, label);
+                test_add(g, &test, &flag, part);
+                if (guard)
+                    test_add(g, &all, &all_flag, part);
             }
-            item->label = tc_str(c, test.data);
-            buf_printf(&all, "%s%s", all.len ? " || " : "", test.data);
+            item->label = flag ? flag : tc_str(c, test.data);
             free(test.data);
         }
         /* An exhaustive enum switch rejects out-of-range values up front, so the
            final case can be a plain else and C sees every path covered. */
         if (guard && last)
             line(g, "if (!(%s)) tc_panic(\"switch value matches no enum case\", %s, %d);",
-                 all.data, quote(c, n->loc.file), n->loc.line);
+                 all_flag ? all_flag : all.data, quote(c, n->loc.file), n->loc.line);
         for (item = n->body; item; item = item->next) {
             if (item->text)
                 continue;

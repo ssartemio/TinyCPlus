@@ -58,6 +58,17 @@ static void fmt_comments(Formatter *f, const char *source, size_t begin, size_t 
             p++;
     }
 }
+/* Mirrors the parser: case and default are contextual, so they open a label only when a
+   label can follow (a literal, a name or '-' after case; ':' after default). */
+static int label_start(const Token *token, const Token *next) {
+    if (token->kind != TK_ID)
+        return 0;
+    if (!strcmp(token->text, "default"))
+        return next->kind == TK_OP && !strcmp(next->text, ":");
+    if (!strcmp(token->text, "case"))
+        return next->kind != TK_OP || !strcmp(next->text, "-");
+    return 0;
+}
 int tc_format_file(const char *path, const char *output) {
     char *source = read_file(path);
     Context *c = (Context *)calloc(1, sizeof(*c));
@@ -106,8 +117,7 @@ int tc_format_file(const char *path, const char *output) {
             }
             /* A case/default label at the start of a statement closes the previous
                case body; its statements are indented one level under the label. */
-            if (token->kind == TK_ID && (!strcmp(text, "case") || !strcmp(text, "default")) &&
-                !f->paren && f->brace && strcmp(next, "=") && strcmp(next, ";") &&
+            if (label_start(token, &c->tokens[i + 1]) && !f->paren && f->brace &&
                 (!f->output.len || f->output.data[f->output.len - 1] == '\n')) {
                 if (f->in_case[f->brace]) {
                     f->in_case[f->brace] = 0;
@@ -135,7 +145,7 @@ int tc_format_file(const char *path, const char *output) {
                       (!strcmp(text, "-") || !strcmp(text, "+") || !strcmp(text, "!") ||
                        !strcmp(text, "~")) &&
                       (!*f->previous || !strcmp(f->previous, "return") ||
-                       !strcmp(f->previous, "case") ||
+                       (f->label && !strcmp(f->previous, "case")) ||
                        (f->previous_op && strcmp(f->previous, ")") && strcmp(f->previous, "]")));
             f->previous_op = token->kind == TK_OP;
             f->previous = text;

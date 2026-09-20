@@ -73,8 +73,11 @@ RUN = [
     ('switch_defer_scope', 'int main(){switch(1){case 1:defer println(2);println(1);default:{}}println(3);}', '1\n2\n3\n'),
     ('switch_async', 'import std.concurrent;async int f(int x,Future<int> input){int r=0;switch(x){case 1:var n=await input;r=n+10;default:r=x*2;}return r;}void produce(Future<int> o){o.complete(5);}int main(){var input=Future<int>.create();defer input.destroy();var t=f(1,input);defer t.destroy();var p=spawn produce(input);defer p.destroy();println(t.get());p.get();}', '15\n'),
     ('switch_keywords_as_identifiers', 'int main(){int case=1;int default=2;println(case+default);}', '3\n'),
+    ('switch_keywords_in_case_body', 'int main(){int default=0;int case=1;switch(1){case 1:default=3;case=case+default;case++;println(default);println(case);default:println(99);}switch(7){case -7,7:println("hit");default:println("miss");}}', '3\n5\nhit\n'),
     ('hash_builtin', 'int main(){assert(hash(42)==hash(42));assert(hash(\"abc\")==hash(\"abc\"));assert(hash(\"abc\")!=hash(\"abd\"));int x=0;assert(hash(&x)==hash(&x));println(\"ok\");}', 'ok\n'),
     ('hash_user_function', 'u64 hash(int x){return 7;}int main(){println(hash(3));}', '7\n'),
+    ('hash_user_method', 'class Box{int v;int hash(int x){return x+1000;}int go(){return hash(5);}}int main(){Box b;println(b.go());assert(hash(5)==hash(5));}', '1005\n'),
+    ('hash_user_static_method', 'class Util{static int hash(int x){return x*2;}static int go(){return hash(21);}}int main(){println(Util.go());}', '42\n'),
     ('map_string', 'import std.collections;int main(){var m=Map<string,int>.create();defer m.destroy();assert(m.put(\"one\",1));assert(m.put(\"two\",2));assert(!m.put(\"one\",11));var v,ok=m.get(\"one\");assert(ok);println(v);println(m.getOr(\"three\",-1));assert(m.remove(\"two\"));assert(!m.contains(\"two\"));println(m.length);}', '11\n-1\n1\n'),
     ('map_growth_tombstones', 'import std.collections;int main(){var m=Map<i64,i64>.create();defer m.destroy();for(i64 i=0;i<20000;i++)m.put(i*7919,i);for(i64 i=0;i<20000;i+=2)assert(m.remove(i*7919));i64 sum=0;for(i64 i=0;i<20000;i++){var x,found=m.get(i*7919);if(found)sum+=x;assert(found==(i%2==1));}println(m.length);println(sum);var cap=m.capacity;for(int r=0;r<50;r++){for(i64 i=1;i<=500;i++)m.put(-i,i);for(i64 i=1;i<=500;i++)assert(m.remove(-i));}assert(m.capacity==cap);println(m.length);}', '10000\n100000000\n10000\n'),
     ('map_enum_keys', 'import std.collections;enum Kind{Fn,Var,Type}int main(){var m=Map<Kind,string>.create();defer m.destroy();m.put(Kind.Fn,\"function\");m.put(Kind.Type,\"type\");println(m.getOr(Kind.Type,\"?\"));println(m.getOr(Kind.Var,\"?\"));var keys=Array<Kind>.create();defer keys.destroy();m.keys(&keys);println(keys.length);m.clear();println(m.length);}', 'type\n?\n2\n0\n'),
@@ -144,6 +147,21 @@ FAIL += [
     ('hex_short', 'int main(){println("\\x1");}', 'exactly two digits'),
     ('stream_missing_terminal', 'int main(){int[1] a={1};var s=a.stream().filter(x=>x>0);}', 'terminal operation'),
     ('stream_bad_map', 'int main(){int[1] a={1};a.stream().map(x=>println(x)).count();}', 'cannot return void'),
+]
+
+# Generated switches that cross the code generator's 4096-character statement limit; they
+# must fold the comparison chain instead of failing with "exceeds length limit".
+LARGE = 300
+LARGE_ENUM = 'enum Op{%s}' % ','.join('Operation%d' % i for i in range(LARGE))
+LARGE_ARMS = ''.join('case Op.Operation%d:return %d;' % (i, i) for i in range(LARGE))
+RUN += [
+    ('switch_large_enum', LARGE_ENUM + 'int f(Op o){switch(o){%s}}int main(){println(f(Op.Operation0));println(f(Op.Operation150));println(f(Op.Operation%d));}' % (LARGE_ARMS, LARGE - 1), '0\n150\n%d\n' % (LARGE - 1)),
+    ('switch_large_enum_async', LARGE_ENUM + 'async int f(Op o){switch(o){%s}}int main(){var t=f(Op.Operation%d);defer t.destroy();println(t.get());}' % (LARGE_ARMS, LARGE - 1), '%d\n' % (LARGE - 1)),
+    ('switch_many_int_labels', 'int f(int x){switch(x){case %s:return 1;case 1000:return 2;default:return 0;}}int main(){println(f(0));println(f(599));println(f(600));println(f(1000));}' % ','.join(str(i) for i in range(600)), '1\n1\n0\n2\n'),
+    ('switch_many_string_labels', 'int f(string s){switch(s){case %s:return 1;default:return 0;}}int main(){println(f("s0"));println(f("s299"));println(f("x"));}' % ','.join('"s%d"' % i for i in range(300)), '1\n1\n0\n'),
+]
+RUNTIME_FAIL += [
+    ('switch_large_enum_out_of_range', LARGE_ENUM + 'int f(Op o){switch(o){%s}}int main(){println(f(cast<Op>(5000)));}' % LARGE_ARMS, 'switch value matches no enum case'),
 ]
 
 count = 0
