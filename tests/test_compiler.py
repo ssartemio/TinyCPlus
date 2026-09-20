@@ -221,9 +221,15 @@ with nullcontext(run_folder) as folder:
         assert p.returncode==0 and 'integer\t0xff' in p.stdout and 'comment' not in p.stdout
         p=invoke('ast','int main(){var a=2+3*4;}','--emit-ast')
         assert p.returncode==0 and 'FunctionDecl main' in p.stdout and 'Binary *' in p.stdout
+        p=invoke('typed_ast','int main(){var a=2+3*4;}','--emit-typed-ast')
+        assert p.returncode==0 and 'VarDecl a @1:12 : i32' in p.stdout and 'Binary + @1:19 : i32' in p.stdout and 'Int 3 @1:20 : i32' in p.stdout
+        untyped=invoke('ast','int main(){var a=2+3*4;}','--emit-ast')
+        assert untyped.returncode==0 and 'Binary + @1:19\n' in untyped.stdout and ' : ' not in untyped.stdout
+        p=invoke('typed_ast_error','int main(){int x="text";}','--emit-typed-ast')
+        assert p.returncode==1 and p.stdout=='' and 'expected i32, found string' in p.stderr
         p=invoke('lowering','int main(){defer println(8);return 0;}','--emit-c')
         assert p.returncode==0 and '#line 1 ' in p.stdout and p.stdout.index('tc_print_integer')<p.stdout.index('return tc_tmp')
-        count+=3
+        count+=5
     except Exception as e: errors.append(('inspection',str(e)))
 
 for name,error in errors: print('FAIL',name,error)
