@@ -355,6 +355,7 @@ Opciones de inspección:
 tinyc --emit-c programa.tc
 tinyc --emit-ast programa.tc
 tinyc --emit-typed-ast programa.tc
+tinyc --emit-types programa.tc
 tinyc --emit-tokens programa.tc
 tinyc --emit-asm programa.tc
 ```
