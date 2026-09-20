@@ -1,9 +1,9 @@
 import std.concurrent;
 
-void increment(void* argument)
+void setValue(void* argument)
 {
-    Atomic* counter = argument;
-    counter.add(1);
+    int* value = argument;
+    *value = 41;
 }
 
 int doubleValue(int value)
@@ -13,11 +13,14 @@ int doubleValue(int value)
 
 int main()
 {
+    int shared = 0;
+    var thread = Thread.start(setValue, &shared);
+    assert(thread.join() == 0);
+    assert(shared == 41);
+
     var counter = Atomic.create();
     defer counter.destroy();
-
-    var thread = Thread.start(increment, &counter);
-    assert(thread.join() == 0);
+    assert(counter.add(1) == 0);
     assert(counter.load() == 1);
 
     var future = Future<int>.create();
