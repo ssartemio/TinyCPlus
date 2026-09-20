@@ -84,9 +84,26 @@ Mouse  = 3
 Resize = 4
 Close  = 5
 Custom = 6
+Scroll = 7
 ```
 
 Mouse buttons use `GuiMouseButton.None/Left/Right/Middle` (0/1/2/3).
+
+## Modifier flags
+
+`GuiEvent.modifiers` is a portable bitmask:
+
+```text
+GuiModifier.Shift    = 1
+GuiModifier.Control  = 2
+GuiModifier.Alt      = 4
+GuiModifier.Super    = 8
+GuiModifier.CapsLock = 16
+```
+
+Use `GuiInput.hasModifier(event, GuiModifier.Control)` instead of testing bits
+directly when application code only needs a predicate. Native key, text, mouse
+and scroll events carry the modifier state captured for that event.
 
 `GuiEventKind.Scroll` carries `double scrollX` and `double scrollY`.
 Positive X scrolls to the right and positive Y scrolls upward. Coordinates
