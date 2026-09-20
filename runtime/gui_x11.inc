@@ -298,8 +298,8 @@ static int tc_gui_x11_create(TcGuiWindow *window, TinyString title) {
     wm_delete = XInternAtom(display, "WM_DELETE_WINDOW", False);
     window->native_delete = (unsigned long)wm_delete;
     XSetWMProtocols(display, native, &wm_delete, 1);
+    setlocale(LC_CTYPE, "");
     if (XSupportsLocale()) {
-        setlocale(LC_CTYPE, "");
         XSetLocaleModifiers("");
         window->native_im = XOpenIM(display, NULL, NULL, NULL);
         if (window->native_im)

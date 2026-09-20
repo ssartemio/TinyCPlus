@@ -143,6 +143,14 @@ int main(void) {
 
 #ifdef TC_GUI_X11_BACKEND
     {
+        const char utf8[] = {'A', (char)0xc3, (char)0xa9, (char)0xe2, (char)0x82, (char)0xac};
+        int offset = 0;
+        assert(tc_gui_x11_utf8_next(utf8, (int)sizeof(utf8), &offset) == 'A');
+        assert(tc_gui_x11_utf8_next(utf8, (int)sizeof(utf8), &offset) == 0x00e9u);
+        assert(tc_gui_x11_utf8_next(utf8, (int)sizeof(utf8), &offset) == 0x20acu);
+        assert(offset == (int)sizeof(utf8));
+    }
+    {
         TcGuiWindow *native;
         TcGuiEvent native_event;
         Display *display;
