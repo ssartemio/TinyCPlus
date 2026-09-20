@@ -37,6 +37,7 @@ int main() {
     if (error != 0)
         return error;
     defer window.destroy();
+    assert(window.scale() == 1.0);
     Surface canvas = window.surface();
     canvas.clear(Pixel.rgba(1, 2, 3));
     int changed = window.present();

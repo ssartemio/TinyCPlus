@@ -159,3 +159,30 @@ Current limits:
   framebuffer; higher-DPI scaling policy is still intentionally undefined;
 - Cocoa is not auto-selected: explicit backend selection keeps headless builds
   deterministic.
+
+
+## HiDPI coordinate policy
+
+TinyC+ GUI geometry is defined in **framebuffer pixels**. This preserves the
+existing `Surface`, `GuiRect`, layout and widget semantics across backends.
+
+`GuiWindow.scale()` reports the ratio:
+
+```text
+framebuffer pixels / native logical unit
+```
+
+Headless and X11 currently report `1.0`. Cocoa reads
+`NSWindow.backingScaleFactor`; a requested 800x600 window therefore keeps an
+800x600 TinyC+ framebuffer even when the native content size is 400x300 points
+at scale 2.0. Mouse coordinates and resize events are converted back to
+framebuffer pixels before they enter `GuiEvent`.
+
+When the Cocoa backing scale changes (for example when moving between displays),
+the window delegate updates `scale()`, rebuilds the framebuffer at the new
+physical pixel size and emits the existing resize event. No second coordinate
+system is introduced into widgets.
+
+This first policy intentionally favors deterministic pixel rendering. A future
+high-level density-independent layout helper can be built on top of
+`scale()` without changing `Surface`.

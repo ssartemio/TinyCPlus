@@ -95,6 +95,7 @@ static (GuiWindow, Error) create(int width = 800, int height = 600,
                                  string title = "TinyC+", bool headless = false);
 int width();
 int height();
+double scale();
 bool isOpen();
 Surface surface();
 int present();
@@ -105,6 +106,10 @@ void destroy();
 ```
 
 `surface()` returns a borrowed back buffer and must not be destroyed separately.
+
+`scale()` is framebuffer pixels per native logical unit. Public GUI coordinates,
+window width/height, mouse positions and resize dimensions remain framebuffer
+pixels; Cocoa performs point/pixel conversion internally.
 
 Headless windows are portable and used throughout CI. Windows uses Win32/GDI.
 Linux can compile the native X11 implementation explicitly:

@@ -79,6 +79,7 @@ int main(void) {
 
     window = (TcGuiWindow *)tc_gui_window_create(5, 4, TC_STRING("headless"), 1, &error);
     assert(window && error == 0 && tc_gui_window_open(window));
+    assert(tc_gui_window_scale(window) == 1.0);
     tc_gui_surface_clear(tc_gui_window_surface(window), green);
     assert(tc_gui_window_present(window) == 20);
     assert(tc_gui_window_post(window, TC_GUI_EVENT_CUSTOM, 42, 1, 2, 3, 4, 5, 1, 'Z') == 0);
@@ -213,8 +214,10 @@ int main(void) {
 
         {
             TcCocoaSize size;
-            size.width = 140;
-            size.height = 90;
+            double native_scale = tc_gui_window_scale(native);
+            assert(native_scale >= 1.0);
+            size.width = 140.0 / native_scale;
+            size.height = 90.0 / native_scale;
             ((void (*)(void *, TcCocoaSel, TcCocoaSize))tc_cocoa.msg_send)
                 (native->native_window, tc_cocoa_sel("setContentSize:"), size);
             memset(&native_event, 0, sizeof(native_event));

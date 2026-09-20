@@ -636,6 +636,7 @@ typedef struct TcGuiEvent {
 typedef struct TcGuiWindow {
     TcGuiBuffer *buffer;
     int headless, open;
+    double scale;
     TcGuiEvent events[64];
     unsigned event_read, event_write;
 #ifdef _WIN32
@@ -860,6 +861,7 @@ void *tc_gui_window_create(int32_t width, int32_t height, TinyString title, int3
     }
     window->headless = !!headless;
     window->open = 1;
+    window->scale = 1.0;
 #ifdef _WIN32
     if (!window->headless) {
         RECT area = {0, 0, width, height};
@@ -927,6 +929,10 @@ int32_t tc_gui_window_width(void *handle) {
 int32_t tc_gui_window_height(void *handle) {
     TcGuiWindow *window = (TcGuiWindow *)handle;
     return window ? window->buffer->back.height : 0;
+}
+double tc_gui_window_scale(void *handle) {
+    TcGuiWindow *window = (TcGuiWindow *)handle;
+    return window && window->scale > 0.0 ? window->scale : 1.0;
 }
 int32_t tc_gui_window_open(void *handle) {
     TcGuiWindow *window = (TcGuiWindow *)handle;

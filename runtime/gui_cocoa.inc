@@ -107,6 +107,9 @@ static uint64_t tc_cocoa_u64(void *object, const char *selector) {
 static TcCocoaBool tc_cocoa_bool(void *object, const char *selector) {
     return ((TcCocoaBool (*)(void *, TcCocoaSel))tc_cocoa.msg_send)(object, tc_cocoa_sel(selector));
 }
+static double tc_cocoa_double(void *object, const char *selector) {
+    return ((double (*)(void *, TcCocoaSel))tc_cocoa.msg_send)(object, tc_cocoa_sel(selector));
+}
 static TcCocoaPoint tc_cocoa_point(void *object, const char *selector) {
     return ((TcCocoaPoint (*)(void *, TcCocoaSel))tc_cocoa.msg_send)(object, tc_cocoa_sel(selector));
 }
@@ -198,8 +201,8 @@ static void tc_cocoa_draw_rect(void *self, TcCocoaSel command, TcCocoaRect dirty
         return;
     area.origin.x = 0;
     area.origin.y = 0;
-    area.size.width = window->buffer->front.width;
-    area.size.height = window->buffer->front.height;
+    area.size.width = window->buffer->front.width / window->scale;
+    area.size.height = window->buffer->front.height / window->scale;
     tc_cocoa.context_draw_image(context, area, window->native_image);
     tc_gui_surface_damage_clear(&window->buffer->front);
 }
@@ -266,8 +269,8 @@ static void tc_cocoa_resize_notification(void *self, TcCocoaSel command, void *n
     if (!view)
         return;
     bounds = tc_cocoa_rect(view, "bounds");
-    width = (int32_t)(bounds.size.width + 0.5);
-    height = (int32_t)(bounds.size.height + 0.5);
+    width = (int32_t)(bounds.size.width * window->scale + 0.5);
+    height = (int32_t)(bounds.size.height * window->scale + 0.5);
     if (width < 1 || height < 1 ||
         (width == window->buffer->front.width && height == window->buffer->front.height))
         return;
@@ -285,6 +288,26 @@ static void tc_cocoa_resize_notification(void *self, TcCocoaSel command, void *n
     event.height = height;
     tc_gui_event_push(window, event);
     tc_cocoa_void_bool(window->native_view, "setNeedsDisplay:", 1);
+}
+static void tc_cocoa_scale_notification(void *self, TcCocoaSel command, void *notification) {
+    void *native_window;
+    TcCocoaMap *entry;
+    TcGuiWindow *window;
+    double scale;
+    (void)self;
+    (void)command;
+    native_window = tc_cocoa_id0(notification, "object");
+    entry = tc_cocoa_find_window(native_window);
+    if (!entry)
+        return;
+    window = entry->window;
+    scale = tc_cocoa_double(native_window, "backingScaleFactor");
+    if (scale < 1.0)
+        scale = 1.0;
+    if (scale == window->scale)
+        return;
+    window->scale = scale;
+    tc_cocoa_resize_notification(self, command, notification);
 }
 static void tc_cocoa_close_notification(void *self, TcCocoaSel command, void *notification) {
     void *native_window;
@@ -317,7 +340,10 @@ static int tc_cocoa_delegate_class_ready(void) {
     if (!tc_cocoa.class_add_method(tc_cocoa_delegate_class, tc_cocoa_sel("windowDidResize:"),
                                     (void *)tc_cocoa_resize_notification, "v@:@") ||
         !tc_cocoa.class_add_method(tc_cocoa_delegate_class, tc_cocoa_sel("windowWillClose:"),
-                                    (void *)tc_cocoa_close_notification, "v@:@"))
+                                    (void *)tc_cocoa_close_notification, "v@:@") ||
+        !tc_cocoa.class_add_method(tc_cocoa_delegate_class,
+                                    tc_cocoa_sel("windowDidChangeBackingProperties:"),
+                                    (void *)tc_cocoa_scale_notification, "v@:@"))
         return 0;
     tc_cocoa.register_class_pair(tc_cocoa_delegate_class);
     return 1;
@@ -398,8 +424,9 @@ static void tc_cocoa_process_event(void *native_event) {
                type == 5 || type == 6 || type == 7 || type == 25 || type == 26 || type == 27) {
         TcCocoaPoint point = tc_cocoa_point(native_event, "locationInWindow");
         event.kind = TC_GUI_EVENT_MOUSE;
-        event.x = (int32_t)point.x;
-        event.y = window->buffer->front.height - 1 - (int32_t)point.y;
+        event.x = (int32_t)(point.x * window->scale + 0.5);
+        event.y = window->buffer->front.height - 1 -
+                  (int32_t)(point.y * window->scale + 0.5);
         if (type == 1 || type == 2 || type == 6)
             event.button = 1;
         else if (type == 3 || type == 4 || type == 7)
@@ -445,6 +472,18 @@ static int tc_gui_cocoa_create(TcGuiWindow *window, TinyString title) {
         return 9;
     }
     tc_cocoa_void_bool(native, "setReleasedWhenClosed:", 0);
+    window->scale = tc_cocoa_double(native, "backingScaleFactor");
+    if (window->scale < 1.0)
+        window->scale = 1.0;
+    if (window->scale != 1.0) {
+        TcCocoaSize content_size;
+        content_size.width = window->buffer->front.width / window->scale;
+        content_size.height = window->buffer->front.height / window->scale;
+        ((void (*)(void *, TcCocoaSel, TcCocoaSize))tc_cocoa.msg_send)
+            (native, tc_cocoa_sel("setContentSize:"), content_size);
+        rect.size.width = content_size.width;
+        rect.size.height = content_size.height;
+    }
     view = tc_cocoa_id0((void *)tc_cocoa_view_class, "alloc");
     view = ((void *(*)(void *, TcCocoaSel, TcCocoaRect))tc_cocoa.msg_send)
         (view, tc_cocoa_sel("initWithFrame:"), rect);
