@@ -1,0 +1,1228 @@
+module parser;
+import std.string;
+import std.collections;
+import std.io;
+import std.process;
+import lexer;
+
+/// Stage 1 parser: a port of compiler/parser.c that must print the same tree as
+/// `tiny --emit-ast`, and stop with the same diagnostic on malformed input. The calls are made
+/// in the same order as in C on purpose: the parser is context sensitive (it remembers which
+/// names it has seen as types), so even harmless-looking reordering would change results.
+///
+/// Nodes and types are never freed: like the compiler that this replaces, the process is a
+/// short-lived batch job and the tree lives until it exits.
+///
+/// Known difference: stage 0 also registers tuple types under the internal name tc_tuple_<id>,
+/// so an identifier spelled exactly like that would count as a type there. Stage 1 does not
+/// number types and ignores this.
+
+enum NodeKind
+{
+    Program, FunctionDecl, Class, Interface, Extension, Property, Block,
+    VarDecl, ExprStmt, Return, If, While, For, Range,
+    Break, Continue, Defer, Delete, Int, Float, String,
+    Char, Bool, Null, Identifier, Binary, Unary, Call,
+    Index, Slice, Member, Init, Tuple, New, Cast,
+    Sizeof, Lambda, Await, Spawn, Module, Import, Enum,
+    Switch, Case
+}
+
+// Node flags, numbered as in compiler/tiny.h.
+const int flagExtern = 1;
+const int flagStatic = 2;
+const int flagAsync = 4;
+const int flagTest = 8;
+const int flagConst = 16;
+const int flagPost = 32;
+const int flagConstructor = 64;
+const int flagDestructor = 128;
+const int flagStdcall = 4096;
+
+enum TypeRefKind { Named, PointerTo, FixedArray, SliceOf, TupleOf, FunctionOf, ClosureOf, Inferred }
+
+/// A type as written in the source. Stage 0 interns real types while it parses; stage 1 keeps
+/// the syntax and leaves resolution to the semantic phase.
+class TypeRef
+{
+    TypeRefKind kind;
+    string name;
+    TypeRef* base;
+    TypeRef* items;
+    TypeRef* next;
+    u64 count;
+    bool isConst;
+}
+
+class Node
+{
+    NodeKind kind;
+    int line;
+    int column;
+    string name;
+    string text;
+    string label;
+    int flags;
+    TypeRef* declType;
+    TypeRef* type;
+    Node* a;
+    Node* b;
+    Node* c;
+    Node* body;
+    Node* params;
+    Node* args;
+    Node* next;
+    Node* owner;
+}
+
+string nodeKindName(NodeKind kind)
+{
+    switch (kind)
+    {
+        case NodeKind.Program: return "Program";
+        case NodeKind.FunctionDecl: return "FunctionDecl";
+        case NodeKind.Class: return "Class";
+        case NodeKind.Interface: return "Interface";
+        case NodeKind.Extension: return "Extension";
+        case NodeKind.Property: return "Property";
+        case NodeKind.Block: return "Block";
+        case NodeKind.VarDecl: return "VarDecl";
+        case NodeKind.ExprStmt: return "ExprStmt";
+        case NodeKind.Return: return "Return";
+        case NodeKind.If: return "If";
+        case NodeKind.While: return "While";
+        case NodeKind.For: return "For";
+        case NodeKind.Range: return "Range";
+        case NodeKind.Break: return "Break";
+        case NodeKind.Continue: return "Continue";
+        case NodeKind.Defer: return "Defer";
+        case NodeKind.Delete: return "Delete";
+        case NodeKind.Int: return "Int";
+        case NodeKind.Float: return "Float";
+        case NodeKind.String: return "String";
+        case NodeKind.Char: return "Char";
+        case NodeKind.Bool: return "Bool";
+        case NodeKind.Null: return "Null";
+        case NodeKind.Identifier: return "Identifier";
+        case NodeKind.Binary: return "Binary";
+        case NodeKind.Unary: return "Unary";
+        case NodeKind.Call: return "Call";
+        case NodeKind.Index: return "Index";
+        case NodeKind.Slice: return "Slice";
+        case NodeKind.Member: return "Member";
+        case NodeKind.Init: return "Init";
+        case NodeKind.Tuple: return "Tuple";
+        case NodeKind.New: return "New";
+        case NodeKind.Cast: return "Cast";
+        case NodeKind.Sizeof: return "Sizeof";
+        case NodeKind.Lambda: return "Lambda";
+        case NodeKind.Await: return "Await";
+        case NodeKind.Spawn: return "Spawn";
+        case NodeKind.Module: return "Module";
+        case NodeKind.Import: return "Import";
+        case NodeKind.Enum: return "Enum";
+        case NodeKind.Switch: return "Switch";
+        case NodeKind.Case: return "Case";
+    }
+}
+
+/// Appends the tree exactly as --emit-ast prints it: kind, name, text and position on one
+/// line, then params, args, a, b, c and body indented two more spaces, then the next sibling.
+void dumpNode(Node* n, StringBuilder* out, int indent)
+{
+    while (n != null)
+    {
+        for (int i = 0; i < indent; i++) out.appendChar(' ');
+        out.append(nodeKindName(n.kind));
+        if (n.name.length > 0)
+        {
+            out.appendChar(' ');
+            out.append(n.name);
+        }
+        if (n.text.length > 0)
+        {
+            out.appendChar(' ');
+            out.append(n.text);
+        }
+        out.append(" @");
+        out.appendInt(n.line);
+        out.appendChar(':');
+        out.appendInt(n.column);
+        out.appendChar('\n');
+        if (n.params != null) dumpNode(n.params, out, indent + 2);
+        if (n.args != null) dumpNode(n.args, out, indent + 2);
+        if (n.a != null) dumpNode(n.a, out, indent + 2);
+        if (n.b != null) dumpNode(n.b, out, indent + 2);
+        if (n.c != null) dumpNode(n.c, out, indent + 2);
+        if (n.body != null) dumpNode(n.body, out, indent + 2);
+        n = n.next;
+    }
+}
+
+string join(string first, string second, string third)
+{
+    var text = StringBuilder.create();
+    text.append(first);
+    text.append(second);
+    text.append(third);
+    OwnedString owned = text.toOwned();
+    text.destroy();
+    return owned.view();
+}
+
+/// strtoull(text, NULL, 0) as stage 0 applies it to integer tokens: a 0x prefix means hex, a
+/// leading 0 means octal (so "089" reads as 0), and overflow saturates and reports ERANGE.
+(u64, bool) parseCInteger(string text)
+{
+    u64 value = 0;
+    bool overflow = false;
+    u64 base = 10;
+    u64 i = 0;
+    u64 size = len(text);
+    if (size >= 2 && text[0] == '0' && (text[1] == 'x' || text[1] == 'X'))
+    {
+        base = 16;
+        i = 2;
+    }
+    else if (size >= 1 && text[0] == '0')
+    {
+        base = 8;
+        i = 1;
+    }
+    while (i < size)
+    {
+        char ch = text[i];
+        u64 digit = 0;
+        if (ch >= '0' && ch <= '9') digit = cast<u64>(ch - '0');
+        else if (ch >= 'a' && ch <= 'f') digit = cast<u64>(ch - 'a') + 10;
+        else if (ch >= 'A' && ch <= 'F') digit = cast<u64>(ch - 'A') + 10;
+        else break;
+        if (digit >= base) break;
+        if (!overflow)
+        {
+            if (value > (18446744073709551615 - digit) / base) overflow = true;
+            else value = value * base + digit;
+        }
+        i++;
+    }
+    if (overflow) value = 18446744073709551615;
+    return (value, overflow);
+}
+
+/// The name under which stage 0 stores a type: primitives and their aliases collapse onto one
+/// entry (int and i32 are the same type), everything else keeps its own name.
+string canonicalTypeName(string name)
+{
+    switch (name)
+    {
+        case "int", "Error": return "i32";
+        case "uint": return "u32";
+        case "byte": return "u8";
+        case "short": return "i16";
+        case "long": return "i64";
+        case "ulong": return "u64";
+        case "StringView": return "string";
+        default: return name;
+    }
+}
+
+int precedence(string op)
+{
+    switch (op)
+    {
+        case "=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=": return 1;
+        case "||": return 2;
+        case "&&": return 3;
+        case "|": return 4;
+        case "^": return 5;
+        case "&": return 6;
+        case "==", "!=": return 7;
+        case "<", ">", "<=", ">=": return 8;
+        case "<<", ">>": return 9;
+        case "+", "-": return 10;
+        case "*", "/", "%": return 11;
+        default: return 0;
+    }
+}
+
+bool isUpper(char ch) { return ch >= 'A' && ch <= 'Z'; }
+
+class Parser
+{
+    string file;
+    Array<Token>* tokens;
+    u64 pos;
+    int depth;
+    /// Every name stage 0 would have in its type table so far (what type_start consults).
+    Map<string, bool> known;
+    /// Names that already have a class, struct, interface or enum declaration.
+    Map<string, bool> declared;
+
+    static Parser create(string file, Array<Token>* tokens)
+    {
+        Parser parser;
+        parser.file = file;
+        parser.tokens = tokens;
+        parser.pos = 0;
+        parser.depth = 0;
+        parser.known = Map<string, bool>.create();
+        parser.declared = Map<string, bool>.create();
+        return parser;
+    }
+
+    void destroy()
+    {
+        known.destroy();
+        declared.destroy();
+    }
+
+    // ---- tokens ------------------------------------------------------------------------
+
+    Token peek() { return tokens.data[pos]; }
+    u64 count() { return tokens.length; }
+    string textAt(u64 index) { return tokens.data[index].text; }
+    bool at(string s) { return tokens.data[pos].text == s; }
+
+    bool eat(string s)
+    {
+        if (at(s))
+        {
+            pos++;
+            return true;
+        }
+        return false;
+    }
+
+    bool keyword(string s) { return tokens.data[pos].kind == TokenKind.Identifier && at(s); }
+
+    void failAt(Token t, string message) { fail(file, t.line, t.column, message); }
+
+    Token take()
+    {
+        Token t = peek();
+        if (t.kind == TokenKind.Eof) failAt(t, "unexpected end of file");
+        pos++;
+        return t;
+    }
+
+    Token expect(string s)
+    {
+        Token t = peek();
+        if (!eat(s)) failAt(t, join("expected '", s, join("', found '", t.text, "'")));
+        return t;
+    }
+
+    string ident()
+    {
+        Token t = take();
+        if (t.kind != TokenKind.Identifier) failAt(t, "expected identifier");
+        return t.text;
+    }
+
+    void enter()
+    {
+        depth++;
+        if (depth > 256) failAt(peek(), "syntax nesting limit (256) exceeded");
+    }
+
+    void leave() { depth--; }
+
+    // ---- tree construction ---------------------------------------------------------------
+
+    Node* make(NodeKind kind, Token at)
+    {
+        Node* n = new Node();
+        n.kind = kind;
+        n.line = at.line;
+        n.column = at.column;
+        return n;
+    }
+
+    Node* append(Node* head, Node* n)
+    {
+        if (head == null) return n;
+        Node* last = head;
+        while (last.next != null) last = last.next;
+        last.next = n;
+        return head;
+    }
+
+    /// Records a type name the way add_type does, so that type_start later recognizes it.
+    void registerType(string name) { known.put(name, true); }
+
+    TypeRef* typeNamed(string name)
+    {
+        string canonical = canonicalTypeName(name);
+        registerType(canonical);
+        TypeRef* t = new TypeRef();
+        t.kind = TypeRefKind.Named;
+        if (name == "var") t.kind = TypeRefKind.Inferred;
+        t.name = name;
+        return t;
+    }
+
+    TypeRef* voidType()
+    {
+        registerType("void");
+        TypeRef* t = new TypeRef();
+        t.kind = TypeRefKind.Named;
+        t.name = "void";
+        return t;
+    }
+
+    TypeRef* autoType()
+    {
+        registerType("var");
+        TypeRef* t = new TypeRef();
+        t.kind = TypeRefKind.Inferred;
+        t.name = "var";
+        return t;
+    }
+
+    // ---- types -------------------------------------------------------------------------
+
+    /// Does a type start here? Mirrors type_start, including its use of the type table.
+    bool typeStart()
+    {
+        string s = tokens.data[pos].text;
+        if (pos + 1 < count() && textAt(pos + 1) == ".")
+        {
+            u64 p = pos;
+            while (p + 2 < count() && textAt(p + 1) == "." && tokens.data[p + 2].kind == TokenKind.Identifier)
+                p += 2;
+            if (p + 1 < count() && (tokens.data[p + 1].kind == TokenKind.Identifier || textAt(p + 1) == "*"))
+                return true;
+            return false;
+        }
+        if (pos + 1 < count() && textAt(pos + 1) == "(") return false;
+        switch (s)
+        {
+            case "const", "var", "Slice", "Array", "Channel", "Task", "Future", "func", "closure":
+                return true;
+            default:
+            {
+            }
+        }
+        if (known.contains(s)) return true;
+        switch (s)
+        {
+            case "void", "bool", "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64", "float",
+                "double", "char", "string", "int", "uint", "byte", "short", "long", "ulong",
+                "size_t", "Error", "StringView":
+                return true;
+            default:
+            {
+            }
+        }
+        if (len(s) > 0 && isUpper(s[0]) && pos + 1 < count() &&
+            (tokens.data[pos + 1].kind == TokenKind.Identifier || textAt(pos + 1) == "*" || textAt(pos + 1) == "["))
+            return true;
+        return false;
+    }
+
+    /// Comma separated types up to `end`. A '>>' closing two argument lists is split by
+    /// rewriting the token to '>' and leaving it in place for the outer list.
+    TypeRef* typeItems(string end)
+    {
+        TypeRef* list = null;
+        TypeRef* last = null;
+        while (true)
+        {
+            TypeRef* item = parseType();
+            if (list == null) list = item;
+            else last.next = item;
+            last = item;
+            if (!(eat(","))) break;
+        }
+        if (end == ">" && at(">>"))
+        {
+            tokens.data[pos].text = ">";
+            return list;
+        }
+        expect(end);
+        return list;
+    }
+
+    TypeRef* parseType()
+    {
+        TypeRef* t;
+        bool isConst = eat("const");
+        enter();
+        if (eat("("))
+        {
+            t = new TypeRef();
+            t.kind = TypeRefKind.TupleOf;
+            t.items = typeItems(")");
+        }
+        else
+        {
+            string name = ident();
+            while (eat(".")) name = join(name, ".", ident());
+            if (eat("<"))
+            {
+                if (name == "func" || name == "closure")
+                {
+                    TypeRef* ret = parseType();
+                    TypeRef* params = null;
+                    expect("(");
+                    if (!eat(")")) params = typeItems(")");
+                    expect(">");
+                    registerType("Function");
+                    t = new TypeRef();
+                    t.kind = TypeRefKind.FunctionOf;
+                    if (name == "closure") t.kind = TypeRefKind.ClosureOf;
+                    t.name = "Function";
+                    t.base = ret;
+                    t.items = params;
+                }
+                else
+                {
+                    TypeRef* items = typeItems(">");
+                    if (name == "Slice")
+                    {
+                        if (items.next != null) failAt(peek(), "Slice takes one type");
+                        t = new TypeRef();
+                        t.kind = TypeRefKind.SliceOf;
+                        t.base = items;
+                    }
+                    else
+                    {
+                        registerType(name);
+                        t = new TypeRef();
+                        t.kind = TypeRefKind.Named;
+                        t.name = name;
+                        t.items = items;
+                    }
+                }
+            }
+            else
+                t = typeNamed(name);
+        }
+        if (isConst) t.isConst = true;
+        while (true)
+        {
+            if (eat("*"))
+            {
+                TypeRef* pointer = new TypeRef();
+                pointer.kind = TypeRefKind.PointerTo;
+                pointer.base = t;
+                t = pointer;
+            }
+            else if (eat("["))
+            {
+                Token n = take();
+                if (n.kind != TokenKind.Integer) failAt(n, "array length must be an integer literal");
+                var length, overflow = parseCInteger(n.text);
+                if (overflow || length == 0 || length > 10000000)
+                    failAt(n, "array length must be between 1 and 10000000");
+                expect("]");
+                TypeRef* array = new TypeRef();
+                array.kind = TypeRefKind.FixedArray;
+                array.base = t;
+                array.count = length;
+                t = array;
+            }
+            else
+                break;
+        }
+        leave();
+        return t;
+    }
+
+    // ---- expressions ---------------------------------------------------------------------
+
+    Node* arguments(string end)
+    {
+        Node* list = null;
+        if (eat(end)) return null;
+        while (true)
+        {
+            string label = "";
+            if (tokens.data[pos].kind == TokenKind.Identifier && pos + 1 < count() && textAt(pos + 1) == ":")
+            {
+                label = ident();
+                expect(":");
+            }
+            Node* n = expr(1);
+            n.label = label;
+            list = append(list, n);
+            if (!(eat(","))) break;
+        }
+        expect(end);
+        return list;
+    }
+
+    Node* parameters()
+    {
+        Node* list = null;
+        if (eat(")")) return null;
+        if (at("void") && textAt(pos + 1) == ")")
+        {
+            pos += 2;
+            return null;
+        }
+        while (true)
+        {
+            Node* p = make(NodeKind.VarDecl, peek());
+            if (eat("..."))
+            {
+                p.name = "...";
+                list = append(list, p);
+                break;
+            }
+            p.declType = parseType();
+            p.name = ident();
+            if (eat("=")) p.a = expr(1);
+            list = append(list, p);
+            if (!(eat(","))) break;
+        }
+        expect(")");
+        return list;
+    }
+
+    bool lambdaAhead()
+    {
+        u64 p = pos;
+        int level = 0;
+        if (!at("(")) return false;
+        while (true)
+        {
+            string s = textAt(p);
+            p++;
+            if (s == "(") level++;
+            else if (s == ")") level--;
+            if (!(p < count() && level > 0)) break;
+        }
+        return level == 0 && p < count() && textAt(p) == "=>";
+    }
+
+    bool genericCallAhead()
+    {
+        u64 p = pos;
+        int level = 0;
+        if (!at("<")) return false;
+        while (p < count() && p < pos + 128)
+        {
+            string s = textAt(p);
+            p++;
+            if (s == "<") level++;
+            else if (s == ">") level--;
+            else if (s == ">>") level -= 2;
+            else if (s == ";" || s == "{" || s == "=") return false;
+            if (level <= 0) return p < count() && (textAt(p) == "(" || textAt(p) == ".");
+        }
+        return false;
+    }
+
+    Node* primary()
+    {
+        Token t = peek();
+        Node* n;
+        enter();
+        if (lambdaAhead())
+        {
+            n = make(NodeKind.Lambda, t);
+            expect("(");
+            if (!eat(")"))
+            {
+                while (true)
+                {
+                    Node* p = make(NodeKind.VarDecl, peek());
+                    if (typeStart())
+                    {
+                        p.declType = parseType();
+                        p.name = ident();
+                    }
+                    else
+                    {
+                        p.name = ident();
+                        p.declType = autoType();
+                    }
+                    n.params = append(n.params, p);
+                    if (!(eat(","))) break;
+                }
+                expect(")");
+            }
+            expect("=>");
+            if (at("{")) n.body = stmt();
+            else n.a = expr(1);
+        }
+        else if (eat("("))
+        {
+            n = expr(1);
+            if (eat(","))
+            {
+                Node* tuple = make(NodeKind.Tuple, t);
+                tuple.args = n;
+                while (true)
+                {
+                    tuple.args = append(tuple.args, expr(1));
+                    if (!(eat(","))) break;
+                }
+                n = tuple;
+            }
+            expect(")");
+        }
+        else if (eat("{"))
+        {
+            n = make(NodeKind.Init, t);
+            n.args = arguments("}");
+        }
+        else if (eat("new"))
+        {
+            n = make(NodeKind.New, t);
+            n.declType = parseType();
+            if (eat("(")) n.args = arguments(")");
+        }
+        else if (eat("sizeof"))
+        {
+            n = make(NodeKind.Sizeof, t);
+            expect("(");
+            n.declType = parseType();
+            expect(")");
+        }
+        else if (eat("cast"))
+        {
+            n = make(NodeKind.Cast, t);
+            expect("<");
+            n.declType = parseType();
+            expect(">");
+            expect("(");
+            n.a = expr(1);
+            expect(")");
+        }
+        else if (at("!") || at("-") || at("+") || at("~") || at("*") || at("&") || at("++") || at("--"))
+        {
+            n = make(NodeKind.Unary, t);
+            n.text = take().text;
+            n.a = expr(14);
+        }
+        else if (eat("await"))
+        {
+            n = make(NodeKind.Await, t);
+            n.a = expr(14);
+        }
+        else if (eat("spawn"))
+        {
+            n = make(NodeKind.Spawn, t);
+            n.a = expr(14);
+        }
+        else
+        {
+            take();
+            if (t.kind == TokenKind.Integer) n = make(NodeKind.Int, t);
+            else if (t.kind == TokenKind.Float) n = make(NodeKind.Float, t);
+            else if (t.kind == TokenKind.String) n = make(NodeKind.String, t);
+            else if (t.kind == TokenKind.Char) n = make(NodeKind.Char, t);
+            else if (t.text == "true" || t.text == "false") n = make(NodeKind.Bool, t);
+            else if (t.text == "null") n = make(NodeKind.Null, t);
+            else if (t.kind == TokenKind.Identifier)
+            {
+                n = make(NodeKind.Identifier, t);
+                n.name = t.text;
+                if (eat("=>"))
+                {
+                    Node* p = make(NodeKind.VarDecl, t);
+                    p.name = n.name;
+                    p.declType = autoType();
+                    n.kind = NodeKind.Lambda;
+                    n.params = p;
+                    n.name = "";
+                    if (at("{")) n.body = stmt();
+                    else n.a = expr(1);
+                }
+                else if (genericCallAhead())
+                {
+                    expect("<");
+                    TypeRef* items = typeItems(">");
+                    registerType(t.text);
+                    TypeRef* generic = new TypeRef();
+                    generic.kind = TypeRefKind.Named;
+                    generic.name = t.text;
+                    generic.items = items;
+                    n.declType = generic;
+                }
+            }
+            else
+            {
+                failAt(t, join("expected expression, found '", t.text, "'"));
+                n = null;
+            }
+            n.text = t.text;
+        }
+        while (true)
+        {
+            if (eat("("))
+            {
+                Node* call = make(NodeKind.Call, t);
+                call.a = n;
+                call.args = arguments(")");
+                n = call;
+            }
+            else if (eat(".") || eat("->"))
+            {
+                Node* member = make(NodeKind.Member, peek());
+                member.a = n;
+                member.name = ident();
+                n = member;
+            }
+            else if (eat("["))
+            {
+                Node* index = make(NodeKind.Index, peek());
+                index.a = n;
+                if (!at(":")) index.b = expr(1);
+                if (eat(":"))
+                {
+                    index.kind = NodeKind.Slice;
+                    if (!at("]")) index.c = expr(1);
+                }
+                expect("]");
+                n = index;
+            }
+            else if (at("++") || at("--"))
+            {
+                Node* unary = make(NodeKind.Unary, peek());
+                unary.a = n;
+                unary.text = take().text;
+                unary.flags |= flagPost;
+                n = unary;
+            }
+            else
+                break;
+        }
+        leave();
+        return n;
+    }
+
+    Node* expr(int min)
+    {
+        enter();
+        Node* left = primary();
+        int p = precedence(tokens.data[pos].text);
+        while (p >= min)
+        {
+            Token op = take();
+            Node* n = make(NodeKind.Binary, op);
+            n.text = op.text;
+            n.a = left;
+            if (p == 1) n.b = expr(p);
+            else n.b = expr(p + 1);
+            left = n;
+            p = precedence(tokens.data[pos].text);
+        }
+        leave();
+        return left;
+    }
+
+    // ---- statements ------------------------------------------------------------------------
+
+    Node* variable(bool semi)
+    {
+        Node* n = make(NodeKind.VarDecl, peek());
+        n.declType = parseType();
+        n.name = ident();
+        if (n.declType.kind == TypeRefKind.Inferred)
+        {
+            while (eat(","))
+            {
+                Node* p = make(NodeKind.VarDecl, peek());
+                p.name = ident();
+                n.params = append(n.params, p);
+            }
+        }
+        if (eat("["))
+        {
+            Token t = take();
+            var length, overflow = parseCInteger(t.text);
+            if (t.kind != TokenKind.Integer || length == 0 || length > 10000000)
+                failAt(t, "invalid array length");
+            expect("]");
+            TypeRef* array = new TypeRef();
+            array.kind = TypeRefKind.FixedArray;
+            array.base = n.declType;
+            array.count = length;
+            n.declType = array;
+        }
+        if (eat("=")) n.a = expr(1);
+        else if (eat("("))
+        {
+            n.a = new Node();
+            n.a.kind = NodeKind.New;
+            n.a.line = n.line;
+            n.a.column = n.column;
+            n.a.declType = n.declType;
+            n.a.args = arguments(")");
+            n.a.flags |= flagConstructor;
+        }
+        if (semi) expect(";");
+        return n;
+    }
+
+    /// True when `word` (case or default) opens a switch label here rather than being a
+    /// variable that happens to have that name. Same rule as case_label in parser.c.
+    bool caseLabel(string word)
+    {
+        if (!keyword(word) || pos + 1 >= count()) return false;
+        Token next = tokens.data[pos + 1];
+        if (word == "default") return next.kind == TokenKind.Operator && next.text == ":";
+        return next.kind != TokenKind.Operator || next.text == "-";
+    }
+
+    Node* stmt()
+    {
+        Token t = peek();
+        Node* n;
+        enter();
+        if (eat("{"))
+        {
+            n = make(NodeKind.Block, t);
+            while (!eat("}"))
+            {
+                if (peek().kind == TokenKind.Eof) failAt(t, "unterminated block");
+                n.body = append(n.body, stmt());
+            }
+        }
+        else if (eat("return"))
+        {
+            n = make(NodeKind.Return, t);
+            if (!at(";"))
+            {
+                n.a = expr(1);
+                if (eat(","))
+                {
+                    Node* tuple = make(NodeKind.Tuple, t);
+                    tuple.args = n.a;
+                    while (true)
+                    {
+                        tuple.args = append(tuple.args, expr(1));
+                        if (!(eat(","))) break;
+                    }
+                    n.a = tuple;
+                }
+            }
+            expect(";");
+        }
+        else if (eat("if"))
+        {
+            n = make(NodeKind.If, t);
+            expect("(");
+            n.a = expr(1);
+            expect(")");
+            n.body = stmt();
+            if (eat("else")) n.b = stmt();
+        }
+        else if (keyword("switch") && pos + 1 < count() && textAt(pos + 1) == "(")
+        {
+            bool hasDefault = false;
+            take();
+            n = make(NodeKind.Switch, t);
+            expect("(");
+            n.a = expr(1);
+            expect(")");
+            expect("{");
+            while (!eat("}"))
+            {
+                Token label = peek();
+                if (label.kind == TokenKind.Eof) failAt(t, "unterminated switch");
+                Node* item = make(NodeKind.Case, label);
+                if (caseLabel("case"))
+                {
+                    take();
+                    while (true)
+                    {
+                        item.args = append(item.args, expr(1));
+                        if (!(eat(","))) break;
+                    }
+                }
+                else if (caseLabel("default"))
+                {
+                    take();
+                    if (hasDefault) failAt(label, "switch has more than one default");
+                    hasDefault = true;
+                    item.text = "default";
+                }
+                else
+                    failAt(label, "expected 'case' or 'default' in switch");
+                expect(":");
+                item.body = make(NodeKind.Block, label);
+                while (!caseLabel("case") && !caseLabel("default") &&
+                       !(peek().kind == TokenKind.Operator && at("}")))
+                {
+                    if (peek().kind == TokenKind.Eof) failAt(t, "unterminated switch");
+                    item.body.body = append(item.body.body, stmt());
+                }
+                n.body = append(n.body, item);
+            }
+        }
+        else if (eat("while"))
+        {
+            n = make(NodeKind.While, t);
+            expect("(");
+            n.a = expr(1);
+            expect(")");
+            n.body = stmt();
+        }
+        else if (eat("for"))
+        {
+            n = make(NodeKind.For, t);
+            expect("(");
+            if (tokens.data[pos].kind == TokenKind.Identifier && (textAt(pos + 1) == "," || textAt(pos + 1) == "in"))
+            {
+                n.kind = NodeKind.Range;
+                n.name = ident();
+                if (eat(",")) n.text = ident();
+                expect("in");
+                n.a = expr(1);
+                expect(")");
+                n.body = stmt();
+            }
+            else
+            {
+                if (!at(";"))
+                {
+                    if (typeStart()) n.a = variable(false);
+                    else
+                    {
+                        n.a = make(NodeKind.ExprStmt, t);
+                        n.a.a = expr(1);
+                    }
+                }
+                expect(";");
+                if (!at(";")) n.b = expr(1);
+                expect(";");
+                if (!at(")")) n.c = expr(1);
+                expect(")");
+                n.body = stmt();
+            }
+        }
+        else if (eat("break"))
+        {
+            n = make(NodeKind.Break, t);
+            expect(";");
+        }
+        else if (eat("continue"))
+        {
+            n = make(NodeKind.Continue, t);
+            expect(";");
+        }
+        else if (eat("defer"))
+        {
+            n = make(NodeKind.Defer, t);
+            if (at("{")) n.body = stmt();
+            else
+            {
+                n.a = expr(1);
+                expect(";");
+            }
+        }
+        else if (eat("delete"))
+        {
+            n = make(NodeKind.Delete, t);
+            n.a = expr(1);
+            expect(";");
+        }
+        else if (typeStart())
+            n = variable(true);
+        else
+        {
+            n = make(NodeKind.ExprStmt, t);
+            if (!at(";")) n.a = expr(1);
+            expect(";");
+        }
+        leave();
+        return n;
+    }
+
+    // ---- declarations ---------------------------------------------------------------------
+
+    Node* declaration(int flags, Node* owner)
+    {
+        Token t = peek();
+        Node* n;
+        if (eat("@"))
+        {
+            string annotation = ident();
+            if (annotation != "test") failAt(t, join("unknown annotation '", annotation, "'"));
+            return declaration(flags | flagTest, owner);
+        }
+        if (eat("static")) return declaration(flags | flagStatic, owner);
+        if (eat("async")) return declaration(flags | flagAsync, owner);
+        if (eat("stdcall")) return declaration(flags | flagStdcall, owner);
+        if (eat("cdecl")) return declaration(flags, owner);
+        if (eat("enum"))
+        {
+            i64 next = 0;
+            n = make(NodeKind.Enum, t);
+            n.name = ident();
+            n.flags = flags;
+            n.type = typeNamed(n.name);
+            string key = canonicalTypeName(n.name);
+            if (declared.contains(key)) failAt(t, join("duplicate type '", n.name, "'"));
+            declared.put(key, true);
+            expect("{");
+            while (!eat("}"))
+            {
+                Node* value = make(NodeKind.VarDecl, peek());
+                value.name = ident();
+                value.owner = n;
+                value.flags = flagConst | flagStatic;
+                value.declType = n.type;
+                if (eat("="))
+                {
+                    i64 sign = 1;
+                    if (eat("-")) sign = -1;
+                    Token number = take();
+                    if (number.kind != TokenKind.Integer) failAt(number, "enum value requires an integer literal");
+                    var magnitude, overflow = parseCInteger(number.text);
+                    u64 limit = 2147483647;
+                    if (sign < 0) limit = 2147483648;
+                    if (overflow || magnitude > limit) failAt(number, "enum value outside i32 range");
+                    next = cast<i64>(magnitude) * sign;
+                }
+                if (next > 2147483647)
+                    fail(file, value.line, value.column, "enum value outside i32 range");
+                OwnedString digits = String.fromInt(next);
+                value.text = digits.view();
+                next++;
+                n.body = append(n.body, value);
+                if (!eat(","))
+                {
+                    expect("}");
+                    break;
+                }
+            }
+            eat(";");
+            return n;
+        }
+        if (eat("module") || eat("import"))
+        {
+            NodeKind kind = NodeKind.Import;
+            if (t.text == "module") kind = NodeKind.Module;
+            n = make(kind, t);
+            n.name = ident();
+            while (eat("."))
+            {
+                string part = ident();
+                n.name = join(n.name, ".", part);
+            }
+            expect(";");
+            return n;
+        }
+        if (eat("class") || eat("struct") || eat("interface") || eat("extension"))
+        {
+            NodeKind kind = NodeKind.Extension;
+            if (t.text == "class" || t.text == "struct") kind = NodeKind.Class;
+            else if (t.text == "interface") kind = NodeKind.Interface;
+            n = make(kind, t);
+            n.flags = flags;
+            n.name = ident();
+            n.type = typeNamed(n.name);
+            if (n.kind != NodeKind.Extension)
+            {
+                string key = canonicalTypeName(n.name);
+                if (declared.contains(key)) failAt(t, join("duplicate type '", n.name, "'"));
+                declared.put(key, true);
+            }
+            if (eat("<"))
+            {
+                while (true)
+                {
+                    Node* p = make(NodeKind.VarDecl, peek());
+                    p.name = ident();
+                    p.type = typeNamed(p.name);
+                    n.params = append(n.params, p);
+                    if (!(eat(","))) break;
+                }
+                expect(">");
+            }
+            expect("{");
+            while (!eat("}")) n.body = append(n.body, declaration(0, n));
+            eat(";");
+            return n;
+        }
+        if (eat("property"))
+        {
+            n = make(NodeKind.Property, t);
+            n.declType = parseType();
+            n.name = ident();
+            n.owner = owner;
+            if (!eat(";"))
+            {
+                expect("{");
+                expect("get");
+                expect("=>");
+                n.a = expr(1);
+                expect(";");
+                expect("}");
+            }
+            return n;
+        }
+        if (owner != null && at(owner.name) && textAt(pos + 1) == "(")
+        {
+            n = make(NodeKind.FunctionDecl, t);
+            take();
+            n.name = "init";
+            n.declType = voidType();
+            n.flags = flags | flagConstructor;
+        }
+        else if (owner != null && eat("~"))
+        {
+            n = make(NodeKind.FunctionDecl, t);
+            if (ident() != owner.name) failAt(t, "destructor name must match class");
+            n.name = "destroy";
+            n.declType = voidType();
+            n.flags = flags | flagDestructor;
+        }
+        else
+        {
+            TypeRef* ret = parseType();
+            n = make(NodeKind.FunctionDecl, t);
+            n.declType = ret;
+            n.name = ident();
+            n.flags = flags;
+            if (eat("<"))
+            {
+                while (true)
+                {
+                    Node* p = make(NodeKind.VarDecl, peek());
+                    p.name = ident();
+                    p.type = typeNamed(p.name);
+                    n.args = append(n.args, p);
+                    if (!(eat(","))) break;
+                }
+                expect(">");
+            }
+            if (!at("("))
+            {
+                n.kind = NodeKind.VarDecl;
+                if (eat("=")) n.a = expr(1);
+                expect(";");
+                n.owner = owner;
+                return n;
+            }
+        }
+        expect("(");
+        n.params = parameters();
+        n.owner = owner;
+        if (!eat(";")) n.body = stmt();
+        return n;
+    }
+
+    Node* parse()
+    {
+        Node* program = make(NodeKind.Program, peek());
+        while (peek().kind != TokenKind.Eof)
+        {
+            if (eat("extern"))
+            {
+                Token t = take();
+                if (t.text != "C") failAt(t, "expected C after extern");
+                expect("{");
+                while (!eat("}")) program.body = append(program.body, declaration(flagExtern, null));
+            }
+            else
+                program.body = append(program.body, declaration(0, null));
+        }
+        return program;
+    }
+}
