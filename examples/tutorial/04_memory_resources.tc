@@ -11,7 +11,6 @@ OwnedString makeStatus(int value)
 int main()
 {
     int* heapValue = new int(42);
-    defer delete heapValue;
 
     assert(*heapValue == 42);
 
@@ -29,5 +28,7 @@ int main()
 
     println(second.view());
     println(status.view());
+
+    delete heapValue;
     return 0;
 }

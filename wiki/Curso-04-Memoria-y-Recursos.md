@@ -15,7 +15,9 @@ int main()
 }
 ```
 
-No hay GC ni ARC universal.
+No hay GC ni ARC universal. `delete` es una sentencia, por lo que no se escribe
+`defer delete value`. Para objetos `new`, use `delete` explícito o encapsule
+la propiedad en un tipo con una operación de cleanup expresable como método.
 
 ## OwnedString
 
