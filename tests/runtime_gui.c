@@ -99,6 +99,7 @@ int main(void) {
         TcGuiEvent native_event;
         native = (TcGuiWindow *)tc_gui_window_create(64, 48, TC_STRING("TinyC+ CI"), 0, &error);
         assert(native && error == 0 && native->hwnd && tc_gui_window_open(native));
+        assert(tc_gui_window_scale(native) >= 1.0);
         ShowWindow(native->hwnd, SW_HIDE);
         gui_native_drain(native);
 
@@ -108,6 +109,14 @@ int main(void) {
             assert(native_width > 0 && native_height > 0);
             tc_gui_surface_clear(tc_gui_window_surface(native), blue);
             assert(tc_gui_window_present(native) == native_width * native_height);
+        }
+
+        {
+            RECT suggested;
+            GetWindowRect(native->hwnd, &suggested);
+            SendMessageA(native->hwnd, WM_DPICHANGED, (WPARAM)(144u | (144u << 16)),
+                         (LPARAM)(uintptr_t)&suggested);
+            assert(tc_gui_window_scale(native) == 1.5);
         }
 
         memset(&native_event, 0, sizeof(native_event));

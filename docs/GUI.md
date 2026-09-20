@@ -172,13 +172,13 @@ existing `Surface`, `GuiRect`, layout and widget semantics across backends.
 framebuffer pixels / native logical unit
 ```
 
-Headless and X11 currently report `1.0`. Cocoa reads
+Headless and X11 currently report `1.0`. Win32 requests Per-Monitor DPI Awareness V2 when available and reports `GetDpiForWindow()/96`. Cocoa reads
 `NSWindow.backingScaleFactor`; a requested 800x600 window therefore keeps an
 800x600 TinyC+ framebuffer even when the native content size is 400x300 points
 at scale 2.0. Mouse coordinates and resize events are converted back to
 framebuffer pixels before they enter `GuiEvent`.
 
-When the Cocoa backing scale changes (for example when moving between displays),
+On Windows, `WM_DPICHANGED` updates `scale()` and Windows supplies framebuffer-pixel mouse/client coordinates while DPI-aware. When the Cocoa backing scale changes (for example when moving between displays),
 the window delegate updates `scale()`, rebuilds the framebuffer at the new
 physical pixel size and emits the existing resize event. No second coordinate
 system is introduced into widgets.
@@ -186,3 +186,9 @@ system is introduced into widgets.
 This first policy intentionally favors deterministic pixel rendering. A future
 high-level density-independent layout helper can be built on top of
 `scale()` without changing `Surface`.
+
+
+On older Windows versions where the modern DPI APIs are unavailable, the
+backend falls back to the legacy DPI-aware call and ultimately to scale 1.0.
+All DPI APIs are resolved dynamically, so this does not raise the minimum SDK
+or loader requirement for TinyC+.

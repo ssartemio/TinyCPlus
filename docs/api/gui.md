@@ -109,7 +109,8 @@ void destroy();
 
 `scale()` is framebuffer pixels per native logical unit. Public GUI coordinates,
 window width/height, mouse positions and resize dimensions remain framebuffer
-pixels; Cocoa performs point/pixel conversion internally.
+pixels. Win32 enables DPI awareness dynamically and reports DPI/96 when supported;
+Cocoa performs point/pixel conversion internally.
 
 Headless windows are portable and used throughout CI. Windows uses Win32/GDI.
 Linux can compile the native X11 implementation explicitly:

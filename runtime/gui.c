@@ -691,6 +691,54 @@ static int tc_gui_event_pop(TcGuiWindow *window, TcGuiEvent *event) {
 #ifdef _WIN32
 static const char tc_gui_window_class[] = "TinyCPlusGuiWindow";
 static ATOM tc_gui_window_atom;
+static int tc_gui_win_dpi_initialized;
+
+static void tc_gui_win_enable_dpi(void) {
+    HMODULE user32;
+    BOOL (WINAPI *set_context)(HANDLE);
+    if (tc_gui_win_dpi_initialized)
+        return;
+    tc_gui_win_dpi_initialized = 1;
+    user32 = GetModuleHandleA("user32.dll");
+    if (!user32)
+        return;
+    set_context = (BOOL (WINAPI *)(HANDLE))(uintptr_t)GetProcAddress(user32, "SetProcessDpiAwarenessContext");
+    if (set_context)
+        set_context((HANDLE)(intptr_t)-4); /* DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 */
+    else {
+        BOOL (WINAPI *set_aware)(void) =
+            (BOOL (WINAPI *)(void))(uintptr_t)GetProcAddress(user32, "SetProcessDPIAware");
+        if (set_aware)
+            set_aware();
+    }
+}
+static UINT tc_gui_win_window_dpi(HWND hwnd) {
+    HMODULE user32 = GetModuleHandleA("user32.dll");
+    UINT (WINAPI *get_dpi)(HWND);
+    if (!user32)
+        return 96;
+    get_dpi = (UINT (WINAPI *)(HWND))(uintptr_t)GetProcAddress(user32, "GetDpiForWindow");
+    return get_dpi && hwnd ? get_dpi(hwnd) : 96;
+}
+static UINT tc_gui_win_system_dpi(void) {
+    HMODULE user32 = GetModuleHandleA("user32.dll");
+    UINT (WINAPI *get_dpi)(void);
+    if (!user32)
+        return 96;
+    get_dpi = (UINT (WINAPI *)(void))(uintptr_t)GetProcAddress(user32, "GetDpiForSystem");
+    return get_dpi ? get_dpi() : 96;
+}
+static void tc_gui_win_adjust_rect(RECT *area, DWORD style, UINT dpi) {
+    HMODULE user32 = GetModuleHandleA("user32.dll");
+    BOOL (WINAPI *adjust)(LPRECT, DWORD, BOOL, DWORD, UINT);
+    if (user32) {
+        adjust = (BOOL (WINAPI *)(LPRECT, DWORD, BOOL, DWORD, UINT))(uintptr_t)
+            GetProcAddress(user32, "AdjustWindowRectExForDpi");
+        if (adjust && adjust(area, style, FALSE, 0, dpi))
+            return;
+    }
+    AdjustWindowRect(area, style, FALSE);
+}
 
 static int32_t tc_gui_mouse_x(LPARAM value) {
     return (int32_t)(int16_t)(value & 0xffff);
@@ -728,6 +776,9 @@ static LRESULT CALLBACK tc_gui_window_proc(HWND hwnd, UINT message, WPARAM wpara
         CREATESTRUCTA *create = (CREATESTRUCTA *)(uintptr_t)lparam;
         window = (TcGuiWindow *)create->lpCreateParams;
         window->hwnd = hwnd;
+        window->scale = (double)tc_gui_win_window_dpi(hwnd) / 96.0;
+        if (window->scale < 1.0)
+            window->scale = 1.0;
         SetWindowLongPtrA(hwnd, GWLP_USERDATA, (LONG_PTR)(uintptr_t)window);
     }
     if (!window)
@@ -746,6 +797,18 @@ static LRESULT CALLBACK tc_gui_window_proc(HWND hwnd, UINT message, WPARAM wpara
         window->hwnd = NULL;
         window->open = 0;
         return 0;
+    case WM_DPICHANGED: {
+        UINT dpi = (UINT)(wparam & 0xffffu);
+        RECT *suggested = (RECT *)(uintptr_t)lparam;
+        window->scale = (double)dpi / 96.0;
+        if (window->scale < 1.0)
+            window->scale = 1.0;
+        if (suggested)
+            SetWindowPos(hwnd, NULL, suggested->left, suggested->top,
+                         suggested->right - suggested->left, suggested->bottom - suggested->top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+        return 0;
+    }
     case WM_SIZE: {
         int width = (int)(uint16_t)(lparam & 0xffff);
         int height = (int)(uint16_t)((lparam >> 16) & 0xffff);
@@ -834,6 +897,7 @@ static LRESULT CALLBACK tc_gui_window_proc(HWND hwnd, UINT message, WPARAM wpara
 }
 static int tc_gui_register_window(void) {
     WNDCLASSA type;
+    tc_gui_win_enable_dpi();
     if (tc_gui_window_atom)
         return 1;
     memset(&type, 0, sizeof(type));
@@ -881,7 +945,7 @@ void *tc_gui_window_create(int32_t width, int32_t height, TinyString title, int3
         }
         memcpy(caption, title.data, title.length);
         caption[title.length] = 0;
-        AdjustWindowRect(&area, WS_OVERLAPPEDWINDOW, FALSE);
+        tc_gui_win_adjust_rect(&area, WS_OVERLAPPEDWINDOW, tc_gui_win_system_dpi());
         window->hwnd = CreateWindowExA(
             0, tc_gui_window_class, caption, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
             area.right - area.left, area.bottom - area.top, NULL, NULL, GetModuleHandleA(NULL),
