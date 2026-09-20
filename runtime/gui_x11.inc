@@ -16,6 +16,11 @@ static Window tc_gui_x11_window(TcGuiWindow *window) {
 static GC tc_gui_x11_gc(TcGuiWindow *window) {
     return (GC)window->native_gc;
 }
+static int tc_gui_x11_host_lsb(void) {
+    const uint16_t value = 1;
+    return *(const uint8_t *)&value == 1;
+}
+
 static void tc_gui_x11_drop_image(TcGuiWindow *window) {
     XImage *image = (XImage *)window->native_image;
     if (!image)
@@ -39,6 +44,12 @@ static int tc_gui_x11_make_image(TcGuiWindow *window) {
                          32, front->stride * (int)sizeof(TcGuiPixel));
     if (!image)
         return 9;
+    if (image->bits_per_pixel != 32 ||
+        image->byte_order != (tc_gui_x11_host_lsb() ? LSBFirst : MSBFirst)) {
+        image->data = NULL;
+        XDestroyImage(image);
+        return 9;
+    }
     window->native_image = image;
     return 0;
 }
