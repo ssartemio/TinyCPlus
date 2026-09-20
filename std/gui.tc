@@ -1,0 +1,366 @@
+module std.gui;
+import std.string;
+import std.input;
+
+/// Packed pixel format is 0xAARRGGBB. Surfaces own their pixel memory explicitly.
+extern C {
+    uint tc_gui_rgba(uint red, uint green, uint blue, uint alpha);
+    void* tc_gui_surface_create(int width, int height, Error* error);
+    void tc_gui_surface_destroy(void* surface);
+    int tc_gui_surface_width(void* surface);
+    int tc_gui_surface_height(void* surface);
+    void tc_gui_surface_clear(void* surface, uint color);
+    uint tc_gui_surface_get(void* surface, int x, int y);
+    void tc_gui_surface_set(void* surface, int x, int y, uint color);
+    void tc_gui_fill_rect(void* surface, int x, int y, int width, int height, uint color);
+    void tc_gui_rect(void* surface, int x, int y, int width, int height, uint color);
+    void tc_gui_line(void* surface, int x0, int y0, int x1, int y1, uint color);
+    void tc_gui_blit(void* destination, int dx, int dy, void* source, int sx, int sy, int width, int height);
+    int tc_gui_surface_damage(void* surface, int* x, int* y, int* width, int* height);
+    void tc_gui_surface_damage_clear(void* surface);
+    u64 tc_gui_surface_checksum(void* surface);
+    int tc_gui_text_width(string text, int scale);
+    void tc_gui_text(void* surface, int x, int y, string text, uint color, int scale);
+    void* tc_gui_buffer_create(int width, int height, Error* error);
+    void tc_gui_buffer_destroy(void* buffer);
+    void* tc_gui_buffer_front(void* buffer);
+    void* tc_gui_buffer_back(void* buffer);
+    int tc_gui_buffer_present(void* buffer);
+    void* tc_gui_window_create(int width, int height, string title, int headless, Error* error);
+    int tc_gui_window_width(void* window);
+    int tc_gui_window_height(void* window);
+    int tc_gui_window_open(void* window);
+    void* tc_gui_window_surface(void* window);
+    int tc_gui_window_present(void* window);
+    Error tc_gui_window_post(void* window, int kind, int key, int x, int y, int width, int height, int button, int pressed, uint codepoint);
+    void tc_gui_window_next(void* window, int timeout, int* kind, int* key, int* x, int* y, int* width, int* height, int* button, int* pressed, uint* codepoint);
+    void tc_gui_window_close(void* window);
+    void tc_gui_window_destroy(void* window);
+    void* tc_gui_textbox_create(string initial);
+    void tc_gui_textbox_destroy(void* textbox);
+    string tc_gui_textbox_text(void* textbox);
+    int tc_gui_textbox_dirty(void* textbox);
+    void tc_gui_textbox_clean(void* textbox);
+    Error tc_gui_textbox_event(void* textbox, int kind, int key, uint codepoint);
+    void tc_gui_textbox_draw(void* surface, void* textbox, int x, int y, int width, int height,
+                             int focused, uint foreground, uint background, uint border);
+}
+
+class Pixel {
+    static uint rgba(uint red, uint green, uint blue, uint alpha = 255) {
+        return tc_gui_rgba(red, green, blue, alpha);
+    }
+}
+
+
+class GuiRect {
+    int x;
+    int y;
+    int width;
+    int height;
+    GuiRect(int x, int y, int width, int height) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+    }
+    bool contains(int px, int py) {
+        return px >= x && py >= y && px < x + width && py < y + height;
+    }
+    GuiRect inset(int amount) {
+        int w = width - amount * 2;
+        int h = height - amount * 2;
+        if (w < 0)
+            w = 0;
+        if (h < 0)
+            h = 0;
+        return GuiRect(x + amount, y + amount, w, h);
+    }
+}
+
+class GuiLayout {
+    static GuiRect row(GuiRect area, int count, int gap, int index) {
+        if (count < 1)
+            return area;
+        int available = area.width - gap * (count - 1);
+        int size = available / count;
+        if (size < 0)
+            size = 0;
+        int x = area.x + index * (size + gap);
+        int width = size;
+        if (index == count - 1)
+            width = area.x + area.width - x;
+        if (width < 0)
+            width = 0;
+        return GuiRect(x, area.y, width, area.height);
+    }
+
+    static GuiRect column(GuiRect area, int count, int gap, int index) {
+        if (count < 1)
+            return area;
+        int available = area.height - gap * (count - 1);
+        int size = available / count;
+        if (size < 0)
+            size = 0;
+        int y = area.y + index * (size + gap);
+        int height = size;
+        if (index == count - 1)
+            height = area.y + area.height - y;
+        if (height < 0)
+            height = 0;
+        return GuiRect(area.x, y, area.width, height);
+    }
+}
+
+class Surface {
+    void* handle;
+    static (Surface, Error) create(int width, int height) {
+        Error error;
+        Surface surface(tc_gui_surface_create(width, height, &error));
+        return (surface, error);
+    }
+    int width() { return tc_gui_surface_width(handle); }
+    int height() { return tc_gui_surface_height(handle); }
+    void clear(uint color) { tc_gui_surface_clear(handle, color); }
+    uint getPixel(int x, int y) { return tc_gui_surface_get(handle, x, y); }
+    void setPixel(int x, int y, uint color) { tc_gui_surface_set(handle, x, y, color); }
+    void fillRect(int x, int y, int width, int height, uint color) {
+        tc_gui_fill_rect(handle, x, y, width, height, color);
+    }
+    void rect(int x, int y, int width, int height, uint color) {
+        tc_gui_rect(handle, x, y, width, height, color);
+    }
+    void line(int x0, int y0, int x1, int y1, uint color) {
+        tc_gui_line(handle, x0, y0, x1, y1, color);
+    }
+    void blit(int x, int y, Surface source, int sourceX = 0, int sourceY = 0,
+              int width = -1, int height = -1) {
+        int w = width;
+        int h = height;
+        if (w < 0)
+            w = source.width();
+        if (h < 0)
+            h = source.height();
+        tc_gui_blit(handle, x, y, source.handle, sourceX, sourceY, w, h);
+    }
+    bool damage(int* x, int* y, int* width, int* height) {
+        return tc_gui_surface_damage(handle, x, y, width, height) != 0;
+    }
+    void clearDamage() { tc_gui_surface_damage_clear(handle); }
+    u64 checksum() { return tc_gui_surface_checksum(handle); }
+    int textWidth(string text, int scale = 1) { return tc_gui_text_width(text, scale); }
+    void text(int x, int y, string text, uint color, int scale = 1) {
+        tc_gui_text(handle, x, y, text, color, scale);
+    }
+    void destroy() { tc_gui_surface_destroy(handle); handle = null; }
+}
+
+
+class GuiDraw {
+    static void label(Surface surface, GuiRect area, string text, uint color,
+                      int scale = 1, bool centered = false) {
+        int x = area.x;
+        int y = area.y + (area.height - 7 * scale) / 2;
+        if (centered)
+            x = area.x + (area.width - surface.textWidth(text, scale)) / 2;
+        surface.text(x, y, text, color, scale);
+    }
+
+    static void button(Surface surface, GuiRect area, string text, bool pressed = false,
+                       uint foreground = 15134195, uint background = 2113632,
+                       uint pressedBackground = 4210752) {
+        uint fill = background;
+        if (pressed)
+            fill = pressedBackground;
+        surface.fillRect(area.x, area.y, area.width, area.height, fill);
+        surface.rect(area.x, area.y, area.width, area.height, foreground);
+        GuiRect inner = area.inset(2);
+        GuiDraw.label(surface, inner, text, foreground, 1, true);
+    }
+}
+
+/// Owns two surfaces. front()/back() are borrowed and must not be destroyed separately.
+class DoubleBuffer {
+    void* handle;
+    static (DoubleBuffer, Error) create(int width, int height) {
+        Error error;
+        DoubleBuffer buffer(tc_gui_buffer_create(width, height, &error));
+        return (buffer, error);
+    }
+    Surface front() { Surface surface(tc_gui_buffer_front(handle)); return surface; }
+    Surface back() { Surface surface(tc_gui_buffer_back(handle)); return surface; }
+    int present() { return tc_gui_buffer_present(handle); }
+    void destroy() { tc_gui_buffer_destroy(handle); handle = null; }
+}
+
+
+/// kind: 1 key, 2 text, 3 mouse, 4 resize, 5 close, 6 custom.
+class GuiEvent {
+    int kind;
+    int key;
+    int x;
+    int y;
+    int width;
+    int height;
+    int button;
+    int pressed;
+    uint codepoint;
+}
+
+/// Owns a double-buffered native/headless drawing target.
+/// surface() is borrowed and must not be destroyed separately.
+class GuiWindow {
+    void* handle;
+    static (GuiWindow, Error) create(int width = 800, int height = 600,
+                                     string title = "TinyC+", bool headless = false) {
+        Error error;
+        GuiWindow window(tc_gui_window_create(width, height, title, headless, &error));
+        return (window, error);
+    }
+    int width() { return tc_gui_window_width(handle); }
+    int height() { return tc_gui_window_height(handle); }
+    bool isOpen() { return tc_gui_window_open(handle) != 0; }
+    Surface surface() { Surface surface(tc_gui_window_surface(handle)); return surface; }
+    int present() { return tc_gui_window_present(handle); }
+    Error post(GuiEvent event) {
+        return tc_gui_window_post(handle, event.kind, event.key, event.x, event.y, event.width,
+                                  event.height, event.button, event.pressed, event.codepoint);
+    }
+    GuiEvent nextEvent(int timeout = 16) {
+        GuiEvent event;
+        tc_gui_window_next(handle, timeout, &event.kind, &event.key, &event.x, &event.y,
+                           &event.width, &event.height, &event.button, &event.pressed,
+                           &event.codepoint);
+        return event;
+    }
+    void close() { tc_gui_window_close(handle); }
+    void destroy() { tc_gui_window_destroy(handle); handle = null; }
+}
+
+
+/// Owned single-line editor backed by the same UTF-8 GapBuffer used by TinyEdit.
+/// text() returns an OwnedString that the caller must destroy.
+class GuiTextBox {
+    void* handle;
+    static GuiTextBox create(string initial = "") {
+        GuiTextBox box(tc_gui_textbox_create(initial));
+        assert(box.handle != null);
+        return box;
+    }
+    OwnedString text() {
+        OwnedString result;
+        result.value = tc_gui_textbox_text(handle);
+        return result;
+    }
+    bool dirty() { return tc_gui_textbox_dirty(handle) != 0; }
+    void markClean() { tc_gui_textbox_clean(handle); }
+    Error handleEvent(GuiEvent event) {
+        return tc_gui_textbox_event(handle, event.kind, event.key, event.codepoint);
+    }
+    void draw(Surface surface, GuiRect area, bool focused = false,
+              uint foreground = 15134195, uint background = 1054752,
+              uint border = 8421504) {
+        tc_gui_textbox_draw(surface.handle, handle, area.x, area.y, area.width, area.height,
+                            focused, foreground, background, border);
+    }
+    void destroy() { tc_gui_textbox_destroy(handle); handle = null; }
+}
+
+
+class GuiInput {
+    static bool clicked(GuiEvent event, GuiRect area) {
+        return event.kind == 3 && event.button == 1 && event.pressed == 0 &&
+               area.contains(event.x, event.y);
+    }
+    static bool pressed(GuiEvent event, GuiRect area) {
+        return event.kind == 3 && event.button == 1 && event.pressed != 0 &&
+               area.contains(event.x, event.y);
+    }
+    static bool key(GuiEvent event, int key) {
+        return event.kind == 1 && event.key == key;
+    }
+    static bool text(GuiEvent event) {
+        return event.kind == 2;
+    }
+}
+
+
+/// Small stateful button built on the immediate-mode renderer.
+/// text is a borrowed string and must outlive the button.
+class GuiButton {
+    string text;
+    bool down;
+
+    GuiButton(string text) {
+        this.text = text;
+        this.down = false;
+    }
+
+    bool handleEvent(GuiEvent event, GuiRect area, bool focused = false) {
+        if (event.kind == 3 && event.button == 1) {
+            if (event.pressed != 0) {
+                down = area.contains(event.x, event.y);
+                return false;
+            }
+            bool clicked = down && area.contains(event.x, event.y);
+            down = false;
+            return clicked;
+        }
+        if (focused && event.kind == 1 && (event.key == 13 || event.key == 32))
+            return true;
+        return false;
+    }
+
+    void draw(Surface surface, GuiRect area) {
+        GuiDraw.button(surface, area, text, pressed: down);
+    }
+}
+
+/// Minimal focus index for forms. Tab advances focus; callers may set focus on mouse hits.
+class GuiFocus {
+    int index;
+    int count;
+
+    GuiFocus(int count) {
+        this.count = count;
+        if (count > 0)
+            this.index = 0;
+        else
+            this.index = -1;
+    }
+
+    bool isFocused(int candidate) { return candidate == index; }
+
+    void set(int candidate) {
+        if (candidate >= 0 && candidate < count)
+            index = candidate;
+    }
+
+    void next() {
+        if (count < 1) {
+            index = -1;
+            return;
+        }
+        index = index + 1;
+        if (index >= count)
+            index = 0;
+    }
+
+    void previous() {
+        if (count < 1) {
+            index = -1;
+            return;
+        }
+        index = index - 1;
+        if (index < 0)
+            index = count - 1;
+    }
+
+    bool handleEvent(GuiEvent event) {
+        if (event.kind == 1 && event.key == 9) {
+            next();
+            return true;
+        }
+        return false;
+    }
+}

@@ -1,5 +1,6 @@
 module std.tui;
 import std.string;
+import std.input;
 extern C {
     void* tc_gap_create(string input);
     void tc_gap_destroy(void* buffer);
@@ -79,8 +80,8 @@ class GapBuffer {
 }
 
 /// kind: 1 key, 2 resize, 3 timer, 4 mouse, 5 custom.
-/// key: ASCII/control codes; arrows 1001..1004, home/end 1005/1006,
-/// delete 1007, page-up/down 1008/1009. codepoint carries Unicode input.
+/// key: ASCII/control codes or InputKey values for special keys.
+/// codepoint carries Unicode input.
 class UiEvent { int kind; int key; int x; int y; int width; int height; uint codepoint; }
 
 /// add transfers child ownership to parent. Window.setContent owns the root.

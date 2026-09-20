@@ -40,20 +40,22 @@ def run(label, command, timeout=600):
         return False
 
 run('Language, diagnostics, lowering and deterministic fuzzing', [sys.executable, ROOT/'tests/test_compiler.py', '--fuzz', args.fuzz, *(['--cc',args.cc] if args.cc else [])])
-for name in ('test_modules_ffi.py', 'test_tools.py', 'test_editor.py', 'test_golden.py'):
+for name in ('test_modules_ffi.py', 'test_tools.py', 'test_editor.py', 'test_golden.py', 'test_gui.py'):
     run(name, [sys.executable, ROOT/'tests'/name])
 bundled = ROOT/'third_party/tcc'/('tcc'+ext)
 compilers = [str(bundled)] if bundled.exists() else [shutil.which('cc') or 'cc']
 if args.cc and args.cc not in compilers:
     compilers.append(args.cc)
 for cc in compilers:
-    for name in ('concurrent', 'network', 'tui'):
+    for name in ('concurrent', 'network', 'tui', 'gui'):
         output = native/('runtime_'+name+ext)
         flags = ['-std=c11', '-I'+str(ROOT/'runtime')]
         if os.name != 'nt':
             flags += ['-D_POSIX_C_SOURCE=200809L', '-pthread', '-lm']
         elif name == 'network':
             flags += ['-lws2_32']
+        elif name == 'gui':
+            flags += ['-luser32', '-lgdi32']
         if run('Build runtime '+name+' with '+Path(cc).name, [cc, ROOT/'tests'/('runtime_'+name+'.c'), *flags, '-o', output]):
             run('Run runtime '+name+' with '+Path(cc).name, [output], timeout=30)
 if not args.skip_interop:

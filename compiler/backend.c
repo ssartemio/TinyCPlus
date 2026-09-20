@@ -335,6 +335,10 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
 #ifdef _WIN32
             if (c->uses_io)
                 api.library(s, "ws2_32");
+            if (c->uses_gui) {
+                api.library(s, "user32");
+                api.library(s, "gdi32");
+            }
 #endif
 #ifndef _WIN32
             api.library(s, "m");
@@ -439,6 +443,10 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
 #ifdef _WIN32
         if (c->uses_io)
             args[k++] = "-lws2_32";
+        if (c->uses_gui) {
+            args[k++] = "-luser32";
+            args[k++] = "-lgdi32";
+        }
 #endif
 #ifndef _WIN32
         args[k++] = "-lm";

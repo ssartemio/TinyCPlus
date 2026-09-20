@@ -159,7 +159,7 @@ struct Context {
     Node *loaded_modules, *adapters, *lambdas, *spawns;
     const char *active_file;
     Scope *global, *scope;
-    int next_id, errors, loop_depth, depth, test_mode, bounds, uses_tasks, uses_io, uses_grpc,
+    int next_id, errors, loop_depth, depth, test_mode, bounds, uses_tasks, uses_io, uses_grpc, uses_gui,
         repl_mode, quiet;
     jmp_buf failure;
 };

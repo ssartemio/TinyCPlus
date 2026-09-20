@@ -26,6 +26,18 @@ static int tc_program_argc;
 static char **tc_program_argv;
 static void (*tc_program_cleanup)(void);
 #define TC_STRING(s) ((TinyString){(s), sizeof(s) - 1})
+/* Stable special-key ABI shared by terminal and graphical input. */
+enum {
+    TC_KEY_LEFT = 1001,
+    TC_KEY_RIGHT,
+    TC_KEY_UP,
+    TC_KEY_DOWN,
+    TC_KEY_HOME,
+    TC_KEY_END,
+    TC_KEY_DELETE,
+    TC_KEY_PAGE_UP,
+    TC_KEY_PAGE_DOWN
+};
 static void tc_panic(const char *message, const char *file, int line) {
     if (tc_program_cleanup)
         tc_program_cleanup();
