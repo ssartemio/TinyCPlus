@@ -323,6 +323,142 @@ int32_t tc_gui_buffer_present(void *handle) {
     return changed;
 }
 
+
+static uint32_t tc_gui_text_next(TinyString text, size_t *offset) {
+    unsigned char first;
+    uint32_t cp;
+    int count, i;
+    if (*offset >= text.length)
+        return 0;
+    first = (unsigned char)text.data[(*offset)++];
+    if (first < 0x80)
+        return first;
+    if (first >= 0xc2 && first <= 0xdf) {
+        cp = first & 0x1fu;
+        count = 1;
+    } else if (first >= 0xe0 && first <= 0xef) {
+        cp = first & 0x0fu;
+        count = 2;
+    } else if (first >= 0xf0 && first <= 0xf4) {
+        cp = first & 0x07u;
+        count = 3;
+    } else
+        return '?';
+    for (i = 0; i < count; i++) {
+        unsigned char next;
+        if (*offset >= text.length)
+            return '?';
+        next = (unsigned char)text.data[(*offset)++];
+        if ((next & 0xc0u) != 0x80u)
+            return '?';
+        cp = (cp << 6) | (next & 0x3fu);
+    }
+    return cp <= 0x7fu ? cp : '?';
+}
+
+static void tc_gui_glyph(uint32_t cp, uint8_t rows[7]) {
+#define TC_GLYPH(a,b,c,d,e,f,g) do { rows[0]=(a); rows[1]=(b); rows[2]=(c); rows[3]=(d); rows[4]=(e); rows[5]=(f); rows[6]=(g); } while (0)
+    if (cp >= 'a' && cp <= 'z')
+        cp -= 'a' - 'A';
+    switch (cp) {
+    case ' ': TC_GLYPH(0,0,0,0,0,0,0); break;
+    case '0': TC_GLYPH(14,17,19,21,25,17,14); break;
+    case '1': TC_GLYPH(4,12,4,4,4,4,14); break;
+    case '2': TC_GLYPH(14,17,1,2,4,8,31); break;
+    case '3': TC_GLYPH(30,1,1,14,1,1,30); break;
+    case '4': TC_GLYPH(2,6,10,18,31,2,2); break;
+    case '5': TC_GLYPH(31,16,16,30,1,1,30); break;
+    case '6': TC_GLYPH(14,16,16,30,17,17,14); break;
+    case '7': TC_GLYPH(31,1,2,4,8,8,8); break;
+    case '8': TC_GLYPH(14,17,17,14,17,17,14); break;
+    case '9': TC_GLYPH(14,17,17,15,1,1,14); break;
+    case 'A': TC_GLYPH(14,17,17,31,17,17,17); break;
+    case 'B': TC_GLYPH(30,17,17,30,17,17,30); break;
+    case 'C': TC_GLYPH(14,17,16,16,16,17,14); break;
+    case 'D': TC_GLYPH(30,17,17,17,17,17,30); break;
+    case 'E': TC_GLYPH(31,16,16,30,16,16,31); break;
+    case 'F': TC_GLYPH(31,16,16,30,16,16,16); break;
+    case 'G': TC_GLYPH(14,17,16,23,17,17,15); break;
+    case 'H': TC_GLYPH(17,17,17,31,17,17,17); break;
+    case 'I': TC_GLYPH(14,4,4,4,4,4,14); break;
+    case 'J': TC_GLYPH(7,2,2,2,18,18,12); break;
+    case 'K': TC_GLYPH(17,18,20,24,20,18,17); break;
+    case 'L': TC_GLYPH(16,16,16,16,16,16,31); break;
+    case 'M': TC_GLYPH(17,27,21,21,17,17,17); break;
+    case 'N': TC_GLYPH(17,25,21,19,17,17,17); break;
+    case 'O': TC_GLYPH(14,17,17,17,17,17,14); break;
+    case 'P': TC_GLYPH(30,17,17,30,16,16,16); break;
+    case 'Q': TC_GLYPH(14,17,17,17,21,18,13); break;
+    case 'R': TC_GLYPH(30,17,17,30,20,18,17); break;
+    case 'S': TC_GLYPH(15,16,16,14,1,1,30); break;
+    case 'T': TC_GLYPH(31,4,4,4,4,4,4); break;
+    case 'U': TC_GLYPH(17,17,17,17,17,17,14); break;
+    case 'V': TC_GLYPH(17,17,17,17,10,10,4); break;
+    case 'W': TC_GLYPH(17,17,17,21,21,21,10); break;
+    case 'X': TC_GLYPH(17,17,10,4,10,17,17); break;
+    case 'Y': TC_GLYPH(17,17,10,4,4,4,4); break;
+    case 'Z': TC_GLYPH(31,1,2,4,8,16,31); break;
+    case '.': TC_GLYPH(0,0,0,0,0,6,6); break;
+    case ',': TC_GLYPH(0,0,0,0,6,6,4); break;
+    case ':': TC_GLYPH(0,6,6,0,6,6,0); break;
+    case ';': TC_GLYPH(0,6,6,0,6,6,4); break;
+    case '!': TC_GLYPH(4,4,4,4,4,0,4); break;
+    case '?': TC_GLYPH(14,17,1,2,4,0,4); break;
+    case '-': TC_GLYPH(0,0,0,31,0,0,0); break;
+    case '_': TC_GLYPH(0,0,0,0,0,0,31); break;
+    case '+': TC_GLYPH(0,4,4,31,4,4,0); break;
+    case '=': TC_GLYPH(0,31,0,31,0,0,0); break;
+    case '/': TC_GLYPH(1,2,2,4,8,8,16); break;
+    case '\\': TC_GLYPH(16,8,8,4,2,2,1); break;
+    case '(': TC_GLYPH(2,4,8,8,8,4,2); break;
+    case ')': TC_GLYPH(8,4,2,2,2,4,8); break;
+    case '[': TC_GLYPH(14,8,8,8,8,8,14); break;
+    case ']': TC_GLYPH(14,2,2,2,2,2,14); break;
+    case '#': TC_GLYPH(10,31,10,10,31,10,0); break;
+    default: TC_GLYPH(14,17,1,2,4,0,4); break;
+    }
+#undef TC_GLYPH
+}
+
+int32_t tc_gui_text_width(TinyString text, int32_t scale) {
+    size_t offset = 0;
+    int32_t count = 0;
+    if (scale < 1)
+        scale = 1;
+    while (offset < text.length) {
+        tc_gui_text_next(text, &offset);
+        count++;
+    }
+    return count ? count * 6 * scale - scale : 0;
+}
+
+void tc_gui_text(void *handle, int32_t x, int32_t y, TinyString text, uint32_t color,
+                 int32_t scale) {
+    size_t offset = 0;
+    int32_t origin = x;
+    if (scale < 1)
+        scale = 1;
+    if (scale > 32)
+        scale = 32;
+    while (offset < text.length) {
+        uint8_t rows[7];
+        uint32_t cp = tc_gui_text_next(text, &offset);
+        int row, column;
+        if (cp == '\n') {
+            x = origin;
+            y += 8 * scale;
+            continue;
+        }
+        tc_gui_glyph(cp, rows);
+        for (row = 0; row < 7; row++)
+            for (column = 0; column < 5; column++)
+                if (rows[row] & (uint8_t)(1u << (4 - column)))
+                    tc_gui_fill_rect(handle, x + column * scale, y + row * scale, scale, scale,
+                                     color);
+        x += 6 * scale;
+    }
+}
+
 int32_t tc_gui_buffer_resize(void *handle, int32_t width, int32_t height) {
     TcGuiBuffer *buffer = (TcGuiBuffer *)handle;
     TcGuiSurface front, back;
