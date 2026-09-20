@@ -13,6 +13,6 @@ int main() {
 
     window.close();
     GuiEvent event = window.nextEvent(timeout: 0);
-    assert(event.kind == 5);
+    assert(event.kind == GuiEventKind.Close);
     return 0;
 }
