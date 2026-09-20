@@ -54,6 +54,8 @@ for cc in compilers:
             flags += ['-D_POSIX_C_SOURCE=200809L', '-pthread', '-lm']
         elif name == 'network':
             flags += ['-lws2_32']
+        elif name == 'gui':
+            flags += ['-luser32', '-lgdi32']
         if run('Build runtime '+name+' with '+Path(cc).name, [cc, ROOT/'tests'/('runtime_'+name+'.c'), *flags, '-o', output]):
             run('Run runtime '+name+' with '+Path(cc).name, [output], timeout=30)
 if not args.skip_interop:
