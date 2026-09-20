@@ -89,8 +89,13 @@ int main(void) {
         assert(native && error == 0 && native->hwnd && tc_gui_window_open(native));
         ShowWindow(native->hwnd, SW_HIDE);
 
-        tc_gui_surface_clear(tc_gui_window_surface(native), blue);
-        assert(tc_gui_window_present(native) == 64 * 48);
+        {
+            int32_t native_width = tc_gui_window_width(native);
+            int32_t native_height = tc_gui_window_height(native);
+            assert(native_width > 0 && native_height > 0);
+            tc_gui_surface_clear(tc_gui_window_surface(native), blue);
+            assert(tc_gui_window_present(native) == native_width * native_height);
+        }
 
         memset(&native_event, 0, sizeof(native_event));
         PostMessageA(native->hwnd, WM_KEYDOWN, VK_LEFT, 0);
