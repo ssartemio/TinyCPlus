@@ -8,6 +8,7 @@
 typedef struct Formatter {
     Buffer output;
     int indent, paren, brace, brace_paren[256];
+    int in_case[256], label, glue, previous_op;
     const char *previous;
 } Formatter;
 static void fmt_newline(Formatter *f) {
@@ -92,12 +93,27 @@ int tc_format_file(const char *path, const char *output) {
             previous_end = position + strlen(text);
             column += (int)strlen(text);
             position = previous_end;
-            if (!strcmp(text, "}")) {
+            if (!strcmp(text, "}") && token->kind == TK_OP) {
                 if (f->brace) {
+                    if (f->in_case[f->brace]) {
+                        f->in_case[f->brace] = 0;
+                        f->indent--;
+                    }
                     f->brace--;
                     f->indent--;
                 }
                 fmt_newline(f);
+            }
+            /* A case/default label at the start of a statement closes the previous
+               case body; its statements are indented one level under the label. */
+            if (token->kind == TK_ID && (!strcmp(text, "case") || !strcmp(text, "default")) &&
+                !f->paren && f->brace && strcmp(next, "=") && strcmp(next, ";") &&
+                (!f->output.len || f->output.data[f->output.len - 1] == '\n')) {
+                if (f->in_case[f->brace]) {
+                    f->in_case[f->brace] = 0;
+                    f->indent--;
+                }
+                f->label = 1;
             }
             fmt_indent(f);
             tight = !strcmp(text, ";") || !strcmp(text, ",") || !strcmp(text, ")") ||
@@ -109,18 +125,36 @@ int tc_format_file(const char *path, const char *output) {
             if (!strcmp(text, "(") && strcmp(f->previous, "if") && strcmp(f->previous, "for") &&
                 strcmp(f->previous, "while") && strcmp(f->previous, "switch"))
                 tight = 1;
+            if (f->glue)
+                tight = 1;
             if (*f->previous && !tight)
                 buf_add(&f->output, " ");
             buf_add(&f->output, text);
+            /* Prefix operators stay attached to their operand: return -1, case -1, !ok. */
+            f->glue = token->kind == TK_OP &&
+                      (!strcmp(text, "-") || !strcmp(text, "+") || !strcmp(text, "!") ||
+                       !strcmp(text, "~")) &&
+                      (!*f->previous || !strcmp(f->previous, "return") ||
+                       !strcmp(f->previous, "case") ||
+                       (f->previous_op && strcmp(f->previous, ")") && strcmp(f->previous, "]")));
+            f->previous_op = token->kind == TK_OP;
             f->previous = text;
             if (!strcmp(text, "("))
                 f->paren++;
             if (!strcmp(text, ")") && f->paren)
                 f->paren--;
-            if (!strcmp(text, "{")) {
+            if (f->label && !f->paren && !strcmp(text, ":")) {
+                f->label = 0;
+                if (strcmp(next, "{")) {
+                    f->in_case[f->brace] = 1;
+                    f->indent++;
+                    fmt_newline(f);
+                }
+            } else if (!strcmp(text, "{")) {
                 if (f->brace >= 255)
                     tc_error(c, token->loc, "formatter nesting limit exceeded");
                 f->brace_paren[f->brace++] = f->paren;
+                f->in_case[f->brace] = 0;
                 f->indent++;
                 fmt_newline(f);
             } else if (!strcmp(text, ";") &&

@@ -495,7 +495,9 @@ static int builtin_call(Context *c, Node *n) {
         return 1;
     }
     if (strcmp(name, "println") && strcmp(name, "print") && strcmp(name, "assert") &&
-        strcmp(name, "len"))
+        strcmp(name, "len") && strcmp(name, "hash"))
+        return 0;
+    if (!strcmp(name, "hash") && lookup(c, name))
         return 0;
     for (a = n->args; a; a = a->next) {
         check_expr(c, a, NULL);
@@ -508,6 +510,13 @@ static int builtin_call(Context *c, Node *n) {
         if (!scalar(t))
             tc_error(c, n->loc, "assert expects a scalar");
         n->type = type_primitive(c, TY_VOID);
+    } else if (!strcmp(name, "hash")) {
+        if (!type_integer(t) && t->kind != TY_BOOL && t->kind != TY_CHAR && t->kind != TY_ENUM &&
+            t->kind != TY_PTR && t->kind != TY_STRING)
+            tc_error(c, n->loc,
+                     "hash supports integers, char, bool, enums, pointers and strings, not %s",
+                     t->name);
+        n->type = type_primitive(c, TY_U64);
     } else if (!strcmp(name, "len")) {
         if (t->kind != TY_STRING && t->kind != TY_ARRAY && t->kind != TY_SLICE &&
             !(t->kind == TY_NAMED && !strcmp(t->name, "Array")))
@@ -852,7 +861,7 @@ static Type *check_expr(Context *c, Node *n, Type *expected) {
         TypeLink *pt = expected && (expected->kind == TY_FUNC || expected->kind == TY_CLOSURE)
                            ? expected->items
                            : NULL;
-        int previous_loop = c->loop_depth;
+        int previous_loop = c->loop_depth, previous_switch = c->switch_loop;
         if (n->flags & NF_CHECKED)
             break;
         n->owner = previous_fn;
@@ -864,6 +873,7 @@ static Type *check_expr(Context *c, Node *n, Type *expected) {
         c->current_fn = n;
         c->current_class = NULL;
         c->loop_depth = 0;
+        c->switch_loop = 0;
         scope_push(c);
         for (p = n->params; p; p = p->next) {
             if (p->decl_type->kind == TY_AUTO) {
@@ -888,6 +898,7 @@ static Type *check_expr(Context *c, Node *n, Type *expected) {
         c->current_fn = previous_fn;
         c->current_class = previous_class;
         c->loop_depth = previous_loop;
+        c->switch_loop = previous_switch;
         n->type = function_type(c, n);
         if (n->args || (n->flags & NF_OWNED) || (expected && expected->kind == TY_CLOSURE))
             n->type->kind = TY_CLOSURE;
@@ -944,6 +955,83 @@ static void body_scope(Context *c, Node *n) {
     scope_push(c);
     check_stmt(c, n);
     scope_pop(c);
+}
+/* Resolves a case label to a comparable constant key; returns NULL if it is not constant. */
+static const char *case_key(Node *v) {
+    if (v->kind == N_INT || v->kind == N_CHAR || v->kind == N_BOOL)
+        return v->text;
+    if (v->kind == N_STRING)
+        return v->text;
+    if (v->kind == N_UNARY && v->text && !strcmp(v->text, "-") && v->a && v->a->kind == N_INT)
+        return v->a->text;
+    if (v->kind == N_MEMBER && v->resolved && v->resolved->owner &&
+        v->resolved->owner->kind == N_ENUM)
+        return v->resolved->text;
+    return NULL;
+}
+static int case_negative(Node *v) {
+    return v->kind == N_UNARY;
+}
+static int case_same(Node *a, Node *b) {
+    const char *x = case_key(a), *y = case_key(b);
+    if (a->kind == N_MEMBER || b->kind == N_MEMBER)
+        return !strcmp(x, y);
+    if (a->kind == N_INT || case_negative(a)) {
+        unsigned long long p = strtoull(x, NULL, 0), q = strtoull(y, NULL, 0);
+        if (!strncmp(x, "0x", 2) || !strncmp(x, "0X", 2))
+            p = strtoull(x, NULL, 16);
+        if (!strncmp(y, "0x", 2) || !strncmp(y, "0X", 2))
+            q = strtoull(y, NULL, 16);
+        return p == q && case_negative(a) == case_negative(b);
+    }
+    return !strcmp(x, y);
+}
+static void check_switch(Context *c, Node *n) {
+    Type *t = check_expr(c, n->a, NULL);
+    Node *item, *v, *other_item, *other;
+    int has_default = 0, saved_switch = c->switch_loop;
+    if (!type_integer(t) && t->kind != TY_BOOL && t->kind != TY_CHAR && t->kind != TY_ENUM &&
+        t->kind != TY_STRING)
+        tc_error(c, n->a->loc, "switch requires an integer, char, bool, enum or string, found %s",
+                 t->name);
+    for (item = n->body; item; item = item->next) {
+        if (item->text)
+            has_default = 1;
+        for (v = item->args; v; v = v->next) {
+            require(c, t, check_expr(c, v, t), v->loc);
+            if (!case_key(v))
+                tc_error(c, v->loc, "case label must be a literal or an enum member");
+            if (t->kind == TY_ENUM && v->kind != N_MEMBER)
+                tc_error(c, v->loc, "case label for enum %s must be an enum member", t->name);
+            for (other_item = n->body; other_item; other_item = other_item->next) {
+                for (other = other_item->args; other && other != v; other = other->next)
+                    if (case_same(v, other))
+                        tc_error(c, v->loc, "duplicate case label");
+                if (other == v)
+                    break;
+            }
+        }
+    }
+    if (t->kind == TY_ENUM && !has_default) {
+        Node *m;
+        for (m = t->decl->body; m; m = m->next) {
+            int covered = 0;
+            for (item = n->body; item && !covered; item = item->next)
+                for (v = item->args; v && !covered; v = v->next)
+                    if (!strcmp(v->resolved->text, m->text))
+                        covered = 1;
+            if (!covered)
+                tc_error(c, n->loc, "switch on %s is not exhaustive: missing %s.%s (add the case or a default)",
+                         t->name, t->name, m->name);
+        }
+    }
+    if (has_default || t->kind == TY_ENUM)
+        n->flags |= NF_RETURNS;
+    for (item = n->body; item; item = item->next) {
+        c->switch_loop = c->loop_depth + 1;
+        body_scope(c, item->body);
+    }
+    c->switch_loop = saved_switch;
 }
 static void check_stmt(Context *c, Node *n) {
     Node *p;
@@ -1070,8 +1158,14 @@ static void check_stmt(Context *c, Node *n) {
     }
     case N_BREAK:
     case N_CONTINUE:
+        if (n->kind == N_BREAK && c->switch_loop && c->loop_depth == c->switch_loop - 1)
+            tc_error(c, n->loc,
+                     "break is not allowed directly in a switch case; cases never fall through");
         if (!c->loop_depth)
             tc_error(c, n->loc, "loop control used outside a loop");
+        break;
+    case N_SWITCH:
+        check_switch(c, n);
         break;
     case N_DEFER:
         if (n->body)
@@ -1101,6 +1195,14 @@ static int returns(Node *n) {
     }
     if (n->kind == N_IF)
         return returns(n->body) && returns(n->b);
+    if (n->kind == N_SWITCH) {
+        if (!(n->flags & NF_RETURNS))
+            return 0;
+        for (p = n->body; p; p = p->next)
+            if (!returns(p->body))
+                return 0;
+        return 1;
+    }
     return 0;
 }
 static void check_function(Context *c, Node *n) {
