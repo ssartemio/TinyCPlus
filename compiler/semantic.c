@@ -497,7 +497,10 @@ static int builtin_call(Context *c, Node *n) {
     if (strcmp(name, "println") && strcmp(name, "print") && strcmp(name, "assert") &&
         strcmp(name, "len") && strcmp(name, "hash"))
         return 0;
-    if (!strcmp(name, "hash") && lookup(c, name))
+    /* hash is a builtin only when nothing else is called hash: a symbol in scope or a
+       method of the current class wins, exactly as check_expr resolves N_ID. */
+    if (!strcmp(name, "hash") &&
+        (lookup(c, name) || (c->current_class && member(c->current_class->type, name))))
         return 0;
     for (a = n->args; a; a = a->next) {
         check_expr(c, a, NULL);

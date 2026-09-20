@@ -42,6 +42,26 @@ p = run('fmt', source)
 assert p.returncode == 0 and source.read_text() == formatted
 after = run('run', source)
 assert before.returncode == after.returncode == 0 and before.stdout == after.stdout, after.stderr
+
+switch_source = folder / 'switch_format.tc'
+switch_source.write_text('''enum Color{Red,Green,Blue}
+int f(int x,Color c){int default=0;int r=0;
+switch(x){case -1:r=1;case 0,1:{r=2;}default:default=3;r=default+r;}
+switch(c){case Color.Red:return 1;case Color.Green,Color.Blue:return -2;}}
+int main(){println(f(0,Color.Red));println(f(5,Color.Blue));}
+''')
+before = run('run', switch_source)
+assert before.returncode == 0 and before.stdout.split() == ['1', '-2'], before.stderr
+p = run('fmt', switch_source)
+assert p.returncode == 0, p.stderr
+formatted = switch_source.read_text()
+assert ('    switch (x) {\n        case -1:\n            r = 1;\n        case 0, 1: {\n            r = 2;\n        }\n'
+        '        default:\n            default = 3;\n            r = default + r;\n    }\n') in formatted, formatted
+assert '        case Color.Green, Color.Blue:\n            return -2;\n' in formatted, formatted
+p = run('fmt', switch_source)
+assert p.returncode == 0 and switch_source.read_text() == formatted
+after = run('run', switch_source)
+assert after.returncode == 0 and after.stdout == before.stdout, after.stderr
 docs = folder / 'api.md'
 p = run('doc', source, '-o', docs)
 assert p.returncode == 0 and 'The sample entry point.' in docs.read_text() and 'i32 main();' in docs.read_text(), (p.stderr, docs.read_text())

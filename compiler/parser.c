@@ -17,6 +17,18 @@ static int eat(Context *c, const char *s) {
 static int keyword(Context *c, const char *s) {
     return peek(c)->kind == TK_ID && at(c, s);
 }
+/* case and default stay ordinary identifiers: they open a label only when what follows can
+   continue one (a literal, a name or '-' after case; ':' after default). So `default = 3;`
+   inside a case body is still an assignment to a variable called default. */
+static int case_label(Context *c, const char *word) {
+    Token *next;
+    if (!keyword(c, word) || c->pos + 1 >= c->ntokens)
+        return 0;
+    next = &c->tokens[c->pos + 1];
+    if (!strcmp(word, "default"))
+        return next->kind == TK_OP && !strcmp(next->text, ":");
+    return next->kind != TK_OP || !strcmp(next->text, "-");
+}
 static Token *take(Context *c) {
     Token *t = peek(c);
     if (t->kind == TK_EOF)
@@ -496,12 +508,12 @@ static Node *stmt(Context *c) {
             if (label->kind == TK_EOF)
                 tc_error(c, t->loc, "unterminated switch");
             item = node(c, N_CASE, label->loc);
-            if (keyword(c, "case")) {
+            if (case_label(c, "case")) {
                 take(c);
                 do {
                     append(&item->args, expr(c, 1));
                 } while (eat(c, ","));
-            } else if (keyword(c, "default")) {
+            } else if (case_label(c, "default")) {
                 take(c);
                 if (has_default)
                     tc_error(c, label->loc, "switch has more than one default");
@@ -511,7 +523,7 @@ static Node *stmt(Context *c) {
                 tc_error(c, label->loc, "expected 'case' or 'default' in switch");
             expect(c, ":");
             item->body = node(c, N_BLOCK, label->loc);
-            while (!keyword(c, "case") && !keyword(c, "default") &&
+            while (!case_label(c, "case") && !case_label(c, "default") &&
                    !(peek(c)->kind == TK_OP && at(c, "}"))) {
                 if (peek(c)->kind == TK_EOF)
                     tc_error(c, t->loc, "unterminated switch");
@@ -765,7 +777,9 @@ Node *parse(Context *c) {
     }
     return p;
 }
-void dump_ast(Node *n, FILE *out, int indent) {
+/* Shared by --emit-ast (c == NULL) and --emit-typed-ast: with a context, every node that the
+   semantic pass typed is followed by " : <type>". */
+static void dump_node(Context *c, Node *n, FILE *out, int indent) {
     static const char *names[] = {
         "Program", "FunctionDecl", "Class",  "Interface",  "Extension", "Property", "Block",
         "VarDecl", "ExprStmt",     "Return", "If",         "While",     "For",      "Range",
@@ -778,20 +792,29 @@ void dump_ast(Node *n, FILE *out, int indent) {
         int i;
         for (i = 0; i < indent; i++)
             fputc(' ', out);
-        fprintf(out, "%s%s%s%s%s @%d:%d\n", names[n->kind], n->name ? " " : "",
+        fprintf(out, "%s%s%s%s%s @%d:%d", names[n->kind], n->name ? " " : "",
                 n->name ? n->name : "", n->text ? " " : "", n->text ? n->text : "", n->loc.line,
                 n->loc.col);
+        if (c && n->type)
+            fprintf(out, " : %s", type_name(c, n->type));
+        fputc('\n', out);
         if (n->params)
-            dump_ast(n->params, out, indent + 2);
+            dump_node(c, n->params, out, indent + 2);
         if (n->args)
-            dump_ast(n->args, out, indent + 2);
+            dump_node(c, n->args, out, indent + 2);
         if (n->a)
-            dump_ast(n->a, out, indent + 2);
+            dump_node(c, n->a, out, indent + 2);
         if (n->b)
-            dump_ast(n->b, out, indent + 2);
+            dump_node(c, n->b, out, indent + 2);
         if (n->c)
-            dump_ast(n->c, out, indent + 2);
+            dump_node(c, n->c, out, indent + 2);
         if (n->body)
-            dump_ast(n->body, out, indent + 2);
+            dump_node(c, n->body, out, indent + 2);
     }
+}
+void dump_ast(Node *n, FILE *out, int indent) {
+    dump_node(NULL, n, out, indent);
+}
+void dump_typed_ast(Context *c, Node *n, FILE *out, int indent) {
+    dump_node(c, n, out, indent);
 }

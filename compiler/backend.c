@@ -414,8 +414,6 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
         args[k++] = tc_format(c, "%s/runtime", root);
         args[k++] = "-o";
         args[k++] = (char *)exe;
-        args[k++] = "-x";
-        args[k++] = "none";
         for (j = 0; j < extra_counts[1]; j++) {
             args[k++] = "-I";
             args[k++] = (char *)extra_options[1][j];
@@ -438,6 +436,11 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
             args[k++] = tc_format(c, "%s/third_party/nghttp2/src", root);
             args[k++] = "-I";
             args[k++] = tc_format(c, "%s/third_party/nghttp2/src/includes", root);
+        }
+        /* Undo "-x c" for the extra inputs; without any, clang warns that it has no effect. */
+        if (source_count) {
+            args[k++] = "-x";
+            args[k++] = "none";
         }
         for (j = 0; j < source_count; j++)
             args[k++] = sources[j];

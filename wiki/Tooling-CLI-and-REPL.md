@@ -42,6 +42,7 @@ Argumentos del programa se colocan después de `--`.
 ```bash
 tiny --emit-tokens programa.tc
 tiny --emit-ast programa.tc
+tiny --emit-typed-ast programa.tc
 tiny --emit-c programa.tc -o programa.c
 tiny --emit-asm programa.tc --cc clang -o programa.s
 ```
