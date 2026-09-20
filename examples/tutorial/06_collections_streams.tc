@@ -20,7 +20,11 @@ int main()
     var first, found = scores.stream().filter(x => x >= 90).first();
     assert(found && first == 95);
 
-    var maximum = scores.stream().reduce(0, (best, x) => x > best ? x : best);
+    var maximum = scores.stream().reduce(0, (best, x) => {
+        if (x > best)
+            return x;
+        return best;
+    });
     assert(maximum == 95);
 
     var selected = Array<int>.create();
