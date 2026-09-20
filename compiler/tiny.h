@@ -112,7 +112,9 @@ typedef enum NodeKind {
     N_SPAWN,
     N_MODULE,
     N_IMPORT,
-    N_ENUM
+    N_ENUM,
+    N_SWITCH,
+    N_CASE
 } NodeKind;
 enum {
     NF_EXTERN = 1,
@@ -159,7 +161,7 @@ struct Context {
     Node *loaded_modules, *adapters, *lambdas, *spawns;
     const char *active_file;
     Scope *global, *scope;
-    int next_id, errors, loop_depth, depth, test_mode, bounds, uses_tasks, uses_io, uses_grpc,
+    int next_id, errors, loop_depth, switch_loop, depth, test_mode, bounds, uses_tasks, uses_io, uses_grpc,
         repl_mode, quiet;
     jmp_buf failure;
 };

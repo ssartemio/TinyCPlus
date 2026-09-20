@@ -14,6 +14,9 @@ static int eat(Context *c, const char *s) {
     }
     return 0;
 }
+static int keyword(Context *c, const char *s) {
+    return peek(c)->kind == TK_ID && at(c, s);
+}
 static Token *take(Context *c) {
     Token *t = peek(c);
     if (t->kind == TK_EOF)
@@ -478,6 +481,44 @@ static Node *stmt(Context *c) {
         n->body = stmt(c);
         if (eat(c, "else"))
             n->b = stmt(c);
+    } else if (keyword(c, "switch") && c->pos + 1 < c->ntokens &&
+               !strcmp(c->tokens[c->pos + 1].text, "(")) {
+        Node *item;
+        int has_default = 0;
+        take(c);
+        n = node(c, N_SWITCH, t->loc);
+        expect(c, "(");
+        n->a = expr(c, 1);
+        expect(c, ")");
+        expect(c, "{");
+        while (!eat(c, "}")) {
+            Token *label = peek(c);
+            if (label->kind == TK_EOF)
+                tc_error(c, t->loc, "unterminated switch");
+            item = node(c, N_CASE, label->loc);
+            if (keyword(c, "case")) {
+                take(c);
+                do {
+                    append(&item->args, expr(c, 1));
+                } while (eat(c, ","));
+            } else if (keyword(c, "default")) {
+                take(c);
+                if (has_default)
+                    tc_error(c, label->loc, "switch has more than one default");
+                has_default = 1;
+                item->text = "default";
+            } else
+                tc_error(c, label->loc, "expected 'case' or 'default' in switch");
+            expect(c, ":");
+            item->body = node(c, N_BLOCK, label->loc);
+            while (!keyword(c, "case") && !keyword(c, "default") &&
+                   !(peek(c)->kind == TK_OP && at(c, "}"))) {
+                if (peek(c)->kind == TK_EOF)
+                    tc_error(c, t->loc, "unterminated switch");
+                append(&item->body->body, stmt(c));
+            }
+            append(&n->body, item);
+        }
     } else if (eat(c, "while")) {
         n = node(c, N_WHILE, t->loc);
         expect(c, "(");
@@ -731,7 +772,8 @@ void dump_ast(Node *n, FILE *out, int indent) {
         "Break",   "Continue",     "Defer",  "Delete",     "Int",       "Float",    "String",
         "Char",    "Bool",         "Null",   "Identifier", "Binary",    "Unary",    "Call",
         "Index",   "Slice",        "Member", "Init",       "Tuple",     "New",      "Cast",
-        "Sizeof",  "Lambda",       "Await",  "Spawn",      "Module",    "Import",   "Enum"};
+        "Sizeof",  "Lambda",       "Await",  "Spawn",      "Module",    "Import",   "Enum",
+        "Switch",  "Case"};
     for (; n; n = n->next) {
         int i;
         for (i = 0; i < indent; i++)

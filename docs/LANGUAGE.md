@@ -26,6 +26,31 @@ int main() {
 
 Hay `if/else`, `while`, `for` tradicional, `for(value in collection)` y
 `for(index,value in collection)`, `break`, `continue`, `return`.
+`switch` compara un entero, `char`, `bool`, enum o string contra etiquetas
+constantes (literales o miembros de enum):
+
+```c
+enum Kind { Fn, Var, Type }
+string describe(Kind kind) {
+    switch (kind) {
+        case Kind.Fn:
+            return "función";
+        case Kind.Var, Kind.Type:
+            return "dato";
+    }
+}
+```
+
+Los casos **no caen** al siguiente: un `break` directo dentro de un caso es un
+error; `continue` y un `break` dentro de un bucle anidado funcionan como siempre.
+Cada caso tiene su propio scope, por lo que sus `defer` se ejecutan al salir del
+caso. Se rechazan etiquetas duplicadas (también `16` y `0x10`) y más de un
+`default`. Sobre un enum sin `default`, el switch debe cubrir todos sus valores;
+un valor fuera de rango obtenido con `cast` termina el programa con un mensaje.
+Un switch con `default` o exhaustivo cuenta como retorno en todas las rutas
+cuando todos sus casos retornan. `case` y `default` no son palabras reservadas
+fuera de un switch.
+
 Se evalúan operandos y argumentos de izquierda a derecha; `&&`/`||` cortocircuitan.
 Los argumentos nombrados se evalúan en orden escrito y después se reordenan
 para la ABI. Los valores por defecto deben ser literales.
@@ -131,6 +156,28 @@ monomorfizan. Especifique los argumentos de funciones genéricas, por ejemplo
 `identity<int>(42)`. El límite es 512 instancias por unidad. No hay constraints
 genéricos; los errores se detectan al instanciar. `Array<T>` ofrece reserve,
 push, pop, get, set, clear, destroy e indexación con bounds.
+
+`hash(value)` devuelve un `u64` para enteros, `char`, `bool`, enums, punteros y
+strings (por contenido). Una función de usuario llamada `hash` tiene prioridad.
+`Map<K,V>` de `std.collections` es una tabla hash propietaria con esas mismas
+claves; se comparan con `==`:
+
+```c
+import std.collections;
+int main() {
+    var ages = Map<string, int>.create();
+    defer ages.destroy();
+    ages.put("Ana", 30);
+    var age, found = ages.get("Ana");
+    if (found) println(age);
+    println(ages.getOr("Luis", -1));
+}
+```
+
+Ofrece put, get, getOr, contains, remove, keys, values, clear y destroy.
+Las claves string son vistas: el mapa no copia el texto, que debe vivir más que
+la entrada. El orden de `keys()`/`values()` no está especificado. Las claves de
+tipo clase se rechazan al instanciar.
 
 `enum Color { Red=-1, Green=2 }` usa almacenamiento i32; acceso `Color.Red`.
 

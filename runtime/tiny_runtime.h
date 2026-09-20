@@ -54,6 +54,24 @@ static void tc_slice_check(int64_t lo, int64_t hi, size_t n, const char *file, i
 static bool tc_string_equal(TinyString a, TinyString b) {
     return a.length == b.length && (!a.length || memcmp(a.data, b.data, a.length) == 0);
 }
+/* hash(): FNV-1a for string contents, SplitMix64 finalizer for scalar values. */
+static uint64_t tc_hash_u64(uint64_t x) {
+    x ^= x >> 30;
+    x *= 0xbf58476d1ce4e5b9ULL;
+    x ^= x >> 27;
+    x *= 0x94d049bb133111ebULL;
+    x ^= x >> 31;
+    return x;
+}
+static uint64_t tc_hash_string(TinyString s) {
+    uint64_t h = 0xcbf29ce484222325ULL;
+    size_t i;
+    for (i = 0; i < s.length; i++) {
+        h ^= (unsigned char)s.data[i];
+        h *= 0x100000001b3ULL;
+    }
+    return tc_hash_u64(h);
+}
 static void tc_print_string(TinyString s, int newline) {
     if (s.length)
         fwrite(s.data, 1, s.length, stdout);

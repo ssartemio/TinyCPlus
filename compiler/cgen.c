@@ -364,6 +364,13 @@ static const char *expression(CG *g, Node *n) {
                 return tc_format(c, "tc_closure_destroy((%s).env, (%s).owned)", a, a);
             }
             a = value(g, n->args);
+            if (!strcmp(n->text, "hash")) {
+                if (n->args->type->kind == TY_STRING)
+                    return tc_format(c, "tc_hash_string(%s)", a);
+                if (n->args->type->kind == TY_PTR)
+                    return tc_format(c, "tc_hash_u64((uint64_t)(uintptr_t)(%s))", a);
+                return tc_format(c, "tc_hash_u64((uint64_t)(%s))", a);
+            }
             if (!strcmp(n->text, "len")) {
                 if (n->args->type->kind == TY_ARRAY)
                     return tc_format(c, "%zuULL", n->args->type->count);
@@ -707,6 +714,55 @@ static void statement(CG *g, Node *n) {
             scoped(g, n->b);
         }
         break;
+    case N_SWITCH: {
+        Node *item, *v, *fallback = NULL, *last = NULL;
+        int first = 1, guard = n->a->type->kind == TY_ENUM;
+        const char *subject = value(g, n->a);
+        Buffer all = {0};
+        for (item = n->body; item; item = item->next) {
+            Buffer test = {0};
+            if (item->text) {
+                fallback = item;
+                guard = 0;
+                continue;
+            }
+            last = item;
+            for (v = item->args; v; v = v->next) {
+                const char *label = expression(g, v);
+                if (test.len)
+                    buf_add(&test, " || ");
+                if (n->a->type->kind == TY_STRING)
+                    buf_printf(&test, "tc_string_equal(%s, %s)", subject, label);
+                else
+                    buf_printf(&test, "(%s) == (%s)", subject, label);
+            }
+            item->label = tc_str(c, test.data);
+            buf_printf(&all, "%s%s", all.len ? " || " : "", test.data);
+            free(test.data);
+        }
+        /* An exhaustive enum switch rejects out-of-range values up front, so the
+           final case can be a plain else and C sees every path covered. */
+        if (guard && last)
+            line(g, "if (!(%s)) tc_panic(\"switch value matches no enum case\", %s, %d);",
+                 all.data, quote(c, n->loc.file), n->loc.line);
+        for (item = n->body; item; item = item->next) {
+            if (item->text)
+                continue;
+            if (guard && item == last && !first)
+                line(g, "else");
+            else if (!(guard && item == last))
+                line(g, "%sif (%s)", first ? "" : "else ", item->label);
+            first = 0;
+            scoped(g, item->body);
+        }
+        if (fallback) {
+            if (!first)
+                line(g, "else");
+            scoped(g, fallback->body);
+        }
+        free(all.data);
+        break;
+    }
     case N_WHILE:
     case N_FOR:
     case N_RANGE: {

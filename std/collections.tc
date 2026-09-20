@@ -67,3 +67,174 @@ class Array<T>
         capacity = 0;
     }
 }
+
+/// A manually owned hash map with open addressing and linear probing.
+/// Keys may be integers, char, bool, enums, pointers or strings; they are
+/// hashed with the builtin hash() and compared with ==. String keys are views:
+/// the map does not copy their bytes, so the text must outlive the entry.
+/// Copies alias the same storage. Call destroy exactly once after the final use.
+class Map<K, V>
+{
+    K* keyData;
+    V* valueData;
+    u8* stateData;
+    u64 length;
+    u64 capacity;
+    u64 tombstones;
+
+    static Map<K, V> create()
+    {
+        Map<K, V> map;
+        return map;
+    }
+
+    /// Returns the slot holding key, or capacity when the key is absent.
+    u64 find(K key)
+    {
+        if (length == 0) return capacity;
+        u64 mask = capacity - 1;
+        u64 index = hash(key) & mask;
+        for (u64 probes = 0; probes < capacity; probes++)
+        {
+            u8 state = stateData[index];
+            if (state == 0) return capacity;
+            if (state == 1 && keyData[index] == key) return index;
+            index = (index + 1) & mask;
+        }
+        return capacity;
+    }
+
+    void rehash(u64 next)
+    {
+        assert(next <= 18446744073709551615 / sizeof(K));
+        assert(next <= 18446744073709551615 / sizeof(V));
+        K* oldKeys = keyData;
+        V* oldValues = valueData;
+        u8* oldStates = stateData;
+        u64 oldCapacity = capacity;
+        var allocatedKeys = calloc(next, sizeof(K));
+        var allocatedValues = calloc(next, sizeof(V));
+        var allocatedStates = calloc(next, 1);
+        assert(allocatedKeys != null);
+        assert(allocatedValues != null);
+        assert(allocatedStates != null);
+        keyData = allocatedKeys;
+        valueData = allocatedValues;
+        stateData = allocatedStates;
+        capacity = next;
+        length = 0;
+        tombstones = 0;
+        for (u64 i = 0; i < oldCapacity; i++)
+            if (oldStates[i] == 1) insert(oldKeys[i], oldValues[i]);
+        free(oldKeys);
+        free(oldValues);
+        free(oldStates);
+    }
+
+    /// Stores a key known to be absent; capacity must already have room.
+    void insert(K key, V value)
+    {
+        u64 mask = capacity - 1;
+        u64 index = hash(key) & mask;
+        while (stateData[index] == 1) index = (index + 1) & mask;
+        if (stateData[index] == 2) tombstones--;
+        keyData[index] = key;
+        valueData[index] = value;
+        stateData[index] = 1;
+        length++;
+    }
+
+    /// Inserts key or replaces its value. Returns true when the key is new.
+    bool put(K key, V value)
+    {
+        u64 found = find(key);
+        if (found < capacity)
+        {
+            valueData[found] = value;
+            return false;
+        }
+        if ((length + tombstones + 1) * 4 > capacity * 3)
+        {
+            u64 next = capacity;
+            if (next < 16) next = 16;
+            while ((length + 1) * 2 > next)
+            {
+                assert(next <= 4611686018427387904);
+                next = next * 2;
+            }
+            rehash(next);
+        }
+        insert(key, value);
+        return true;
+    }
+
+    /// Returns (value, true), or (zero value, false) when key is absent.
+    (V, bool) get(K key)
+    {
+        u64 found = find(key);
+        if (found < capacity) return (valueData[found], true);
+        V missing;
+        return (missing, false);
+    }
+
+    V getOr(K key, V fallback)
+    {
+        u64 found = find(key);
+        if (found < capacity) return valueData[found];
+        return fallback;
+    }
+
+    bool contains(K key)
+    {
+        return find(key) < capacity;
+    }
+
+    /// Removes key. Returns true when it was present.
+    bool remove(K key)
+    {
+        u64 found = find(key);
+        if (found >= capacity) return false;
+        K emptyKey;
+        V emptyValue;
+        keyData[found] = emptyKey;
+        valueData[found] = emptyValue;
+        stateData[found] = 2;
+        length--;
+        tombstones++;
+        return true;
+    }
+
+    /// Appends every key to destination, in unspecified order.
+    void keys(Array<K>* destination)
+    {
+        for (u64 i = 0; i < capacity; i++)
+            if (stateData[i] == 1) destination.push(keyData[i]);
+    }
+
+    /// Appends every value to destination, in the same order as keys().
+    void values(Array<V>* destination)
+    {
+        for (u64 i = 0; i < capacity; i++)
+            if (stateData[i] == 1) destination.push(valueData[i]);
+    }
+
+    void clear()
+    {
+        for (u64 i = 0; i < capacity; i++) stateData[i] = 0;
+        length = 0;
+        tombstones = 0;
+    }
+
+    void destroy()
+    {
+        free(keyData);
+        free(valueData);
+        free(stateData);
+        keyData = null;
+        valueData = null;
+        stateData = null;
+        length = 0;
+        capacity = 0;
+        tombstones = 0;
+    }
+}
