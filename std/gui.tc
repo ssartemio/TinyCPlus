@@ -1,4 +1,5 @@
 module std.gui;
+import std.string;
 
 /// Packed pixel format is 0xAARRGGBB. Surfaces own their pixel memory explicitly.
 extern C {
@@ -34,6 +35,14 @@ extern C {
     void tc_gui_window_next(void* window, int timeout, int* kind, int* key, int* x, int* y, int* width, int* height, int* button, int* pressed, uint* codepoint);
     void tc_gui_window_close(void* window);
     void tc_gui_window_destroy(void* window);
+    void* tc_gui_textbox_create(string initial);
+    void tc_gui_textbox_destroy(void* textbox);
+    string tc_gui_textbox_text(void* textbox);
+    int tc_gui_textbox_dirty(void* textbox);
+    void tc_gui_textbox_clean(void* textbox);
+    Error tc_gui_textbox_event(void* textbox, int kind, int key, uint codepoint);
+    void tc_gui_textbox_draw(void* surface, void* textbox, int x, int y, int width, int height,
+                             int focused, uint foreground, uint background, uint border);
 }
 
 class Pixel {
@@ -225,4 +234,33 @@ class GuiWindow {
     }
     void close() { tc_gui_window_close(handle); }
     void destroy() { tc_gui_window_destroy(handle); handle = null; }
+}
+
+
+/// Owned single-line editor backed by the same UTF-8 GapBuffer used by TinyEdit.
+/// text() returns an OwnedString that the caller must destroy.
+class GuiTextBox {
+    void* handle;
+    static GuiTextBox create(string initial = "") {
+        GuiTextBox box(tc_gui_textbox_create(initial));
+        assert(box.handle != null);
+        return box;
+    }
+    OwnedString text() {
+        OwnedString result;
+        result.value = tc_gui_textbox_text(handle);
+        return result;
+    }
+    bool dirty() { return tc_gui_textbox_dirty(handle) != 0; }
+    void markClean() { tc_gui_textbox_clean(handle); }
+    Error handleEvent(GuiEvent event) {
+        return tc_gui_textbox_event(handle, event.kind, event.key, event.codepoint);
+    }
+    void draw(Surface surface, GuiRect area, bool focused = false,
+              uint foreground = 15134195, uint background = 1054752,
+              uint border = 8421504) {
+        tc_gui_textbox_draw(surface.handle, handle, area.x, area.y, area.width, area.height,
+                            focused, foreground, background, border);
+    }
+    void destroy() { tc_gui_textbox_destroy(handle); handle = null; }
 }
