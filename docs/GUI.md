@@ -172,3 +172,20 @@ backend provides one. Cocoa returns `NSWindow.backingScaleFactor`; headless
 and backends without an explicit device-scale policy currently return `1.0`.
 Applications that need pixel-density-aware assets can use this value without
 changing ordinary layout code.
+
+
+## Scroll events
+
+Scroll is a first-class event (`GuiEventKind.Scroll`) rather than a synthetic
+mouse button. Events carry `double scrollX` and `double scrollY`; positive X
+means right and positive Y means up.
+
+Backend normalization:
+
+- Win32: `WM_MOUSEWHEEL/WM_MOUSEHWHEEL`, divided by `WHEEL_DELTA`;
+- X11: buttons 4/5 map to Y +1/-1 and 6/7 to X -1/+1;
+- Cocoa: `scrollingDeltaX/Y` is preserved, including fractional trackpad input;
+- headless/custom events preserve caller-provided double values exactly.
+
+This keeps application scrolling logic portable while retaining high-resolution
+input where the native backend provides it.

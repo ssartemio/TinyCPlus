@@ -405,6 +405,20 @@ static int32_t tc_cocoa_key(uint64_t keycode) {
     default: return 0;
     }
 }
+static void tc_cocoa_push_scroll(TcGuiWindow *window, TcCocoaPoint point,
+                                 double scroll_x, double scroll_y) {
+    TcGuiEvent event;
+    if (!window)
+        return;
+    memset(&event, 0, sizeof(event));
+    event.kind = TC_GUI_EVENT_SCROLL;
+    event.x = (int32_t)point.x;
+    event.y = window->buffer->front.height - 1 - (int32_t)point.y;
+    event.scroll_x = scroll_x;
+    event.scroll_y = scroll_y;
+    tc_gui_event_push(window, event);
+}
+
 static void tc_cocoa_process_event(void *native_event) {
     uint64_t type;
     void *native_window;
@@ -431,6 +445,11 @@ static void tc_cocoa_process_event(void *native_event) {
                             (characters, tc_cocoa_sel("UTF8String")) : NULL;
         if (utf8 && *utf8)
             tc_cocoa_push_text(window, utf8);
+    } else if (type == 22) { /* scrollWheel */
+        TcCocoaPoint point = tc_cocoa_point(native_event, "locationInWindow");
+        tc_cocoa_push_scroll(window, point,
+                             tc_cocoa_double(native_event, "scrollingDeltaX"),
+                             tc_cocoa_double(native_event, "scrollingDeltaY"));
     } else if (type == 1 || type == 2 || type == 3 || type == 4 ||
                type == 5 || type == 6 || type == 7 || type == 25 || type == 26 || type == 27) {
         TcCocoaPoint point = tc_cocoa_point(native_event, "locationInWindow");

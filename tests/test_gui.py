@@ -48,6 +48,20 @@ int main() {
     GuiEvent received = window.nextEvent(timeout: 0);
     assert(received.kind == GuiEventKind.Custom);
     assert(received.key == 77);
+
+    GuiEvent scroll;
+    scroll.kind = GuiEventKind.Scroll;
+    scroll.x = 4;
+    scroll.y = 5;
+    scroll.scrollX = 0.5;
+    scroll.scrollY = -1.25;
+    assert(window.post(scroll) == 0);
+    GuiEvent scrolled = window.nextEvent(timeout: 0);
+    assert(scrolled.kind == GuiEventKind.Scroll);
+    assert(scrolled.x == 4 && scrolled.y == 5);
+    assert(scrolled.scrollX == 0.5 && scrolled.scrollY == -1.25);
+    assert(GuiInput.scroll(scrolled));
+
     window.close();
     assert(!window.isOpen());
     return 0;

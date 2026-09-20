@@ -223,13 +223,27 @@ static void tc_gui_x11_process(TcGuiWindow *window, XEvent *native) {
         break;
     case ButtonPress:
     case ButtonRelease:
-        event.kind = TC_GUI_EVENT_MOUSE;
         event.x = native->xbutton.x;
         event.y = native->xbutton.y;
-        event.button = native->xbutton.button == Button1 ? 1 :
-                       native->xbutton.button == Button3 ? 2 :
-                       native->xbutton.button == Button2 ? 3 : (int32_t)native->xbutton.button;
-        event.pressed = native->type == ButtonPress;
+        if (native->xbutton.button >= Button4 && native->xbutton.button <= 7) {
+            if (native->type == ButtonRelease)
+                break;
+            event.kind = TC_GUI_EVENT_SCROLL;
+            if (native->xbutton.button == Button4)
+                event.scroll_y = 1.0;
+            else if (native->xbutton.button == Button5)
+                event.scroll_y = -1.0;
+            else if (native->xbutton.button == 6)
+                event.scroll_x = -1.0;
+            else
+                event.scroll_x = 1.0;
+        } else {
+            event.kind = TC_GUI_EVENT_MOUSE;
+            event.button = native->xbutton.button == Button1 ? 1 :
+                           native->xbutton.button == Button3 ? 2 :
+                           native->xbutton.button == Button2 ? 3 : (int32_t)native->xbutton.button;
+            event.pressed = native->type == ButtonPress;
+        }
         tc_gui_event_push(window, event);
         break;
     case ClientMessage:
