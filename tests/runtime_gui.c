@@ -55,9 +55,16 @@ int main(void) {
     changed = tc_gui_buffer_present(buffer);
     assert(changed == 12);
     assert(tc_gui_buffer_present(buffer) == 0);
+    tc_gui_surface_damage_clear(tc_gui_buffer_front(buffer));
     tc_gui_surface_set(tc_gui_buffer_back(buffer), 2, 1, red);
     assert(tc_gui_buffer_present(buffer) == 1);
     assert(tc_gui_surface_get(tc_gui_buffer_front(buffer), 2, 1) == red);
+    assert(tc_gui_surface_damage(tc_gui_buffer_front(buffer), &x, &y, &width, &height));
+    assert(x == 2 && y == 1 && width == 1 && height == 1);
+    tc_gui_surface_damage_clear(tc_gui_buffer_front(buffer));
+    tc_gui_surface_set(tc_gui_buffer_back(buffer), 2, 1, red);
+    assert(tc_gui_buffer_present(buffer) == 0);
+    assert(!tc_gui_surface_damage(tc_gui_buffer_front(buffer), &x, &y, &width, &height));
 
     window = (TcGuiWindow *)tc_gui_window_create(5, 4, TC_STRING("headless"), 1, &error);
     assert(window && error == 0 && tc_gui_window_open(window));

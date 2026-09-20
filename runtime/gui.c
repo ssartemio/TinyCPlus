@@ -305,6 +305,7 @@ int32_t tc_gui_buffer_present(void *handle) {
     TcGuiBuffer *buffer = (TcGuiBuffer *)handle;
     TcGuiSurface *front, *back;
     int32_t x, y, changed = 0;
+    int32_t x0 = 0, y0 = 0, x1 = 0, y1 = 0;
     if (!buffer)
         return 0;
     front = &buffer->front;
@@ -316,10 +317,22 @@ int32_t tc_gui_buffer_present(void *handle) {
             size_t index = (size_t)y * (size_t)back->stride + (size_t)x;
             if (front->pixels[index] != back->pixels[index]) {
                 front->pixels[index] = back->pixels[index];
+                if (!changed) {
+                    x0 = x;
+                    y0 = y;
+                    x1 = x + 1;
+                    y1 = y + 1;
+                } else {
+                    if (x < x0) x0 = x;
+                    if (y < y0) y0 = y;
+                    if (x + 1 > x1) x1 = x + 1;
+                    if (y + 1 > y1) y1 = y + 1;
+                }
                 changed++;
             }
         }
-    tc_gui_damage(front, back->x0, back->y0, back->x1 - back->x0, back->y1 - back->y0);
+    if (changed)
+        tc_gui_damage(front, x0, y0, x1 - x0, y1 - y0);
     back->dirty = 0;
     return changed;
 }
@@ -894,7 +907,13 @@ int32_t tc_gui_window_present(void *handle) {
     changed = tc_gui_buffer_present(window->buffer);
 #ifdef _WIN32
     if (!window->headless && window->hwnd && changed) {
-        InvalidateRect(window->hwnd, NULL, FALSE);
+        TcGuiSurface *front = &window->buffer->front;
+        RECT area;
+        area.left = front->x0;
+        area.top = front->y0;
+        area.right = front->x1;
+        area.bottom = front->y1;
+        InvalidateRect(window->hwnd, &area, FALSE);
         UpdateWindow(window->hwnd);
     }
 #endif
