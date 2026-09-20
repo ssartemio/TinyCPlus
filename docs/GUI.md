@@ -80,3 +80,17 @@ keyboard activation through Enter/Space when focused. Its label is a borrowed
 `next()/previous()/set()`, and consumes Tab to advance. Mouse hit-testing
 remains explicit, which keeps layout and ownership visible instead of introducing
 a hidden widget tree.
+
+
+### Checkbox and progress
+
+`GuiCheckbox` adds mouse press/release and focused Enter/Space activation while
+keeping label ownership borrowed. It draws entirely through `Surface`.
+
+`GuiProgressBar` stores an explicit integer value/range, clamps updates, and
+renders without allocations. `percent()` is provided for status text when
+needed.
+
+`GuiLayout.pad()` applies asymmetric margins and `GuiLayout.center()` places
+a fixed-size rectangle in an available area. Both return geometry values only;
+they do not allocate or create a hidden layout tree.

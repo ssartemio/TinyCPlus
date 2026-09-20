@@ -130,3 +130,41 @@ void destroy();
 `handleEvent()` consumes normalized key/text events. Navigation currently
 covers left/right/home/end/delete/backspace. `text()` transfers ownership of
 the returned copy to the caller.
+
+
+## GuiCheckbox
+
+Stateful checkbox with borrowed label storage.
+
+```c
+GuiCheckbox(string text, bool checked = false);
+bool handleEvent(GuiEvent event, GuiRect area, bool focused = false);
+void draw(Surface surface, GuiRect area,
+          uint foreground = 15134195, uint background = 1054752,
+          uint accent = 4638894);
+```
+
+Mouse release toggles only after a press began inside the control. Enter/Space
+toggle it when focused.
+
+## GuiProgressBar
+
+Allocation-free integer progress state.
+
+```c
+GuiProgressBar(int maximum);
+void set(int value);
+int percent();
+void draw(Surface surface, GuiRect area,
+          uint foreground = 15134195, uint background = 1054752,
+          uint fill = 4638894);
+```
+
+`set()` clamps to `0..maximum`. A maximum below 1 becomes 1.
+
+## Additional layout helpers
+
+```c
+static GuiRect GuiLayout.pad(GuiRect area, int left, int top, int right, int bottom);
+static GuiRect GuiLayout.center(GuiRect area, int width, int height);
+```

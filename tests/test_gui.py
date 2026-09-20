@@ -240,3 +240,64 @@ int main() {
 ''')
 p = run('run', button_focus_source)
 assert p.returncode == 0, (p.stdout, p.stderr)
+
+
+widgets_more_source = folder / 'widgets_more.tc'
+widgets_more_source.write_text(r'''
+import std.gui;
+
+int main() {
+    var surface, error = Surface.create(180, 90);
+    if (error != 0)
+        return error;
+    defer surface.destroy();
+
+    GuiRect outer = GuiRect(0, 0, 180, 90);
+    GuiRect padded = GuiLayout.pad(outer, 10, 8, 12, 6);
+    assert(padded.x == 10 && padded.y == 8);
+    assert(padded.width == 158 && padded.height == 76);
+    GuiRect centered = GuiLayout.center(outer, 60, 20);
+    assert(centered.x == 60 && centered.y == 35);
+
+    GuiCheckbox check = GuiCheckbox("ENABLED");
+    GuiRect checkArea = GuiRect(12, 12, 120, 20);
+
+    GuiEvent press;
+    press.kind = 3;
+    press.button = 1;
+    press.pressed = 1;
+    press.x = 15;
+    press.y = 15;
+    assert(!check.handleEvent(press, checkArea));
+    assert(check.down);
+
+    GuiEvent release = press;
+    release.pressed = 0;
+    assert(check.handleEvent(release, checkArea));
+    assert(check.checked);
+    assert(!check.down);
+
+    GuiEvent space;
+    space.kind = 1;
+    space.key = 32;
+    assert(check.handleEvent(space, checkArea, focused: true));
+    assert(!check.checked);
+
+    GuiProgressBar progress = GuiProgressBar(200);
+    progress.set(50);
+    assert(progress.percent() == 25);
+    progress.set(500);
+    assert(progress.value == 200 && progress.percent() == 100);
+    progress.set(-10);
+    assert(progress.value == 0);
+
+    surface.clear(Pixel.rgba(18, 24, 32));
+    check.draw(surface, checkArea);
+    progress.set(125);
+    progress.draw(surface, GuiRect(12, 48, 150, 18));
+    assert(surface.checksum() != 0);
+    return 0;
+}
+''')
+p = run('run', widgets_more_source)
+assert p.returncode == 0, (p.stdout, p.stderr)

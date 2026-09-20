@@ -110,6 +110,31 @@ class GuiLayout {
             height = 0;
         return GuiRect(area.x, y, area.width, height);
     }
+
+    static GuiRect pad(GuiRect area, int left, int top, int right, int bottom) {
+        int width = area.width - left - right;
+        int height = area.height - top - bottom;
+        if (width < 0)
+            width = 0;
+        if (height < 0)
+            height = 0;
+        return GuiRect(area.x + left, area.y + top, width, height);
+    }
+
+    static GuiRect center(GuiRect area, int width, int height) {
+        int w = width;
+        int h = height;
+        if (w > area.width)
+            w = area.width;
+        if (h > area.height)
+            h = area.height;
+        if (w < 0)
+            w = 0;
+        if (h < 0)
+            h = 0;
+        return GuiRect(area.x + (area.width - w) / 2,
+                       area.y + (area.height - h) / 2, w, h);
+    }
 }
 
 class Surface {
@@ -362,5 +387,97 @@ class GuiFocus {
             return true;
         }
         return false;
+    }
+}
+
+
+/// Stateful checkbox. Its label is borrowed and must outlive the control.
+class GuiCheckbox {
+    string text;
+    bool checked;
+    bool down;
+
+    GuiCheckbox(string text, bool checked = false) {
+        this.text = text;
+        this.checked = checked;
+        this.down = false;
+    }
+
+    bool handleEvent(GuiEvent event, GuiRect area, bool focused = false) {
+        if (event.kind == 3 && event.button == 1) {
+            if (event.pressed != 0) {
+                down = area.contains(event.x, event.y);
+                return false;
+            }
+            bool clicked = down && area.contains(event.x, event.y);
+            down = false;
+            if (clicked)
+                checked = !checked;
+            return clicked;
+        }
+        if (focused && event.kind == 1 && (event.key == 13 || event.key == 32)) {
+            checked = !checked;
+            return true;
+        }
+        return false;
+    }
+
+    void draw(Surface surface, GuiRect area,
+              uint foreground = 15134195, uint background = 1054752,
+              uint accent = 4638894) {
+        int size = area.height;
+        if (size > 18)
+            size = 18;
+        if (size < 1)
+            return;
+        GuiRect box = GuiRect(area.x, area.y + (area.height - size) / 2, size, size);
+        surface.fillRect(box.x, box.y, box.width, box.height, background);
+        surface.rect(box.x, box.y, box.width, box.height, foreground);
+        if (checked) {
+            GuiRect inner = box.inset(3);
+            surface.fillRect(inner.x, inner.y, inner.width, inner.height, accent);
+        } else if (down) {
+            GuiRect inner = box.inset(3);
+            surface.rect(inner.x, inner.y, inner.width, inner.height, accent);
+        }
+        GuiRect label = GuiRect(area.x + size + 6, area.y,
+                                area.width - size - 6, area.height);
+        GuiDraw.label(surface, label, text, foreground);
+    }
+}
+
+/// Allocation-free progress indicator with explicit integer range.
+class GuiProgressBar {
+    int value;
+    int maximum;
+
+    GuiProgressBar(int maximum) {
+        this.maximum = maximum;
+        if (this.maximum < 1)
+            this.maximum = 1;
+        this.value = 0;
+    }
+
+    void set(int value) {
+        this.value = value;
+        if (this.value < 0)
+            this.value = 0;
+        if (this.value > maximum)
+            this.value = maximum;
+    }
+
+    int percent() {
+        return value * 100 / maximum;
+    }
+
+    void draw(Surface surface, GuiRect area,
+              uint foreground = 15134195, uint background = 1054752,
+              uint fill = 4638894) {
+        surface.fillRect(area.x, area.y, area.width, area.height, background);
+        surface.rect(area.x, area.y, area.width, area.height, foreground);
+        GuiRect inner = area.inset(2);
+        int width = inner.width * value / maximum;
+        if (width > 0)
+            surface.fillRect(inner.x, inner.y, width, inner.height, fill);
     }
 }
