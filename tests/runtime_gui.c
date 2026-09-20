@@ -218,6 +218,59 @@ int main(void) {
                            &native_event.button, &native_event.pressed, &native_event.codepoint);
         assert(native_event.kind == TC_GUI_EVENT_CUSTOM && native_event.key == 91);
 
+        {
+            void *event_class = (void *)tc_cocoa.get_class("NSEvent");
+            uint64_t number = tc_cocoa_u64(native->native_window, "windowNumber");
+            TcCocoaPoint point;
+            void *empty;
+            void *letter;
+            void *key_event;
+            void *mouse_event;
+            point.x = 7;
+            point.y = 9;
+            empty = ((void *(*)(void *, TcCocoaSel, const char *))tc_cocoa.msg_send)
+                ((void *)tc_cocoa.get_class("NSString"), tc_cocoa_sel("stringWithUTF8String:"), "");
+            letter = ((void *(*)(void *, TcCocoaSel, const char *))tc_cocoa.msg_send)
+                ((void *)tc_cocoa.get_class("NSString"), tc_cocoa_sel("stringWithUTF8String:"), "a");
+
+            key_event =
+                ((void *(*)(void *, TcCocoaSel, uint64_t, TcCocoaPoint, uint64_t, double, long,
+                             void *, void *, void *, TcCocoaBool, unsigned short))tc_cocoa.msg_send)
+                (event_class, tc_cocoa_sel("keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:"),
+                 10, point, 0, 0.0, (long)number, NULL, empty, empty, 0, 123);
+            assert(key_event);
+            tc_cocoa_process_event(key_event);
+            memset(&native_event, 0, sizeof(native_event));
+            assert(tc_gui_event_pop(native, &native_event));
+            assert(native_event.kind == TC_GUI_EVENT_KEY && native_event.key == TC_KEY_LEFT);
+
+            key_event =
+                ((void *(*)(void *, TcCocoaSel, uint64_t, TcCocoaPoint, uint64_t, double, long,
+                             void *, void *, void *, TcCocoaBool, unsigned short))tc_cocoa.msg_send)
+                (event_class, tc_cocoa_sel("keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:"),
+                 10, point, 0, 0.0, (long)number, NULL, letter, letter, 0, 0);
+            assert(key_event);
+            tc_cocoa_process_event(key_event);
+            memset(&native_event, 0, sizeof(native_event));
+            assert(tc_gui_event_pop(native, &native_event));
+            assert(native_event.kind == TC_GUI_EVENT_KEY);
+            memset(&native_event, 0, sizeof(native_event));
+            assert(tc_gui_event_pop(native, &native_event));
+            assert(native_event.kind == TC_GUI_EVENT_TEXT && native_event.codepoint == 'a');
+
+            mouse_event =
+                ((void *(*)(void *, TcCocoaSel, uint64_t, TcCocoaPoint, uint64_t, double, long,
+                             void *, long, long, double))tc_cocoa.msg_send)
+                (event_class, tc_cocoa_sel("mouseEventWithType:location:modifierFlags:timestamp:windowNumber:context:eventNumber:clickCount:pressure:"),
+                 2, point, 0, 0.0, (long)number, NULL, 1, 1, 0.0);
+            assert(mouse_event);
+            tc_cocoa_process_event(mouse_event);
+            memset(&native_event, 0, sizeof(native_event));
+            assert(tc_gui_event_pop(native, &native_event));
+            assert(native_event.kind == TC_GUI_EVENT_MOUSE && native_event.button == 1);
+            assert(native_event.x == 7 && native_event.pressed == 0);
+        }
+
         tc_gui_window_close(native);
         memset(&native_event, 0, sizeof(native_event));
         tc_gui_window_next(native, 0, &native_event.kind, &native_event.key, &native_event.x,
