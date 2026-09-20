@@ -1,6 +1,7 @@
 #ifndef TC_GUI_IMPLEMENTATION
 #define TC_GUI_IMPLEMENTATION
 #include "tiny_runtime.h"
+#include "gapbuffer.c"
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -459,6 +460,130 @@ void tc_gui_text(void *handle, int32_t x, int32_t y, TinyString text, uint32_t c
     }
 }
 
+
+static int tc_gui_encode_utf8(uint32_t cp, char bytes[4]) {
+    if (cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff))
+        cp = '?';
+    if (cp < 0x80) {
+        bytes[0] = (char)cp;
+        return 1;
+    }
+    if (cp < 0x800) {
+        bytes[0] = (char)(0xc0 | (cp >> 6));
+        bytes[1] = (char)(0x80 | (cp & 63));
+        return 2;
+    }
+    if (cp < 0x10000) {
+        bytes[0] = (char)(0xe0 | (cp >> 12));
+        bytes[1] = (char)(0x80 | ((cp >> 6) & 63));
+        bytes[2] = (char)(0x80 | (cp & 63));
+        return 3;
+    }
+    bytes[0] = (char)(0xf0 | (cp >> 18));
+    bytes[1] = (char)(0x80 | ((cp >> 12) & 63));
+    bytes[2] = (char)(0x80 | ((cp >> 6) & 63));
+    bytes[3] = (char)(0x80 | (cp & 63));
+    return 4;
+}
+
+void *tc_gui_textbox_create(TinyString initial) {
+    return tc_gap_create(initial);
+}
+void tc_gui_textbox_destroy(void *handle) {
+    tc_gap_destroy(handle);
+}
+TinyString tc_gui_textbox_text(void *handle) {
+    return tc_gap_text(handle);
+}
+int32_t tc_gui_textbox_dirty(void *handle) {
+    return tc_gap_dirty(handle);
+}
+void tc_gui_textbox_clean(void *handle) {
+    tc_gap_clean(handle);
+}
+int32_t tc_gui_textbox_event(void *handle, int32_t kind, int32_t key, uint32_t codepoint) {
+    TcGap *buffer = (TcGap *)handle;
+    if (!buffer)
+        return 3;
+    if (kind == TC_GUI_EVENT_TEXT && codepoint >= 32 && codepoint != 127) {
+        char encoded[4];
+        TinyString input;
+        input.length = (size_t)tc_gui_encode_utf8(codepoint, encoded);
+        input.data = encoded;
+        return tc_gap_insert(buffer, input);
+    }
+    if (kind != TC_GUI_EVENT_KEY)
+        return 0;
+    if (key == TC_GUI_KEY_LEFT)
+        tc_gap_left(buffer);
+    else if (key == TC_GUI_KEY_RIGHT)
+        tc_gap_right(buffer);
+    else if (key == TC_GUI_KEY_HOME)
+        tc_gap_home(buffer);
+    else if (key == TC_GUI_KEY_END)
+        tc_gap_end(buffer);
+    else if (key == TC_GUI_KEY_DELETE)
+        tc_gap_delete(buffer);
+    else if (key == 8 || key == 127)
+        tc_gap_backspace(buffer);
+    return 0;
+}
+
+static size_t tc_gui_text_offset_for_index(TinyString text, size_t index) {
+    size_t offset = 0, count = 0;
+    while (offset < text.length && count < index) {
+        tc_gui_text_next(text, &offset);
+        count++;
+    }
+    return offset;
+}
+static size_t tc_gui_text_index_for_offset(TinyString text, size_t target) {
+    size_t offset = 0, count = 0;
+    if (target > text.length)
+        target = text.length;
+    while (offset < target) {
+        tc_gui_text_next(text, &offset);
+        count++;
+    }
+    return count;
+}
+
+void tc_gui_textbox_draw(void *surface_handle, void *textbox_handle, int32_t x, int32_t y,
+                         int32_t width, int32_t height, int32_t focused, uint32_t foreground,
+                         uint32_t background, uint32_t border) {
+    TcGap *buffer = (TcGap *)textbox_handle;
+    TinyString text, visible;
+    size_t caret_byte, caret_index, start_index = 0, start_byte, end_byte, capacity;
+    int32_t text_y, caret_x;
+    if (!surface_handle || !buffer || width <= 0 || height <= 0)
+        return;
+    tc_gui_fill_rect(surface_handle, x, y, width, height, background);
+    tc_gui_rect(surface_handle, x, y, width, height, border);
+    if (width < 9 || height < 9)
+        return;
+    text = tc_gap_text(buffer);
+    caret_byte = (size_t)tc_gap_position(buffer);
+    caret_index = tc_gui_text_index_for_offset(text, caret_byte);
+    capacity = (size_t)((width - 8) / 6);
+    if (capacity < 1)
+        capacity = 1;
+    if (caret_index >= capacity)
+        start_index = caret_index - capacity + 1;
+    start_byte = tc_gui_text_offset_for_index(text, start_index);
+    end_byte = tc_gui_text_offset_for_index(text, start_index + capacity);
+    visible.data = text.data + start_byte;
+    visible.length = end_byte - start_byte;
+    text_y = y + (height - 7) / 2;
+    tc_gui_text(surface_handle, x + 4, text_y, visible, foreground, 1);
+    if (focused) {
+        caret_x = x + 4 + (int32_t)(caret_index - start_index) * 6;
+        if (caret_x >= x + width - 2)
+            caret_x = x + width - 3;
+        tc_gui_fill_rect(surface_handle, caret_x, text_y, 1, 7, foreground);
+    }
+    tc_string_free(text);
+}
+
 int32_t tc_gui_buffer_resize(void *handle, int32_t width, int32_t height) {
     TcGuiBuffer *buffer = (TcGuiBuffer *)handle;
     TcGuiSurface front, back;
@@ -488,6 +613,17 @@ enum {
     TC_GUI_EVENT_RESIZE = 4,
     TC_GUI_EVENT_CLOSE = 5,
     TC_GUI_EVENT_CUSTOM = 6
+};
+enum {
+    TC_GUI_KEY_LEFT = 1001,
+    TC_GUI_KEY_RIGHT,
+    TC_GUI_KEY_UP,
+    TC_GUI_KEY_DOWN,
+    TC_GUI_KEY_HOME,
+    TC_GUI_KEY_END,
+    TC_GUI_KEY_DELETE,
+    TC_GUI_KEY_PAGE_UP,
+    TC_GUI_KEY_PAGE_DOWN
 };
 
 typedef struct TcGuiEvent {
@@ -535,6 +671,20 @@ static int32_t tc_gui_mouse_x(LPARAM value) {
 }
 static int32_t tc_gui_mouse_y(LPARAM value) {
     return (int32_t)(int16_t)((value >> 16) & 0xffff);
+}
+static int32_t tc_gui_key_code(WPARAM key) {
+    switch (key) {
+    case VK_LEFT: return TC_GUI_KEY_LEFT;
+    case VK_RIGHT: return TC_GUI_KEY_RIGHT;
+    case VK_UP: return TC_GUI_KEY_UP;
+    case VK_DOWN: return TC_GUI_KEY_DOWN;
+    case VK_HOME: return TC_GUI_KEY_HOME;
+    case VK_END: return TC_GUI_KEY_END;
+    case VK_DELETE: return TC_GUI_KEY_DELETE;
+    case VK_PRIOR: return TC_GUI_KEY_PAGE_UP;
+    case VK_NEXT: return TC_GUI_KEY_PAGE_DOWN;
+    default: return (int32_t)key;
+    }
 }
 static void tc_gui_push_mouse(TcGuiWindow *window, LPARAM value, int button, int pressed) {
     TcGuiEvent event;
@@ -589,7 +739,7 @@ static LRESULT CALLBACK tc_gui_window_proc(HWND hwnd, UINT message, WPARAM wpara
         TcGuiEvent event;
         memset(&event, 0, sizeof(event));
         event.kind = TC_GUI_EVENT_KEY;
-        event.key = (int32_t)wparam;
+        event.key = tc_gui_key_code(wparam);
         tc_gui_event_push(window, event);
         return 0;
     }
