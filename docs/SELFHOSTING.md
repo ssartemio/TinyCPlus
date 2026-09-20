@@ -18,13 +18,47 @@ etapas 2 y 3 es idéntico byte a byte. `compiler/` se conserva como semilla; el
 C generado de la etapa 1 podrá distribuirse para arrancar con solo un
 compilador de C.
 
+## Estado
+
+| Pieza | Estado | Verificación |
+|---|---|---|
+| `--emit-typed-ast` en la etapa 0 | hecho | determinista, anotado con tipos y con el mismo error semántico que `check` |
+| Lexer (`selfhost/lexer.tc`) | hecho: mismo stdout, stderr y código de salida que `--emit-tokens` | `tests/test_selfhost.py` |
+| Parser | pendiente | `--emit-ast` |
+| Semántica | pendiente | `--emit-typed-ast` |
+| Generación de C | pendiente | `--emit-c` y las pruebas existentes |
+
+`tests/test_selfhost.py` compila la etapa 1 con la etapa 0 y compara ambas sobre
+todos los `.tc` del repositorio, 64 casos límite escritos a mano (errores léxicos,
+literales, BOM, NUL, el límite de tokens) y entradas aleatorias con semilla fija.
+Se ejecuta dentro de `tests/run_all.py`. Para probarlo a mano:
+
+```sh
+./bin/tiny build selfhost/main.tc -o build/selfhost/tinyc1
+./build/selfhost/tinyc1 --emit-tokens examples/hello.tc
+python3 tests/test_selfhost.py
+```
+
+## Notas del port
+
+- Los módulos de la etapa 1 son planos: `import lexer;` se resuelve relativo al
+  directorio del archivo que importa, y los nombres de tipo deben ser únicos en
+  todo el programa (véase STATUS.md).
+- El lexer reproduce detalles de la etapa 0 que no son evidentes: las columnas
+  cuentan bytes, el texto se corta en el primer NUL, un literal con más de un
+  carácter UTF-8 no es un `char` válido y la etapa 0 rechaza más de 1.048.576
+  tokens.
+- Una sola función `fail(archivo, línea, columna, mensaje)` emite cada diagnóstico
+  y termina con `exit(1)`, como describe la estrategia de errores.
+- TinyC+ no tiene operador ternario: el port usa variables intermedias.
+
 ## Reglas durante el port
 
 - La sintaxis del lenguaje se congela mientras se porta. Un cambio de lenguaje
   implica actualizar la etapa 0 y la etapa 1 en el mismo PR.
 - La etapa 1 solo usa lo que acepta la etapa 0 de la etiqueta de referencia.
-- Los formatos de `--emit-tokens` y `--emit-ast` son un contrato: cualquier
-  cambio se hace en ambos compiladores a la vez.
+- Los formatos de `--emit-tokens`, `--emit-ast` y `--emit-typed-ast` son un
+  contrato: cualquier cambio se hace en ambos compiladores a la vez.
 
 ## Alcance de la primera versión
 
@@ -59,7 +93,7 @@ Por cada fase portada, un arnés ejecuta ambos compiladores sobre `examples/`,
 |---|---|
 | Lexer | `--emit-tokens` |
 | Parser | `--emit-ast` |
-| Semántica | `--emit-typed-ast` (pendiente de agregar a la etapa 0) |
+| Semántica | `--emit-typed-ast` (ya disponible en la etapa 0) |
 | Generación | `--emit-c` y ejecución de las pruebas existentes |
 
 ## Librería estándar disponible para el port

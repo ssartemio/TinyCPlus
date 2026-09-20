@@ -1,0 +1,39 @@
+import std.string;
+import std.collections;
+import std.fs;
+import std.io;
+import std.process;
+import lexer;
+
+/// Stage 1 driver. It grows phase by phase (see docs/SELFHOSTING.md); today it only
+/// reproduces `tiny --emit-tokens`.
+int main()
+{
+    if (Arguments.count() != 3 || Arguments.get(1) != "--emit-tokens")
+    {
+        Console.writeErrorLine("usage: tinyc1 --emit-tokens source.tc");
+        return 2;
+    }
+    string path = Arguments.get(2);
+    var source, error = File.readAll(path);
+    if (error != 0)
+    {
+        var text = StringBuilder.create();
+        text.append("tiny: cannot read '");
+        text.append(path);
+        text.append("' (maximum source size 32 MiB)");
+        Console.writeErrorLine(text.view());
+        return 1;
+    }
+    defer source.destroy();
+
+    var scanner = Lexer.create(path, source.view());
+    defer scanner.destroy();
+    scanner.run();
+
+    var output = StringBuilder.create();
+    defer output.destroy();
+    writeTokens(&scanner.tokens, &output);
+    print(output.view());
+    return 0;
+}

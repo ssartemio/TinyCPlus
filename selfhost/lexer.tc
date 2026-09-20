@@ -1,0 +1,362 @@
+module lexer;
+import std.string;
+import std.collections;
+import std.io;
+import std.process;
+
+/// Stage 1 lexer: a line-for-line port of compiler/lexer.c. Its output must match
+/// `tiny --emit-tokens` byte for byte, including the diagnostics; tests/test_selfhost.py
+/// compares the two on every source in the repository and on malformed inputs.
+///
+/// Positions count bytes, as in stage 0. Like the C lexer, it stops at the first NUL byte.
+
+enum TokenKind { Eof, Identifier, Integer, Float, String, Char, Operator }
+
+/// text is a view into the source, which must outlive the tokens.
+class Token
+{
+    TokenKind kind;
+    string text;
+    int line;
+    int column;
+}
+
+/// Stage 0 grows its token array by doubling up to 2,000,000 entries; the last size that
+/// fits is 2^20, so this is the most tokens it accepts.
+const u64 tokenLimit = 1048576;
+
+bool isSpace(char c) { return c == ' ' || (c >= '\t' && c <= '\r'); }
+bool isDigit(char c) { return c >= '0' && c <= '9'; }
+bool isAlpha(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
+bool isAlnum(char c) { return isAlpha(c) || isDigit(c); }
+bool isHex(char c) { return isDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'); }
+
+/// The single diagnostic path: `file:line:col: error: message`, then exit(1). Stage 0 stops at
+/// the first error too, so there is no recovery and no second diagnostic.
+void fail(string file, int line, int column, string message)
+{
+    var text = StringBuilder.create();
+    text.append(file);
+    text.appendChar(':');
+    text.appendInt(line);
+    text.appendChar(':');
+    text.appendInt(column);
+    text.append(": error: ");
+    text.append(message);
+    Console.writeErrorLine(text.view());
+    exit(1);
+}
+
+string kindName(TokenKind kind)
+{
+    switch (kind)
+    {
+        case TokenKind.Eof:
+            return "eof";
+        case TokenKind.Identifier:
+            return "identifier";
+        case TokenKind.Integer:
+            return "integer";
+        case TokenKind.Float:
+            return "float";
+        case TokenKind.String:
+            return "string";
+        case TokenKind.Char:
+            return "char";
+        case TokenKind.Operator:
+            return "operator";
+    }
+}
+
+/// Length of the operator that starts at (a, b, c), or 0 when a is not an operator.
+/// Longest match first, which is what the ordered table in lexer.c amounts to.
+int operatorLength(char a, char b, char c)
+{
+    if ((a == '>' && b == '>' && c == '=') || (a == '<' && b == '<' && c == '=') ||
+        (a == '.' && b == '.' && c == '.'))
+        return 3;
+    switch (b)
+    {
+        case '=':
+            if (a == '=' || a == '!' || a == '<' || a == '>' || a == '+' || a == '-' ||
+                a == '*' || a == '/' || a == '%' || a == '&' || a == '|' || a == '^')
+                return 2;
+        case '&':
+            if (a == '&') return 2;
+        case '|':
+            if (a == '|') return 2;
+        case '+':
+            if (a == '+') return 2;
+        case '-':
+            if (a == '-') return 2;
+        case '<':
+            if (a == '<') return 2;
+        case '>':
+            if (a == '>' || a == '-' || a == '=') return 2;
+        case ':':
+            if (a == ':') return 2;
+        default:
+        {
+        }
+    }
+    switch (a)
+    {
+        case '+', '-', '*', '/', '%', '=', '<', '>', '!', '&', '|', '^', '~', '(', ')', '{', '}',
+            '[', ']', ';', ',', '.', ':', '?', '@':
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+class Lexer
+{
+    string file;
+    string source;
+    u64 length;
+    u64 pos;
+    int line;
+    int column;
+    Array<Token> tokens;
+
+    /// Stage 0 works on a C string, so the source ends at its first NUL byte.
+    static Lexer create(string file, string source)
+    {
+        Lexer lexer;
+        lexer.file = file;
+        lexer.source = source;
+        lexer.length = 0;
+        while (lexer.length < len(source) && source[lexer.length] != '\0') lexer.length++;
+        lexer.line = 1;
+        lexer.column = 1;
+        lexer.tokens = Array<Token>.create();
+        return lexer;
+    }
+
+    void destroy()
+    {
+        tokens.destroy();
+    }
+
+    /// The byte at index, or NUL past the end (as reading the terminator of a C string does).
+    char at(u64 index)
+    {
+        if (index >= length) return '\0';
+        return source[index];
+    }
+
+    void push(TokenKind kind, u64 start, u64 end, int atLine, int atColumn)
+    {
+        if (tokens.length == tokenLimit) fail(file, atLine, atColumn, "source exceeds token limit");
+        Token token;
+        token.kind = kind;
+        token.text = source[start:end];
+        token.line = atLine;
+        token.column = atColumn;
+        tokens.push(token);
+    }
+
+    void advance()
+    {
+        pos++;
+        column++;
+    }
+
+    void skipBlockComment(int atLine, int atColumn)
+    {
+        int level = 1;
+        pos += 2;
+        column += 2;
+        while (pos < length && level > 0)
+        {
+            if (at(pos) == '/' && at(pos + 1) == '*')
+            {
+                level++;
+                pos += 2;
+                column += 2;
+            }
+            else if (at(pos) == '*' && at(pos + 1) == '/')
+            {
+                level--;
+                pos += 2;
+                column += 2;
+            }
+            else
+            {
+                if (at(pos) == '\n')
+                {
+                    line++;
+                    column = 1;
+                }
+                else
+                    column++;
+                pos++;
+            }
+        }
+        if (level > 0) fail(file, atLine, atColumn, "unterminated block comment");
+    }
+
+    void number(int atLine, int atColumn)
+    {
+        u64 start = pos;
+        TokenKind kind = TokenKind.Integer;
+        if (at(pos) == '0' && (at(pos + 1) == 'x' || at(pos + 1) == 'X'))
+        {
+            pos += 2;
+            column += 2;
+            if (!isHex(at(pos))) fail(file, atLine, atColumn, "hex literal needs digits");
+            while (isHex(at(pos))) advance();
+        }
+        else
+        {
+            while (isDigit(at(pos))) advance();
+            if (at(pos) == '.' && at(pos + 1) != '.')
+            {
+                kind = TokenKind.Float;
+                advance();
+                while (isDigit(at(pos))) advance();
+            }
+            if (at(pos) == 'e' || at(pos) == 'E')
+            {
+                kind = TokenKind.Float;
+                advance();
+                if (at(pos) == '+' || at(pos) == '-') advance();
+                if (!isDigit(at(pos))) fail(file, atLine, atColumn, "exponent needs digits");
+                while (isDigit(at(pos))) advance();
+            }
+        }
+        if (isAlpha(at(pos)) || at(pos) == '_')
+            fail(file, atLine, atColumn, "invalid numeric literal suffix");
+        push(kind, start, pos, atLine, atColumn);
+    }
+
+    void literal(int atLine, int atColumn)
+    {
+        u64 start = pos;
+        char quote = at(pos);
+        int count = 0;
+        advance();
+        while (pos < length && at(pos) != quote)
+        {
+            if (at(pos) == '\n' || at(pos) == '\r') fail(file, atLine, atColumn, "newline in literal");
+            if (at(pos) == '\\')
+            {
+                advance();
+                if (pos >= length) break;
+                if (at(pos) == 'x')
+                {
+                    if (!isHex(at(pos + 1)) || !isHex(at(pos + 2)))
+                        fail(file, atLine, atColumn, "hex escape requires exactly two digits");
+                    pos += 2;
+                    column += 2;
+                }
+                else
+                {
+                    char escape = at(pos);
+                    bool known = escape == 'a' || escape == 'b' || escape == 'f' || escape == 'n' ||
+                                 escape == 'r' || escape == 't' || escape == 'v' || escape == '\\' ||
+                                 escape == '"' || escape == '\'' || escape == '0';
+                    if (!known)
+                    {
+                        var text = StringBuilder.create();
+                        text.append("unsupported escape '\\");
+                        text.appendChar(escape);
+                        text.appendChar('\'');
+                        fail(file, atLine, atColumn, text.view());
+                    }
+                }
+            }
+            advance();
+            count++;
+        }
+        if (pos >= length) fail(file, atLine, atColumn, "unterminated literal");
+        advance();
+        if (quote == '\'' && count != 1)
+            fail(file, atLine, atColumn, "character literal must contain one character");
+        TokenKind kind = TokenKind.Char;
+        if (quote == '"') kind = TokenKind.String;
+        push(kind, start, pos, atLine, atColumn);
+    }
+
+    void run()
+    {
+        if (length >= 3 && source[0] == '\xef' && source[1] == '\xbb' && source[2] == '\xbf') pos = 3;
+        while (pos < length)
+        {
+            char ch = source[pos];
+            int atLine = line;
+            int atColumn = column;
+            if (isSpace(ch))
+            {
+                if (ch == '\n')
+                {
+                    line++;
+                    column = 1;
+                }
+                else
+                    column++;
+                pos++;
+                continue;
+            }
+            if (ch == '/' && at(pos + 1) == '/')
+            {
+                while (pos < length && at(pos) != '\n') advance();
+                continue;
+            }
+            if (ch == '/' && at(pos + 1) == '*')
+            {
+                skipBlockComment(atLine, atColumn);
+                continue;
+            }
+            if (isAlpha(ch) || ch == '_')
+            {
+                u64 start = pos;
+                advance();
+                while (isAlnum(at(pos)) || at(pos) == '_') advance();
+                push(TokenKind.Identifier, start, pos, atLine, atColumn);
+                continue;
+            }
+            if (isDigit(ch))
+            {
+                number(atLine, atColumn);
+                continue;
+            }
+            if (ch == '"' || ch == '\'')
+            {
+                literal(atLine, atColumn);
+                continue;
+            }
+            int size = operatorLength(ch, at(pos + 1), at(pos + 2));
+            if (size == 0)
+            {
+                var text = StringBuilder.create();
+                text.append("unexpected byte 0x");
+                int value = cast<int>(cast<u8>(ch));
+                if (value < 16) text.appendChar('0');
+                text.appendHex(cast<u64>(value));
+                fail(file, atLine, atColumn, text.view());
+            }
+            push(TokenKind.Operator, pos, pos + cast<u64>(size), atLine, atColumn);
+            pos += cast<u64>(size);
+            column += size;
+        }
+        push(TokenKind.Eof, pos, pos, line, column);
+    }
+}
+
+/// Appends the same text as `tiny --emit-tokens`: `line:col<TAB>kind<TAB>text`, one per line.
+void writeTokens(Array<Token>* tokens, StringBuilder* out)
+{
+    for (u64 i = 0; i < tokens.length; i++)
+    {
+        Token token = tokens.get(i);
+        out.appendInt(token.line);
+        out.appendChar(':');
+        out.appendInt(token.column);
+        out.appendChar('\t');
+        out.append(kindName(token.kind));
+        out.appendChar('\t');
+        out.append(token.text);
+        out.appendChar('\n');
+    }
+}
