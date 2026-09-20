@@ -239,6 +239,7 @@ int main(void) {
             TcCocoaPoint point;
             void *empty;
             void *letter;
+            void *sequence;
             void *key_event;
             void *mouse_event;
             point.x = 7;
@@ -247,6 +248,9 @@ int main(void) {
                 ((void *)tc_cocoa.get_class("NSString"), tc_cocoa_sel("stringWithUTF8String:"), "");
             letter = ((void *(*)(void *, TcCocoaSel, const char *))tc_cocoa.msg_send)
                 ((void *)tc_cocoa.get_class("NSString"), tc_cocoa_sel("stringWithUTF8String:"), "a");
+            sequence = ((void *(*)(void *, TcCocoaSel, const char *))tc_cocoa.msg_send)
+                ((void *)tc_cocoa.get_class("NSString"), tc_cocoa_sel("stringWithUTF8String:"),
+                 "A\xc3\xa9\xe2\x82\xac");
 
             key_event =
                 ((void *(*)(void *, TcCocoaSel, uint64_t, TcCocoaPoint, uint64_t, double, long,
@@ -272,6 +276,26 @@ int main(void) {
             memset(&native_event, 0, sizeof(native_event));
             assert(tc_gui_event_pop(native, &native_event));
             assert(native_event.kind == TC_GUI_EVENT_TEXT && native_event.codepoint == 'a');
+
+            key_event =
+                ((void *(*)(void *, TcCocoaSel, uint64_t, TcCocoaPoint, uint64_t, double, long,
+                             void *, void *, void *, TcCocoaBool, unsigned short))tc_cocoa.msg_send)
+                (event_class, tc_cocoa_sel("keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:"),
+                 10, point, 0, 0.0, (long)number, NULL, sequence, sequence, 0, 0);
+            assert(key_event);
+            tc_cocoa_process_event(key_event);
+            memset(&native_event, 0, sizeof(native_event));
+            assert(tc_gui_event_pop(native, &native_event));
+            assert(native_event.kind == TC_GUI_EVENT_KEY);
+            memset(&native_event, 0, sizeof(native_event));
+            assert(tc_gui_event_pop(native, &native_event));
+            assert(native_event.kind == TC_GUI_EVENT_TEXT && native_event.codepoint == 'A');
+            memset(&native_event, 0, sizeof(native_event));
+            assert(tc_gui_event_pop(native, &native_event));
+            assert(native_event.kind == TC_GUI_EVENT_TEXT && native_event.codepoint == 0x00e9u);
+            memset(&native_event, 0, sizeof(native_event));
+            assert(tc_gui_event_pop(native, &native_event));
+            assert(native_event.kind == TC_GUI_EVENT_TEXT && native_event.codepoint == 0x20acu);
 
             mouse_event =
                 ((void *(*)(void *, TcCocoaSel, uint64_t, TcCocoaPoint, uint64_t, double, long,

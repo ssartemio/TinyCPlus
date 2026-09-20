@@ -322,27 +322,59 @@ static int tc_cocoa_delegate_class_ready(void) {
     tc_cocoa.register_class_pair(tc_cocoa_delegate_class);
     return 1;
 }
-static uint32_t tc_cocoa_utf8_first(const char *text) {
+static uint32_t tc_cocoa_utf8_next(const char *text, size_t length, size_t *offset) {
     const unsigned char *s = (const unsigned char *)text;
+    size_t start = *offset;
     uint32_t cp;
     int need, i;
-    if (!s || !*s)
+    if (!s || start >= length)
         return 0;
-    if (s[0] < 0x80)
-        return s[0];
-    if (s[0] >= 0xc2 && s[0] <= 0xdf) {
-        cp = s[0] & 0x1fu; need = 1;
-    } else if (s[0] >= 0xe0 && s[0] <= 0xef) {
-        cp = s[0] & 0x0fu; need = 2;
-    } else if (s[0] >= 0xf0 && s[0] <= 0xf4) {
-        cp = s[0] & 0x07u; need = 3;
-    } else return 0xfffdu;
-    for (i = 1; i <= need; i++) {
-        if ((s[i] & 0xc0u) != 0x80u)
-            return 0xfffdu;
-        cp = (cp << 6) | (s[i] & 0x3fu);
+    if (s[start] < 0x80) {
+        *offset = start + 1;
+        return s[start];
     }
+    if (s[start] >= 0xc2 && s[start] <= 0xdf) {
+        cp = s[start] & 0x1fu; need = 1;
+    } else if (s[start] >= 0xe0 && s[start] <= 0xef) {
+        cp = s[start] & 0x0fu; need = 2;
+    } else if (s[start] >= 0xf0 && s[start] <= 0xf4) {
+        cp = s[start] & 0x07u; need = 3;
+    } else {
+        *offset = start + 1;
+        return 0xfffdu;
+    }
+    if (start + (size_t)need >= length) {
+        *offset = length;
+        return 0xfffdu;
+    }
+    for (i = 1; i <= need; i++) {
+        if ((s[start + (size_t)i] & 0xc0u) != 0x80u) {
+            *offset = start + (size_t)i;
+            return 0xfffdu;
+        }
+        cp = (cp << 6) | (s[start + (size_t)i] & 0x3fu);
+    }
+    *offset = start + (size_t)need + 1;
+    if (cp > 0x10ffffu || (cp >= 0xd800u && cp <= 0xdfffu))
+        return 0xfffdu;
     return cp;
+}
+
+static void tc_cocoa_push_text(TcGuiWindow *window, const char *utf8) {
+    size_t offset = 0, length;
+    if (!utf8)
+        return;
+    length = strlen(utf8);
+    while (offset < length) {
+        TcGuiEvent event;
+        uint32_t cp = tc_cocoa_utf8_next(utf8, length, &offset);
+        if (!cp)
+            break;
+        memset(&event, 0, sizeof(event));
+        event.kind = TC_GUI_EVENT_TEXT;
+        event.codepoint = cp;
+        tc_gui_event_push(window, event);
+    }
 }
 static int32_t tc_cocoa_key(uint64_t keycode) {
     switch (keycode) {
@@ -387,13 +419,8 @@ static void tc_cocoa_process_event(void *native_event) {
         characters = tc_cocoa_id0(native_event, "characters");
         utf8 = characters ? ((const char *(*)(void *, TcCocoaSel))tc_cocoa.msg_send)
                             (characters, tc_cocoa_sel("UTF8String")) : NULL;
-        if (utf8 && *utf8) {
-            memset(&event, 0, sizeof(event));
-            event.kind = TC_GUI_EVENT_TEXT;
-            event.codepoint = tc_cocoa_utf8_first(utf8);
-            if (event.codepoint)
-                tc_gui_event_push(window, event);
-        }
+        if (utf8 && *utf8)
+            tc_cocoa_push_text(window, utf8);
     } else if (type == 1 || type == 2 || type == 3 || type == 4 ||
                type == 5 || type == 6 || type == 7 || type == 25 || type == 26 || type == 27) {
         TcCocoaPoint point = tc_cocoa_point(native_event, "locationInWindow");
