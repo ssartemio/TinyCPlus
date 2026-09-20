@@ -40,9 +40,9 @@ def run(label, command, timeout=600):
         return False
 
 run('Language, diagnostics, lowering and deterministic fuzzing', [sys.executable, ROOT/'tests/test_compiler.py', '--fuzz', args.fuzz, *(['--cc',args.cc] if args.cc else [])])
-for name in ('test_modules_ffi.py', 'test_tools.py', 'test_stdlib.py', 'test_editor.py', 'test_golden.py', 'test_tutorial.py'):
+for name in ('test_modules_ffi.py', 'test_tools.py', 'test_stdlib.py', 'test_selfhost.py', 'test_editor.py', 'test_golden.py', 'test_tutorial.py'):
     command = [sys.executable, ROOT/'tests'/name]
-    if name in ('test_tutorial.py', 'test_stdlib.py') and args.cc:
+    if name in ('test_tutorial.py', 'test_stdlib.py', 'test_selfhost.py') and args.cc:
         command += ['--cc', args.cc]
     run(name, command)
 bundled = ROOT/'third_party/tcc'/('tcc.exe' if os.name == 'nt' else 'posix/tcc')

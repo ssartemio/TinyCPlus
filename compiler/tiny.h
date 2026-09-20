@@ -181,6 +181,7 @@ void dump_tokens(Context *, FILE *);
 Node *node(Context *, NodeKind, Loc);
 Node *parse(Context *);
 void dump_ast(Node *, FILE *, int);
+void dump_typed_ast(Context *, Node *, FILE *, int);
 Type *type_primitive(Context *, TypeKind);
 Type *type_named(Context *, const char *);
 Type *type_derive(Context *, TypeKind, Type *, size_t);

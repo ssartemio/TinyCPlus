@@ -354,6 +354,7 @@ Opciones de inspección:
 ```bash
 tinyc --emit-c programa.tc
 tinyc --emit-ast programa.tc
+tinyc --emit-typed-ast programa.tc
 tinyc --emit-tokens programa.tc
 tinyc --emit-asm programa.tc
 ```

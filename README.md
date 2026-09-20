@@ -74,6 +74,7 @@ La compilación es nativa para el host; no hay interfaz de compilación cruzada.
 .\bin\tiny.exe build examples\core.tc -o bin\core.exe
 .\bin\tiny.exe --emit-c examples\core.tc -o build\core.c
 .\bin\tiny.exe --emit-ast examples\core.tc
+.\bin\tiny.exe --emit-typed-ast examples\core.tc
 .\bin\tiny.exe --emit-tokens examples\core.tc
 .\bin\tiny.exe --emit-asm examples\core.tc --cc gcc -o build\core.s
 .\bin\tiny.exe fmt examples\hello.tc

@@ -140,6 +140,7 @@ tiny run file.tc
 tiny build file.tc -o app
 tiny --emit-c file.tc -o file.c
 tiny --emit-ast file.tc
+tiny --emit-typed-ast file.tc
 tiny --emit-tokens file.tc
 tiny --emit-asm file.tc --cc clang -o file.s
 tiny fmt file.tc

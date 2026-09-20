@@ -765,7 +765,9 @@ Node *parse(Context *c) {
     }
     return p;
 }
-void dump_ast(Node *n, FILE *out, int indent) {
+/* Shared by --emit-ast (c == NULL) and --emit-typed-ast: with a context, every node that the
+   semantic pass typed is followed by " : <type>". */
+static void dump_node(Context *c, Node *n, FILE *out, int indent) {
     static const char *names[] = {
         "Program", "FunctionDecl", "Class",  "Interface",  "Extension", "Property", "Block",
         "VarDecl", "ExprStmt",     "Return", "If",         "While",     "For",      "Range",
@@ -778,20 +780,29 @@ void dump_ast(Node *n, FILE *out, int indent) {
         int i;
         for (i = 0; i < indent; i++)
             fputc(' ', out);
-        fprintf(out, "%s%s%s%s%s @%d:%d\n", names[n->kind], n->name ? " " : "",
+        fprintf(out, "%s%s%s%s%s @%d:%d", names[n->kind], n->name ? " " : "",
                 n->name ? n->name : "", n->text ? " " : "", n->text ? n->text : "", n->loc.line,
                 n->loc.col);
+        if (c && n->type)
+            fprintf(out, " : %s", type_name(c, n->type));
+        fputc('\n', out);
         if (n->params)
-            dump_ast(n->params, out, indent + 2);
+            dump_node(c, n->params, out, indent + 2);
         if (n->args)
-            dump_ast(n->args, out, indent + 2);
+            dump_node(c, n->args, out, indent + 2);
         if (n->a)
-            dump_ast(n->a, out, indent + 2);
+            dump_node(c, n->a, out, indent + 2);
         if (n->b)
-            dump_ast(n->b, out, indent + 2);
+            dump_node(c, n->b, out, indent + 2);
         if (n->c)
-            dump_ast(n->c, out, indent + 2);
+            dump_node(c, n->c, out, indent + 2);
         if (n->body)
-            dump_ast(n->body, out, indent + 2);
+            dump_node(c, n->body, out, indent + 2);
     }
+}
+void dump_ast(Node *n, FILE *out, int indent) {
+    dump_node(NULL, n, out, indent);
+}
+void dump_typed_ast(Context *c, Node *n, FILE *out, int indent) {
+    dump_node(c, n, out, indent);
 }
