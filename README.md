@@ -62,6 +62,8 @@ python3 build.py --cc cc
 ```
 
 El bootstrap POSIX necesita `sh`, `make`, un compilador C y el SDK del sistema.
+Instala TinyCC en `third_party/tcc/posix/` (ignorado por git), de modo que nunca
+modifica el paquete Windows versionado en `third_party/tcc`.
 El backend externo permite ejecutar programas sin libtcc; el REPL necesita libtcc.
 La compilación es nativa para el host; no hay interfaz de compilación cruzada.
 
@@ -115,6 +117,20 @@ interoperabilidad Protobuf/gRPC, widgets y edición con entradas reproducibles.
 El informe JSON se escribe en `build/test-report.json`. `--skip-interop` omite
 explícitamente las pruebas que necesitan paquetes Python; no es una validación completa.
 
+## Finales de línea
+
+`.gitattributes` guarda todo el texto con LF y lo extrae con LF en todas las
+plataformas, para que los archivos generados (documentación, snapshots, C
+emitido) sean idénticos byte a byte. Después de actualizar a esta versión, un
+clon existente se normaliza una sola vez con:
+
+```sh
+git rm --cached -r -q .
+git reset --hard
+```
+
+(Confirme o guarde antes sus cambios locales: `reset --hard` los descarta.)
+
 ## Documentación
 
 - [Lenguaje, memoria y ejemplos](docs/LANGUAGE.md)
@@ -124,6 +140,7 @@ explícitamente las pruebas que necesitan paquetes Python; no es una validación
 - [TUI y editor](docs/TUI.md)
 - [Cobertura del roadmap y límites](docs/STATUS.md)
 - [Índice de API estándar](docs/API.md)
+- [Plan de autohospedaje](docs/SELFHOSTING.md)
 - [Dependencias y licencias](THIRD_PARTY.md)
 - [Wiki completa del proyecto](wiki/Home.md)
 

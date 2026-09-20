@@ -5,3 +5,7 @@ __pycache__/
 *.out
 a.exe
 out.s
+third_party/tcc/posix/
+bin/tiny
+bin/tinyc
+bin/tinyedit

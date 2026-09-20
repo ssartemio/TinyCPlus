@@ -21,6 +21,8 @@ for path in ROOT.rglob('*'):
         continue
     if rel.parts[0]=='bin' and path.name not in ('tiny.exe','tinyc.exe','tinyedit.exe','tiny','tinyc','tinyedit'):
         continue
+    if rel.parts[:3]==('third_party','tcc','posix'):
+        continue
     if rel.parts[:2]==('third_party','nghttp2') and path.name in ('nghttp2.dll','libnghttp2.dll.a'):
         continue
     files.append((rel.as_posix(),path))

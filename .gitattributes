@@ -1,0 +1,27 @@
+# Every text file is stored and checked out with LF on all platforms, so
+# generated files (docs, snapshots, emitted C) are byte-identical everywhere.
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binaries and archives are never converted.
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.a binary
+*.o binary
+*.obj binary
+*.lib binary
+*.zip binary
+*.gz binary
+*.png binary
+*.ico binary
+third_party/tcc/VERSION -text
+
+# Upstream vendored Windows build files are kept byte-for-byte.
+third_party/nghttp2/src/Makefile.msvc -text
+third_party/nghttp2/src/version.rc.in -text

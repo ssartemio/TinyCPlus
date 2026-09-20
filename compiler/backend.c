@@ -1,4 +1,11 @@
 #include "tiny.h"
+/* Windows uses the committed portable package; POSIX hosts build theirs with
+   tools/bootstrap.py into an untracked subdirectory. */
+#ifdef _WIN32
+#define TC_HOME_DIRECTORY "third_party/tcc"
+#else
+#define TC_HOME_DIRECTORY "third_party/tcc/posix"
+#endif
 #ifdef _WIN32
 #include <windows.h>
 #include <process.h>
@@ -191,7 +198,7 @@ static int load_tcc(Context *c, const char *root, TccApi *api, void **handle) {
 #endif
     path = getenv("LIBTCC_PATH");
     if (!path)
-        path = tc_format(c, "%s/third_party/tcc/" TC_SHARED_LIBRARY, root);
+        path = tc_format(c, "%s/" TC_HOME_DIRECTORY "/" TC_SHARED_LIBRARY, root);
     h = dlopen(path, RTLD_NOW);
     if (!h)
         h = dlopen(TC_SHARED_LIBRARY, RTLD_NOW);
@@ -293,7 +300,7 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
         sources[source_count++] = (char *)extra_options[0][j];
     if (!cc && !assembly && load_tcc(c, root, &api, &handle)) {
         TCCState *s = api.create();
-        const char *libroot = tc_format(c, "%s/third_party/tcc", root);
+        const char *libroot = tc_format(c, "%s/" TC_HOME_DIRECTORY, root);
         char *default_args[] = {"tiny-program", NULL};
         if (!s) {
             unload_tcc(handle);
