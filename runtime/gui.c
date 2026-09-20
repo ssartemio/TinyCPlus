@@ -651,6 +651,7 @@ typedef struct TcGuiWindow {
     void *native_app;
     void *native_window;
     void *native_view;
+    void *native_delegate;
     void *native_pool;
     void *native_image;
     void *native_provider;

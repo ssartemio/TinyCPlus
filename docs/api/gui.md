@@ -123,9 +123,7 @@ tiny run app.tc --gui-backend cocoa
 ```
 
 The Cocoa bridge is implemented in pure C by loading the Objective-C runtime,
-AppKit and CoreGraphics dynamically, so it also works with libtcc. The first
-Cocoa window is fixed-size; resize support and explicit HiDPI policy are still
-future work.
+AppKit and CoreGraphics dynamically, so it also works with libtcc. Cocoa resize notifications rebuild the TinyC+ framebuffer and emit `GuiEvent.resize`; an explicit HiDPI scaling policy is still future work.
 
 
 ## GuiTextBox

@@ -211,6 +211,21 @@ int main(void) {
         tc_gui_surface_clear(tc_gui_window_surface(native), blue);
         assert(tc_gui_window_present(native) == tc_gui_window_width(native) * tc_gui_window_height(native));
 
+        {
+            TcCocoaSize size;
+            size.width = 140;
+            size.height = 90;
+            ((void (*)(void *, TcCocoaSel, TcCocoaSize))tc_cocoa.msg_send)
+                (native->native_window, tc_cocoa_sel("setContentSize:"), size);
+            memset(&native_event, 0, sizeof(native_event));
+            tc_gui_window_next(native, 0, &native_event.kind, &native_event.key, &native_event.x,
+                               &native_event.y, &native_event.width, &native_event.height,
+                               &native_event.button, &native_event.pressed, &native_event.codepoint);
+            assert(native_event.kind == TC_GUI_EVENT_RESIZE);
+            assert(native_event.width == 140 && native_event.height == 90);
+            assert(tc_gui_window_width(native) == 140 && tc_gui_window_height(native) == 90);
+        }
+
         assert(tc_gui_window_post(native, TC_GUI_EVENT_CUSTOM, 91, 0, 0, 0, 0, 0, 0, 0) == 0);
         memset(&native_event, 0, sizeof(native_event));
         tc_gui_window_next(native, 0, &native_event.kind, &native_event.key, &native_event.x,

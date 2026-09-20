@@ -40,6 +40,7 @@ typedef struct TcCocoaMap {
 static TcCocoaApi tc_cocoa;
 static int tc_cocoa_loaded;
 static TcCocoaClass tc_cocoa_view_class;
+static TcCocoaClass tc_cocoa_delegate_class;
 static TcCocoaMap *tc_cocoa_windows;
 
 static int tc_cocoa_symbol(void *handle, const char *name, void *field, size_t size) {
@@ -229,6 +230,98 @@ static int tc_cocoa_view_class_ready(void) {
     tc_cocoa.register_class_pair(tc_cocoa_view_class);
     return 1;
 }
+static TcCocoaRect tc_cocoa_rect(void *object, const char *selector) {
+#if defined(__x86_64__)
+    TcCocoaRect result;
+    void *stret = dlsym(tc_cocoa.objc_handle, "objc_msgSend_stret");
+    if (!stret) {
+        memset(&result, 0, sizeof(result));
+        return result;
+    }
+    ((void (*)(TcCocoaRect *, void *, TcCocoaSel))stret)
+        (&result, object, tc_cocoa_sel(selector));
+    return result;
+#else
+    return ((TcCocoaRect (*)(void *, TcCocoaSel))tc_cocoa.msg_send)
+        (object, tc_cocoa_sel(selector));
+#endif
+}
+static void tc_cocoa_resize_notification(void *self, TcCocoaSel command, void *notification) {
+    void *native_window;
+    TcCocoaMap *entry;
+    TcGuiWindow *window;
+    void *view;
+    TcCocoaRect bounds;
+    int32_t width, height;
+    int result;
+    TcGuiEvent event;
+    (void)self;
+    (void)command;
+    native_window = tc_cocoa_id0(notification, "object");
+    entry = tc_cocoa_find_window(native_window);
+    if (!entry)
+        return;
+    window = entry->window;
+    view = tc_cocoa_id0(native_window, "contentView");
+    if (!view)
+        return;
+    bounds = tc_cocoa_rect(view, "bounds");
+    width = (int32_t)(bounds.size.width + 0.5);
+    height = (int32_t)(bounds.size.height + 0.5);
+    if (width < 1 || height < 1 ||
+        (width == window->buffer->front.width && height == window->buffer->front.height))
+        return;
+    tc_cocoa_drop_image(window);
+    result = tc_gui_buffer_resize(window->buffer, width, height);
+    if (result != 0) {
+        tc_cocoa_make_image(window);
+        return;
+    }
+    if (tc_cocoa_make_image(window) != 0)
+        return;
+    memset(&event, 0, sizeof(event));
+    event.kind = TC_GUI_EVENT_RESIZE;
+    event.width = width;
+    event.height = height;
+    tc_gui_event_push(window, event);
+    tc_cocoa_void_bool(window->native_view, "setNeedsDisplay:", 1);
+}
+static void tc_cocoa_close_notification(void *self, TcCocoaSel command, void *notification) {
+    void *native_window;
+    TcCocoaMap *entry;
+    TcGuiEvent event;
+    (void)self;
+    (void)command;
+    native_window = tc_cocoa_id0(notification, "object");
+    entry = tc_cocoa_find_window(native_window);
+    if (!entry || !entry->window->open)
+        return;
+    memset(&event, 0, sizeof(event));
+    event.kind = TC_GUI_EVENT_CLOSE;
+    tc_gui_event_push(entry->window, event);
+    entry->window->open = 0;
+}
+static int tc_cocoa_delegate_class_ready(void) {
+    TcCocoaClass base;
+    if (tc_cocoa_delegate_class)
+        return 1;
+    tc_cocoa_delegate_class = tc_cocoa.get_class("TinyCPlusWindowDelegate");
+    if (tc_cocoa_delegate_class)
+        return 1;
+    base = tc_cocoa.get_class("NSObject");
+    if (!base)
+        return 0;
+    tc_cocoa_delegate_class = tc_cocoa.allocate_class_pair(base, "TinyCPlusWindowDelegate", 0);
+    if (!tc_cocoa_delegate_class)
+        return 0;
+    if (!tc_cocoa.class_add_method(tc_cocoa_delegate_class, tc_cocoa_sel("windowDidResize:"),
+                                    (void *)tc_cocoa_resize_notification, "v@:@") ||
+        !tc_cocoa.class_add_method(tc_cocoa_delegate_class, tc_cocoa_sel("windowWillClose:"),
+                                    (void *)tc_cocoa_close_notification, "v@:@"))
+        return 0;
+    tc_cocoa.register_class_pair(tc_cocoa_delegate_class);
+    return 1;
+}
 static uint32_t tc_cocoa_utf8_first(const char *text) {
     const unsigned char *s = (const unsigned char *)text;
     uint32_t cp;
@@ -321,8 +414,9 @@ static int tc_gui_cocoa_create(TcGuiWindow *window, TinyString title) {
     TcCocoaClass app_class, pool_class, nswindow_class, string_class;
     void *app, *pool, *native, *view, *caption;
     TcCocoaRect rect;
-    unsigned long style = 1u | 2u | 4u;
-    if (!tc_cocoa_load() || !tc_cocoa_view_class_ready())
+    unsigned long style = 1u | 2u | 4u | 8u;
+    void *delegate;
+    if (!tc_cocoa_load() || !tc_cocoa_view_class_ready() || !tc_cocoa_delegate_class_ready())
         return 9;
     pool_class = tc_cocoa.get_class("NSAutoreleasePool");
     app_class = tc_cocoa.get_class("NSApplication");
@@ -372,7 +466,9 @@ static int tc_gui_cocoa_create(TcGuiWindow *window, TinyString title) {
     window->native_pool = pool;
     window->native_window = native;
     window->native_view = view;
-    if (tc_cocoa_make_image(window) != 0) {
+    delegate = tc_cocoa_id0((void *)tc_cocoa_delegate_class, "alloc");
+    delegate = tc_cocoa_id0(delegate, "init");
+    if (!delegate) {
         if (caption) tc_cocoa_void0(caption, "release");
         tc_cocoa_void0(view, "release");
         tc_cocoa_void0(native, "release");
@@ -383,7 +479,22 @@ static int tc_gui_cocoa_create(TcGuiWindow *window, TinyString title) {
         window->native_view = NULL;
         return 9;
     }
+    window->native_delegate = delegate;
+    if (tc_cocoa_make_image(window) != 0) {
+        if (caption) tc_cocoa_void0(caption, "release");
+        tc_cocoa_void0(view, "release");
+        tc_cocoa_void0(native, "release");
+        tc_cocoa_void0(pool, "release");
+        tc_cocoa_void0(delegate, "release");
+        window->native_app = NULL;
+        window->native_pool = NULL;
+        window->native_window = NULL;
+        window->native_view = NULL;
+        window->native_delegate = NULL;
+        return 9;
+    }
     tc_cocoa_map_add(window);
+    tc_cocoa_void_id(native, "setDelegate:", delegate);
     tc_cocoa_void_id(native, "makeKeyAndOrderFront:", NULL);
     tc_cocoa_void_bool(app, "activateIgnoringOtherApps:", 1);
     tc_cocoa_void0(view, "display");
@@ -432,17 +543,20 @@ static void tc_gui_cocoa_close(TcGuiWindow *window) {
     TcGuiEvent event;
     if (!window || !window->native_window)
         return;
+    if (window->open)
+        tc_cocoa_void0(window->native_window, "close");
     if (window->open) {
         memset(&event, 0, sizeof(event));
         event.kind = TC_GUI_EVENT_CLOSE;
         tc_gui_event_push(window, event);
+        window->open = 0;
     }
-    window->open = 0;
-    tc_cocoa_void0(window->native_window, "close");
 }
 static void tc_gui_cocoa_destroy(TcGuiWindow *window) {
     if (!window)
         return;
+    if (window->native_window)
+        tc_cocoa_void_id(window->native_window, "setDelegate:", NULL);
     tc_cocoa_map_remove(window);
     tc_cocoa_drop_image(window);
     if (window->native_window) {
@@ -450,11 +564,14 @@ static void tc_gui_cocoa_destroy(TcGuiWindow *window) {
             tc_cocoa_void0(window->native_window, "close");
         tc_cocoa_void0(window->native_window, "release");
     }
+    if (window->native_delegate)
+        tc_cocoa_void0(window->native_delegate, "release");
     if (window->native_pool)
         tc_cocoa_void0(window->native_pool, "release");
     window->native_app = NULL;
     window->native_window = NULL;
     window->native_view = NULL;
+    window->native_delegate = NULL;
     window->native_pool = NULL;
 }
 #endif

@@ -43,7 +43,7 @@ on Windows.
 
 1. validate the Win32 native path interactively in addition to CI compilation;
 2. reuse Row/Column layout rules for graphical Label/Button/TextBox;
-3. evaluate a Wayland backend and add resize support to the first Cocoa bridge without changing Surface/Canvas semantics;
+3. evaluate a Wayland backend and define a cross-platform HiDPI policy without changing Surface/Canvas semantics;
 4. add richer font backends later without changing the basic Surface contract;
 5. keep GUI/TUI event payloads interoperable while preserving their existing kind values.
 
@@ -153,7 +153,7 @@ native `NSEvent` objects to verify special-key, text and mouse translation.
 
 Current limits:
 
-- the first Cocoa window is fixed-size; resize events will be added in a later step;
+- Cocoa windows are resizable and rebuild their framebuffer/CGImage on `windowDidResize:`;
 - advanced IME/composition semantics are not yet modeled beyond AppKit's text value;
 - rendering uses a cached CoreGraphics image backed directly by the TinyC+
   framebuffer; higher-DPI scaling policy is still intentionally undefined;
