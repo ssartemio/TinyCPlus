@@ -2,7 +2,7 @@
 #include <assert.h>
 #include <stdio.h>
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(TC_GUI_X11_BACKEND)
 static void gui_native_drain(TcGuiWindow *window) {
     TcGuiEvent event;
     do {
@@ -134,6 +134,65 @@ int main(void) {
         tc_gui_window_close(native);
         memset(&native_event, 0, sizeof(native_event));
         tc_gui_window_next(native, 250, &native_event.kind, &native_event.key, &native_event.x,
+                           &native_event.y, &native_event.width, &native_event.height,
+                           &native_event.button, &native_event.pressed, &native_event.codepoint);
+        assert(native_event.kind == TC_GUI_EVENT_CLOSE && !tc_gui_window_open(native));
+        tc_gui_window_destroy(native);
+    }
+#endif
+
+#ifdef TC_GUI_X11_BACKEND
+    {
+        TcGuiWindow *native;
+        TcGuiEvent native_event;
+        Display *display;
+        XEvent sent;
+        Window xwindow;
+        native = (TcGuiWindow *)tc_gui_window_create(96, 64, TC_STRING("TinyC+ X11 CI"), 0, &error);
+        assert(native && error == 0 && native->native_display && native->native_window);
+        display = (Display *)native->native_display;
+        xwindow = (Window)native->native_window;
+        gui_native_drain(native);
+
+        tc_gui_surface_clear(tc_gui_window_surface(native), blue);
+        assert(tc_gui_window_present(native) == tc_gui_window_width(native) * tc_gui_window_height(native));
+
+        memset(&sent, 0, sizeof(sent));
+        sent.xkey.type = KeyPress;
+        sent.xkey.display = display;
+        sent.xkey.window = xwindow;
+        sent.xkey.root = DefaultRootWindow(display);
+        sent.xkey.same_screen = True;
+        sent.xkey.keycode = XKeysymToKeycode(display, XK_Left);
+        assert(XSendEvent(display, xwindow, True, KeyPressMask, &sent));
+        XFlush(display);
+        memset(&native_event, 0, sizeof(native_event));
+        tc_gui_window_next(native, 250, &native_event.kind, &native_event.key, &native_event.x,
+                           &native_event.y, &native_event.width, &native_event.height,
+                           &native_event.button, &native_event.pressed, &native_event.codepoint);
+        assert(native_event.kind == TC_GUI_EVENT_KEY && native_event.key == TC_KEY_LEFT);
+
+        memset(&sent, 0, sizeof(sent));
+        sent.xbutton.type = ButtonRelease;
+        sent.xbutton.display = display;
+        sent.xbutton.window = xwindow;
+        sent.xbutton.root = DefaultRootWindow(display);
+        sent.xbutton.same_screen = True;
+        sent.xbutton.button = Button1;
+        sent.xbutton.x = 7;
+        sent.xbutton.y = 9;
+        assert(XSendEvent(display, xwindow, True, ButtonReleaseMask, &sent));
+        XFlush(display);
+        memset(&native_event, 0, sizeof(native_event));
+        tc_gui_window_next(native, 250, &native_event.kind, &native_event.key, &native_event.x,
+                           &native_event.y, &native_event.width, &native_event.height,
+                           &native_event.button, &native_event.pressed, &native_event.codepoint);
+        assert(native_event.kind == TC_GUI_EVENT_MOUSE && native_event.button == 1);
+        assert(native_event.x == 7 && native_event.y == 9 && native_event.pressed == 0);
+
+        tc_gui_window_close(native);
+        memset(&native_event, 0, sizeof(native_event));
+        tc_gui_window_next(native, 0, &native_event.kind, &native_event.key, &native_event.x,
                            &native_event.y, &native_event.width, &native_event.height,
                            &native_event.button, &native_event.pressed, &native_event.codepoint);
         assert(native_event.kind == TC_GUI_EVENT_CLOSE && !tc_gui_window_open(native));

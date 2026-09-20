@@ -35,6 +35,28 @@ int backend_option(int kind, const char *value) {
     extra_options[kind][extra_counts[kind]++] = value;
     return 0;
 }
+
+static int gui_x11_backend;
+int backend_gui_backend(const char *value) {
+    if (!strcmp(value, "headless")) {
+        gui_x11_backend = 0;
+        return 0;
+    }
+#ifdef __linux__
+    if (!strcmp(value, "x11")) {
+        gui_x11_backend = 1;
+        return 0;
+    }
+#endif
+    fprintf(stderr, "tiny: unsupported GUI backend '%s'%s\n", value,
+#ifdef __linux__
+            " (expected headless or x11)"
+#else
+            " (expected headless on this platform)"
+#endif
+    );
+    return 1;
+}
 typedef struct ReplSlot {
     char *name;
     void *data;
@@ -305,6 +327,10 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
 #ifndef _WIN32
         api.options(s, "-D_POSIX_C_SOURCE=200809L");
 #endif
+#ifdef __linux__
+        if (c->uses_gui && gui_x11_backend)
+            api.options(s, "-DTC_GUI_X11_BACKEND");
+#endif
         api.include_path(s, tc_format(c, "%s/runtime", root));
         for (j = 0; j < extra_counts[1]; j++)
             api.include_path(s, extra_options[1][j]);
@@ -343,6 +369,14 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
 #ifndef _WIN32
             api.library(s, "m");
             api.library(s, "pthread");
+#ifdef __linux__
+            if (c->uses_gui && gui_x11_backend && api.library(s, "X11") < 0) {
+                fputs("tiny: X11 backend requires libX11 development/runtime files\n", stderr);
+                api.destroy(s);
+                unload_tcc(handle);
+                return 1;
+            }
+#endif
 #endif
             result = run ? api.run(s, argc ? argc : 1, argc ? argv : default_args)
                          : api.output_file(s, output);
@@ -404,6 +438,10 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
 #ifndef _WIN32
         args[k++] = "-D_POSIX_C_SOURCE=200809L";
 #endif
+#ifdef __linux__
+        if (c->uses_gui && gui_x11_backend)
+            args[k++] = "-DTC_GUI_X11_BACKEND";
+#endif
         if (assembly)
             args[k++] = "-S";
         args[k++] = (char *)tmp;
@@ -451,6 +489,10 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
 #ifndef _WIN32
         args[k++] = "-lm";
         args[k++] = "-pthread";
+#ifdef __linux__
+        if (c->uses_gui && gui_x11_backend)
+            args[k++] = "-lX11";
+#endif
 #endif
         args[k] = NULL;
         result = tc_process(args);
