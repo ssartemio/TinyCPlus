@@ -149,6 +149,21 @@ FAIL += [
     ('stream_bad_map', 'int main(){int[1] a={1};a.stream().map(x=>println(x)).count();}', 'cannot return void'),
 ]
 
+# Generated switches that cross the code generator's 4096-character statement limit; they
+# must fold the comparison chain instead of failing with "exceeds length limit".
+LARGE = 300
+LARGE_ENUM = 'enum Op{%s}' % ','.join('Operation%d' % i for i in range(LARGE))
+LARGE_ARMS = ''.join('case Op.Operation%d:return %d;' % (i, i) for i in range(LARGE))
+RUN += [
+    ('switch_large_enum', LARGE_ENUM + 'int f(Op o){switch(o){%s}}int main(){println(f(Op.Operation0));println(f(Op.Operation150));println(f(Op.Operation%d));}' % (LARGE_ARMS, LARGE - 1), '0\n150\n%d\n' % (LARGE - 1)),
+    ('switch_large_enum_async', LARGE_ENUM + 'async int f(Op o){switch(o){%s}}int main(){var t=f(Op.Operation%d);defer t.destroy();println(t.get());}' % (LARGE_ARMS, LARGE - 1), '%d\n' % (LARGE - 1)),
+    ('switch_many_int_labels', 'int f(int x){switch(x){case %s:return 1;case 1000:return 2;default:return 0;}}int main(){println(f(0));println(f(599));println(f(600));println(f(1000));}' % ','.join(str(i) for i in range(600)), '1\n1\n0\n2\n'),
+    ('switch_many_string_labels', 'int f(string s){switch(s){case %s:return 1;default:return 0;}}int main(){println(f("s0"));println(f("s299"));println(f("x"));}' % ','.join('"s%d"' % i for i in range(300)), '1\n1\n0\n'),
+]
+RUNTIME_FAIL += [
+    ('switch_large_enum_out_of_range', LARGE_ENUM + 'int f(Op o){switch(o){%s}}int main(){println(f(cast<Op>(5000)));}' % LARGE_ARMS, 'switch value matches no enum case'),
+]
+
 count = 0
 start = time.monotonic()
 errors = []
