@@ -370,7 +370,7 @@ static uint32_t tc_cocoa_utf8_next(const char *text, size_t length, size_t *offs
     return cp;
 }
 
-static void tc_cocoa_push_text(TcGuiWindow *window, const char *utf8) {
+static void tc_cocoa_push_text(TcGuiWindow *window, const char *utf8, int32_t modifiers) {
     size_t offset = 0, length;
     if (!utf8)
         return;
@@ -383,8 +383,18 @@ static void tc_cocoa_push_text(TcGuiWindow *window, const char *utf8) {
         memset(&event, 0, sizeof(event));
         event.kind = TC_GUI_EVENT_TEXT;
         event.codepoint = cp;
+        event.modifiers = modifiers;
         tc_gui_event_push(window, event);
     }
+}
+static int32_t tc_cocoa_modifiers(uint64_t flags) {
+    int32_t modifiers = 0;
+    if (flags & (1ull << 17)) modifiers |= TC_GUI_MOD_SHIFT;
+    if (flags & (1ull << 18)) modifiers |= TC_GUI_MOD_CONTROL;
+    if (flags & (1ull << 19)) modifiers |= TC_GUI_MOD_ALT;
+    if (flags & (1ull << 20)) modifiers |= TC_GUI_MOD_SUPER;
+    if (flags & (1ull << 16)) modifiers |= TC_GUI_MOD_CAPS_LOCK;
+    return modifiers;
 }
 static int32_t tc_cocoa_key(uint64_t keycode) {
     switch (keycode) {
@@ -406,7 +416,7 @@ static int32_t tc_cocoa_key(uint64_t keycode) {
     }
 }
 static void tc_cocoa_push_scroll(TcGuiWindow *window, TcCocoaPoint point,
-                                 double scroll_x, double scroll_y) {
+                                 double scroll_x, double scroll_y, int32_t modifiers) {
     TcGuiEvent event;
     if (!window)
         return;
@@ -416,6 +426,7 @@ static void tc_cocoa_push_scroll(TcGuiWindow *window, TcCocoaPoint point,
     event.y = window->buffer->front.height - 1 - (int32_t)point.y;
     event.scroll_x = scroll_x;
     event.scroll_y = scroll_y;
+    event.modifiers = modifiers;
     tc_gui_event_push(window, event);
 }
 
@@ -439,21 +450,24 @@ static void tc_cocoa_process_event(void *native_event) {
         const char *utf8;
         event.kind = TC_GUI_EVENT_KEY;
         event.key = tc_cocoa_key(tc_cocoa_u64(native_event, "keyCode"));
+        event.modifiers = tc_cocoa_modifiers(tc_cocoa_u64(native_event, "modifierFlags"));
         tc_gui_event_push(window, event);
         characters = tc_cocoa_id0(native_event, "characters");
         utf8 = characters ? ((const char *(*)(void *, TcCocoaSel))tc_cocoa.msg_send)
                             (characters, tc_cocoa_sel("UTF8String")) : NULL;
         if (utf8 && *utf8)
-            tc_cocoa_push_text(window, utf8);
+            tc_cocoa_push_text(window, utf8, event.modifiers);
     } else if (type == 22) { /* scrollWheel */
         TcCocoaPoint point = tc_cocoa_point(native_event, "locationInWindow");
         tc_cocoa_push_scroll(window, point,
                              tc_cocoa_double(native_event, "scrollingDeltaX"),
-                             tc_cocoa_double(native_event, "scrollingDeltaY"));
+                             tc_cocoa_double(native_event, "scrollingDeltaY"),
+                             tc_cocoa_modifiers(tc_cocoa_u64(native_event, "modifierFlags")));
     } else if (type == 1 || type == 2 || type == 3 || type == 4 ||
                type == 5 || type == 6 || type == 7 || type == 25 || type == 26 || type == 27) {
         TcCocoaPoint point = tc_cocoa_point(native_event, "locationInWindow");
         event.kind = TC_GUI_EVENT_MOUSE;
+        event.modifiers = tc_cocoa_modifiers(tc_cocoa_u64(native_event, "modifierFlags"));
         event.x = (int32_t)point.x;
         event.y = window->buffer->front.height - 1 - (int32_t)point.y;
         if (type == 1 || type == 2 || type == 6)

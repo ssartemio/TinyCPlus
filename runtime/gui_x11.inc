@@ -60,6 +60,15 @@ static int tc_gui_x11_make_image(TcGuiWindow *window) {
     window->native_image = image;
     return 0;
 }
+static int32_t tc_gui_x11_modifiers(unsigned state) {
+    int32_t modifiers = 0;
+    if (state & ShiftMask) modifiers |= TC_GUI_MOD_SHIFT;
+    if (state & ControlMask) modifiers |= TC_GUI_MOD_CONTROL;
+    if (state & Mod1Mask) modifiers |= TC_GUI_MOD_ALT;
+    if (state & Mod4Mask) modifiers |= TC_GUI_MOD_SUPER;
+    if (state & LockMask) modifiers |= TC_GUI_MOD_CAPS_LOCK;
+    return modifiers;
+}
 static int32_t tc_gui_x11_key(KeySym key) {
     switch (key) {
     case XK_Left: return TC_KEY_LEFT;
@@ -137,7 +146,8 @@ static void tc_gui_x11_repaint(TcGuiWindow *window, int full) {
     XFlush(display);
     tc_gui_surface_damage_clear(front);
 }
-static void tc_gui_x11_push_text(TcGuiWindow *window, const char *bytes, int length) {
+static void tc_gui_x11_push_text(TcGuiWindow *window, const char *bytes, int length,
+                                  int32_t modifiers) {
     int offset = 0;
     while (offset < length) {
         TcGuiEvent event;
@@ -147,6 +157,7 @@ static void tc_gui_x11_push_text(TcGuiWindow *window, const char *bytes, int len
         memset(&event, 0, sizeof(event));
         event.kind = TC_GUI_EVENT_TEXT;
         event.codepoint = codepoint;
+        event.modifiers = modifiers;
         tc_gui_event_push(window, event);
     }
 }
@@ -176,9 +187,10 @@ static void tc_gui_x11_push_key(TcGuiWindow *window, XKeyEvent *key) {
     memset(&event, 0, sizeof(event));
     event.kind = TC_GUI_EVENT_KEY;
     event.key = tc_gui_x11_key(symbol);
+    event.modifiers = tc_gui_x11_modifiers(key->state);
     tc_gui_event_push(window, event);
     if (length > 0)
-        tc_gui_x11_push_text(window, bytes, length);
+        tc_gui_x11_push_text(window, bytes, length, event.modifiers);
     if (bytes != stack)
         free(bytes);
 }
@@ -219,12 +231,14 @@ static void tc_gui_x11_process(TcGuiWindow *window, XEvent *native) {
         event.kind = TC_GUI_EVENT_MOUSE;
         event.x = native->xmotion.x;
         event.y = native->xmotion.y;
+        event.modifiers = tc_gui_x11_modifiers(native->xmotion.state);
         tc_gui_event_push(window, event);
         break;
     case ButtonPress:
     case ButtonRelease:
         event.x = native->xbutton.x;
         event.y = native->xbutton.y;
+        event.modifiers = tc_gui_x11_modifiers(native->xbutton.state);
         if (native->xbutton.button >= Button4 && native->xbutton.button <= 7) {
             if (native->type == ButtonRelease)
                 break;
