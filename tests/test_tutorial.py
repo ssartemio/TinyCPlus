@@ -69,4 +69,28 @@ assert result.stdout == "61\n781\n", result.stdout
 passed += 1
 print("PASS 07_modules/main.tc")
 
+EDGE_CASES = [
+    ("03_bounds_fail.tc", 101, "index out of bounds"),
+]
+
+for filename, expected_code, expected_stderr in EDGE_CASES:
+    path = tutorial / "exercises" / filename
+    result = invoke(["run", path, *(["--cc", args.cc] if args.cc else [])])
+    assert result.returncode == expected_code, (filename, result.returncode, result.stdout, result.stderr)
+    assert expected_stderr in result.stderr, (filename, result.stderr)
+    passed += 1
+    print("PASS expected failure", filename)
+
+for filename, expected in [
+    ("04_defer_return.tc", "body\ncleanup\n42\n"),
+    ("08_corrupt_file.tc", "parse error\n"),
+    ("09_channel_closed.tc", "closed\n"),
+]:
+    path = tutorial / "exercises" / filename
+    result = check_case(path)
+    assert result.returncode == 0, (filename, result.stdout, result.stderr)
+    assert result.stdout == expected, (filename, result.stdout, expected)
+    passed += 1
+    print("PASS exercise", filename)
+
 print(f"{passed} tutorial examples passed")

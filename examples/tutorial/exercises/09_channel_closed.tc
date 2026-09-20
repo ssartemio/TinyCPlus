@@ -1,0 +1,18 @@
+import std.concurrent;
+
+int main()
+{
+    var channel = Channel<int>.create(1);
+    defer channel.destroy();
+
+    channel.close();
+
+    var value, error = channel.receive();
+
+    if (error != 0)
+        println("closed");
+    else
+        println(value);
+
+    return 0;
+}

@@ -1,0 +1,23 @@
+import std.fs;
+import std.string;
+
+int main()
+{
+    string path = "build/tutorial-corrupt.txt";
+
+    assert(File.writeAll(path, "not-a-number") == 0);
+
+    var contents, readError = File.readAll(path);
+    assert(readError == 0);
+    defer contents.destroy();
+
+    var value, parseError = String.parseInt(contents.view());
+
+    if (parseError != 0)
+        println("parse error");
+    else
+        println(value);
+
+    assert(File.remove(path) == 0);
+    return 0;
+}
