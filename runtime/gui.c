@@ -461,6 +461,27 @@ void tc_gui_text(void *handle, int32_t x, int32_t y, TinyString text, uint32_t c
 }
 
 
+enum {
+    TC_GUI_EVENT_NONE = 0,
+    TC_GUI_EVENT_KEY = 1,
+    TC_GUI_EVENT_TEXT = 2,
+    TC_GUI_EVENT_MOUSE = 3,
+    TC_GUI_EVENT_RESIZE = 4,
+    TC_GUI_EVENT_CLOSE = 5,
+    TC_GUI_EVENT_CUSTOM = 6
+};
+enum {
+    TC_GUI_KEY_LEFT = 1001,
+    TC_GUI_KEY_RIGHT,
+    TC_GUI_KEY_UP,
+    TC_GUI_KEY_DOWN,
+    TC_GUI_KEY_HOME,
+    TC_GUI_KEY_END,
+    TC_GUI_KEY_DELETE,
+    TC_GUI_KEY_PAGE_UP,
+    TC_GUI_KEY_PAGE_DOWN
+};
+
 static int tc_gui_encode_utf8(uint32_t cp, char bytes[4]) {
     if (cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff))
         cp = '?';
@@ -604,27 +625,6 @@ int32_t tc_gui_buffer_resize(void *handle, int32_t width, int32_t height) {
     buffer->back = back;
     return 0;
 }
-
-enum {
-    TC_GUI_EVENT_NONE = 0,
-    TC_GUI_EVENT_KEY = 1,
-    TC_GUI_EVENT_TEXT = 2,
-    TC_GUI_EVENT_MOUSE = 3,
-    TC_GUI_EVENT_RESIZE = 4,
-    TC_GUI_EVENT_CLOSE = 5,
-    TC_GUI_EVENT_CUSTOM = 6
-};
-enum {
-    TC_GUI_KEY_LEFT = 1001,
-    TC_GUI_KEY_RIGHT,
-    TC_GUI_KEY_UP,
-    TC_GUI_KEY_DOWN,
-    TC_GUI_KEY_HOME,
-    TC_GUI_KEY_END,
-    TC_GUI_KEY_DELETE,
-    TC_GUI_KEY_PAGE_UP,
-    TC_GUI_KEY_PAGE_DOWN
-};
 
 typedef struct TcGuiEvent {
     int32_t kind, key, x, y, width, height, button, pressed;
