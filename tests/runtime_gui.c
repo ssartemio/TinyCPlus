@@ -89,6 +89,14 @@ int main(void) {
     assert(event.kind == TC_GUI_EVENT_CUSTOM && event.key == 42 && event.x == 1 && event.y == 2);
     assert(event.width == 3 && event.height == 4 && event.button == 5 && event.pressed == 1);
     assert(event.codepoint == 'Z');
+    assert(tc_gui_window_post(window, TC_GUI_EVENT_SCROLL, 0, 2, 3, 0, 0, 0, 0, 0,
+                              0.25, -1.5) == 0);
+    memset(&event, 0, sizeof(event));
+    tc_gui_window_next(window, 0, &event.kind, &event.key, &event.x, &event.y, &event.width,
+                       &event.height, &event.button, &event.pressed, &event.codepoint,
+                       &event.scroll_x, &event.scroll_y);
+    assert(event.kind == TC_GUI_EVENT_SCROLL && event.x == 2 && event.y == 3);
+    assert(event.scroll_x == 0.25 && event.scroll_y == -1.5);
     tc_gui_window_close(window);
     assert(!tc_gui_window_open(window));
     tc_gui_window_destroy(window);
@@ -131,6 +139,21 @@ int main(void) {
                            &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y);
         assert(native_event.kind == TC_GUI_EVENT_MOUSE && native_event.button == 1);
         assert(native_event.x == 7 && native_event.y == 9 && native_event.pressed == 0);
+
+        {
+            POINT point = {7, 9};
+            ClientToScreen(native->hwnd, &point);
+            memset(&native_event, 0, sizeof(native_event));
+            PostMessageA(native->hwnd, WM_MOUSEWHEEL, MAKEWPARAM(0, WHEEL_DELTA),
+                         MAKELPARAM((short)point.x, (short)point.y));
+            tc_gui_window_next(native, 250, &native_event.kind, &native_event.key, &native_event.x,
+                               &native_event.y, &native_event.width, &native_event.height,
+                               &native_event.button, &native_event.pressed, &native_event.codepoint,
+                               &native_event.scroll_x, &native_event.scroll_y);
+            assert(native_event.kind == TC_GUI_EVENT_SCROLL);
+            assert(native_event.x == 7 && native_event.y == 9);
+            assert(native_event.scroll_x == 0.0 && native_event.scroll_y == 1.0);
+        }
 
         tc_gui_window_close(native);
         memset(&native_event, 0, sizeof(native_event));
@@ -198,6 +221,26 @@ int main(void) {
                            &native_event.button, &native_event.pressed, &native_event.codepoint, &native_event.scroll_x, &native_event.scroll_y);
         assert(native_event.kind == TC_GUI_EVENT_MOUSE && native_event.button == 1);
         assert(native_event.x == 7 && native_event.y == 9 && native_event.pressed == 0);
+
+        memset(&sent, 0, sizeof(sent));
+        sent.xbutton.type = ButtonPress;
+        sent.xbutton.display = display;
+        sent.xbutton.window = xwindow;
+        sent.xbutton.root = DefaultRootWindow(display);
+        sent.xbutton.same_screen = True;
+        sent.xbutton.button = Button4;
+        sent.xbutton.x = 11;
+        sent.xbutton.y = 13;
+        assert(XSendEvent(display, xwindow, True, ButtonPressMask, &sent));
+        XFlush(display);
+        memset(&native_event, 0, sizeof(native_event));
+        tc_gui_window_next(native, 250, &native_event.kind, &native_event.key, &native_event.x,
+                           &native_event.y, &native_event.width, &native_event.height,
+                           &native_event.button, &native_event.pressed, &native_event.codepoint,
+                           &native_event.scroll_x, &native_event.scroll_y);
+        assert(native_event.kind == TC_GUI_EVENT_SCROLL);
+        assert(native_event.x == 11 && native_event.y == 13);
+        assert(native_event.scroll_x == 0.0 && native_event.scroll_y == 1.0);
 
         XResizeWindow(display, xwindow, 120, 72);
         XFlush(display);
@@ -283,6 +326,7 @@ int main(void) {
             void *sequence;
             void *key_event;
             void *mouse_event;
+            void *scroll_event;
             point.x = 7;
             point.y = 9;
             empty = ((void *(*)(void *, TcCocoaSel, const char *))tc_cocoa.msg_send)
@@ -349,6 +393,18 @@ int main(void) {
             assert(tc_gui_event_pop(native, &native_event));
             assert(native_event.kind == TC_GUI_EVENT_MOUSE && native_event.button == 1);
             assert(native_event.x == 7 && native_event.pressed == 0);
+
+            scroll_event =
+                ((void *(*)(void *, TcCocoaSel, uint64_t, TcCocoaPoint, uint64_t, double, long,
+                             void *, long, long, double))tc_cocoa.msg_send)
+                (event_class, tc_cocoa_sel("mouseEventWithType:location:modifierFlags:timestamp:windowNumber:context:eventNumber:clickCount:pressure:"),
+                 22, point, 0, 0.0, (long)number, NULL, 2, 0, 0.0);
+            assert(scroll_event);
+            tc_cocoa_process_event(scroll_event);
+            memset(&native_event, 0, sizeof(native_event));
+            assert(tc_gui_event_pop(native, &native_event));
+            assert(native_event.kind == TC_GUI_EVENT_SCROLL);
+            assert(native_event.x == 7);
         }
 
         tc_gui_window_close(native);
