@@ -641,6 +641,14 @@ typedef struct TcGuiWindow {
 #ifdef _WIN32
     HWND hwnd;
     uint32_t surrogate;
+#elif defined(TC_GUI_X11_BACKEND)
+    void *native_display;
+    unsigned long native_window;
+    void *native_gc;
+    unsigned long native_delete;
+    void *native_image;
+    void *native_im;
+    void *native_ic;
 #endif
 } TcGuiWindow;
 
@@ -663,6 +671,10 @@ static int tc_gui_event_pop(TcGuiWindow *window, TcGuiEvent *event) {
     window->event_read = (window->event_read + 1u) % 64u;
     return 1;
 }
+
+#ifdef TC_GUI_X11_BACKEND
+#include "gui_x11.inc"
+#endif
 
 #ifdef _WIN32
 static const char tc_gui_window_class[] = "TinyCPlusGuiWindow";
@@ -871,6 +883,13 @@ void *tc_gui_window_create(int32_t width, int32_t height, TinyString title, int3
         ShowWindow(window->hwnd, SW_SHOW);
         UpdateWindow(window->hwnd);
     }
+#elif defined(TC_GUI_X11_BACKEND)
+    if (!window->headless && tc_gui_x11_create(window, title) != 0) {
+        if (error) *error = 9;
+        tc_gui_buffer_destroy(window->buffer);
+        free(window);
+        return NULL;
+    }
 #else
     (void)title;
     if (!window->headless) {
@@ -916,6 +935,9 @@ int32_t tc_gui_window_present(void *handle) {
         InvalidateRect(window->hwnd, &area, FALSE);
         UpdateWindow(window->hwnd);
     }
+#elif defined(TC_GUI_X11_BACKEND)
+    if (!window->headless && window->native_window && changed)
+        tc_gui_x11_present(window, 0);
 #endif
     return changed;
 }
@@ -959,6 +981,11 @@ void tc_gui_window_next(void *handle, int32_t timeout, int32_t *kind, int32_t *k
             MsgWaitForMultipleObjects(0, NULL, FALSE, 10, QS_ALLINPUT);
         }
     } else
+#elif defined(TC_GUI_X11_BACKEND)
+    if (window && !window->headless) {
+        tc_gui_x11_wait(window, timeout);
+        tc_gui_event_pop(window, &event);
+    } else
 #endif
     if (window)
         tc_gui_event_pop(window, &event);
@@ -979,10 +1006,17 @@ void tc_gui_window_close(void *handle) {
     TcGuiWindow *window = (TcGuiWindow *)handle;
     if (!window)
         return;
-    window->open = 0;
 #ifdef _WIN32
+    window->open = 0;
     if (!window->headless && window->hwnd)
         PostMessageA(window->hwnd, WM_CLOSE, 0, 0);
+#elif defined(TC_GUI_X11_BACKEND)
+    if (!window->headless)
+        tc_gui_x11_close(window);
+    else
+        window->open = 0;
+#else
+    window->open = 0;
 #endif
 }
 void tc_gui_window_destroy(void *handle) {
@@ -992,6 +1026,9 @@ void tc_gui_window_destroy(void *handle) {
 #ifdef _WIN32
     if (window->hwnd)
         DestroyWindow(window->hwnd);
+#elif defined(TC_GUI_X11_BACKEND)
+    if (!window->headless)
+        tc_gui_x11_destroy(window);
 #endif
     tc_gui_buffer_destroy(window->buffer);
     free(window);

@@ -202,4 +202,5 @@ int tc_document_file(const char *, const char *);
 int tc_repl(const char *);
 void tc_repl_clear(void);
 int backend_option(int, const char *);
+int backend_gui_backend(const char *);
 #endif
