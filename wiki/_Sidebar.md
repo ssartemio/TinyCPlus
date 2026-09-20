@@ -23,8 +23,12 @@
 **Proyecto**
 - [Tooling, CLI y REPL](Tooling-CLI-and-REPL)
 - [Arquitectura del compilador](Compiler-Architecture)
+- [Modelo de costes y rendimiento](Cost-Model-and-Performance)
 - [Biblioteca estándar](Standard-Library)
 - [Testing, CI y calidad](Testing-CI-and-Release)
 - [Roadmap y estado](Roadmap-and-Status)
 - [Contribuir](Contributing)
+- [Seguridad y límites](Security-and-Limits)
+- [Troubleshooting](Troubleshooting)
+- [Glosario](Glossary)
 - [FAQ](FAQ)

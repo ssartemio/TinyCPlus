@@ -121,3 +121,12 @@ modelo de TinyC+.
 La regla editorial de esta Wiki es simple: **lo marcado como estable debe estar
 respaldado por código y pruebas del repositorio**. Las ideas futuras se marcan
 como tales.
+
+
+## Lecturas de referencia
+
+Para evaluar una abstracción en detalle consulte
+**[Modelo de costes y rendimiento](Cost-Model-and-Performance)**.
+
+Para fallos frecuentes consulte **[Troubleshooting](Troubleshooting)** y para
+supuestos de seguridad **[Seguridad y límites](Security-and-Limits)**.

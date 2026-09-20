@@ -34,3 +34,16 @@ En PowerShell puede copiar el contenido de `wiki\` al clon de
 
 La fuente permanece en el repositorio principal para que los cambios de
 documentación puedan revisarse junto con el código.
+
+
+## Publicador multiplataforma
+
+También se incluye:
+
+```bash
+python tools/publish-wiki.py --dry-run
+python tools/publish-wiki.py
+```
+
+El script clona el repositorio Wiki, sincroniza estas páginas, hace commit y
+push usando las credenciales Git configuradas en el equipo.
