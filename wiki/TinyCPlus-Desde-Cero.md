@@ -47,3 +47,37 @@ y forman parte de la CI mediante `tests/test_tutorial.py`.
 El capítulo 13 se conserva en
 [`examples/tutorial/experimental/`](https://github.com/ssartemio/TinyCPlus/tree/main/examples/tutorial/experimental)
 porque requiere `std.gui` post-1.0.
+
+
+## Soluciones verificadas
+
+Los ejemplos acumulativos se encuentran en `examples/tutorial/`. Las soluciones
+explícitas de los ejercicios están en:
+
+```text
+examples/tutorial/solutions/
+├── 01_exercises.tc
+├── 02_exercises.tc
+├── 03_exercises.tc
+├── 04_exercises.tc
+├── 05_exercises.tc
+├── 06_exercises.tc
+├── 08_exercises.tc
+├── 09_exercises.tc
+├── 10_exercises.tc
+├── 11_exercises.tc
+└── 12_exercises.tc
+```
+
+El capítulo 7 usa la solución multiarchivo `examples/tutorial/07_modules/`.
+Los fallos deliberados y casos de borde viven en
+`examples/tutorial/exercises/`. El capítulo 13 gráfico está en
+`examples/tutorial/experimental/`.
+
+Consulte
+[EXERCISE_SOLUTIONS.md](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/EXERCISE_SOLUTIONS.md)
+para el mapa completo entre ejercicios, archivos y validación CI.
+
+La regla del curso es intentar primero el ejercicio y consultar la solución
+después. Todos los archivos estables se compilan y ejecutan en
+`tests/test_tutorial.py`.

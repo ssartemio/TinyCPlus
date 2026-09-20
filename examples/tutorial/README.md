@@ -27,3 +27,23 @@ El capítulo 7 es multiarchivo y añade una unidad C:
 tiny run examples/tutorial/07_modules/main.tc \
   --c-source examples/tutorial/07_modules/checksum.c
 ```
+
+
+## Soluciones por ejercicio
+
+Después de intentar los ejercicios de cada capítulo:
+
+```text
+solutions/             soluciones explícitas por capítulo
+exercises/             fallos esperados y casos de borde
+07_modules/            solución multiarchivo/FFI
+experimental/          capítulo 13, fuera de main
+EXERCISE_SOLUTIONS.md  mapa de cobertura
+```
+
+La suite ejecuta tanto el programa acumulativo como la solución de ejercicios:
+
+```bash
+python tests/test_tutorial.py
+python tests/test_tutorial.py --cc gcc
+```
