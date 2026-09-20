@@ -5,6 +5,7 @@ import std.input;
 /// Packed pixel format is 0xAARRGGBB. Surfaces own their pixel memory explicitly.
 extern C {
     uint tc_gui_rgba(uint red, uint green, uint blue, uint alpha);
+    int tc_gui_scale_value(double scale, int value);
     void* tc_gui_surface_create(int width, int height, Error* error);
     void tc_gui_surface_destroy(void* surface);
     int tc_gui_surface_width(void* surface);
@@ -76,6 +77,27 @@ class GuiRect {
         if (h < 0)
             h = 0;
         return GuiRect(x + amount, y + amount, w, h);
+    }
+}
+
+/// Explicit conversion from logical UI units to framebuffer pixels.
+/// Drawing APIs themselves remain pixel-based; this helper never scales implicitly.
+class GuiDensity {
+    double scale;
+
+    GuiDensity(double scale = 1.0) {
+        if (scale > 0.0)
+            this.scale = scale;
+        else
+            this.scale = 1.0;
+    }
+
+    int px(int value) {
+        return tc_gui_scale_value(scale, value);
+    }
+
+    GuiRect rect(int x, int y, int width, int height) {
+        return GuiRect(px(x), px(y), px(width), px(height));
     }
 }
 
@@ -221,6 +243,7 @@ class GuiWindow {
     int width() { return tc_gui_window_width(handle); }
     int height() { return tc_gui_window_height(handle); }
     double scale() { return tc_gui_window_scale(handle); }
+    GuiDensity density() { return GuiDensity(scale()); }
     bool isOpen() { return tc_gui_window_open(handle) != 0; }
     Surface surface() { Surface surface(tc_gui_window_surface(handle)); return surface; }
     int present() { return tc_gui_window_present(handle); }

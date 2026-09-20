@@ -59,6 +59,19 @@ void destroy();
 `inset()`. `GuiLayout.row()` and `GuiLayout.column()` divide an area without
 allocating widget objects.
 
+## GuiDensity
+
+Explicit density conversion without implicit renderer scaling:
+
+```c
+GuiDensity density = window.density();
+int pixels = density.px(16);
+GuiRect rect = density.rect(8, 8, 120, 32);
+```
+
+The stored scale is normally obtained from `GuiWindow.scale()`. Values are
+rounded to the nearest framebuffer pixel.
+
 ## GuiDraw
 
 Immediate-mode helpers:

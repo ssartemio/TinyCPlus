@@ -192,3 +192,25 @@ On older Windows versions where the modern DPI APIs are unavailable, the
 backend falls back to the legacy DPI-aware call and ultimately to scale 1.0.
 All DPI APIs are resolved dynamically, so this does not raise the minimum SDK
 or loader requirement for TinyC+.
+
+
+### GuiDensity
+
+Raw rendering remains framebuffer-pixel based. Applications that want
+density-independent sizing can opt in explicitly:
+
+```c
+GuiDensity density = window.density();
+
+GuiRect button = density.rect(
+    x: 16,
+    y: 16,
+    width: 120,
+    height: 32
+);
+```
+
+`px()` rounds a logical integer unit to the nearest framebuffer pixel.
+`rect()` applies the same conversion to all four geometry fields. This helper
+does not alter `Surface`, event coordinates or layout automatically, so low-level
+code keeps exact pixel control.

@@ -241,3 +241,34 @@ int main() {
 ''')
 p = run('run', button_focus_source)
 assert p.returncode == 0, (p.stdout, p.stderr)
+
+
+density_source = folder / 'density.tc'
+density_source.write_text(r'''
+import std.gui;
+
+int main() {
+    GuiDensity one = GuiDensity();
+    assert(one.px(12) == 12);
+
+    GuiDensity scaled = GuiDensity(1.5);
+    assert(scaled.px(2) == 3);
+    assert(scaled.px(3) == 5);
+    assert(scaled.px(-2) == -3);
+
+    GuiRect area = scaled.rect(4, 6, 20, 10);
+    assert(area.x == 6);
+    assert(area.y == 9);
+    assert(area.width == 30);
+    assert(area.height == 15);
+
+    var window, error = GuiWindow.create(width: 20, height: 10, headless: true);
+    if (error != 0)
+        return error;
+    defer window.destroy();
+    assert(window.density().px(8) == 8);
+    return 0;
+}
+''')
+p = run('run', density_source)
+assert p.returncode == 0, (p.stdout, p.stderr)

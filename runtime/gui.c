@@ -87,6 +87,18 @@ uint32_t tc_gui_rgba(uint32_t red, uint32_t green, uint32_t blue, uint32_t alpha
     return ((alpha & 255u) << 24) | ((red & 255u) << 16) | ((green & 255u) << 8) | (blue & 255u);
 }
 
+int32_t tc_gui_scale_value(double scale, int32_t value) {
+    double scaled;
+    if (scale <= 0.0)
+        scale = 1.0;
+    scaled = (double)value * scale;
+    if (scaled > 2147483647.0)
+        return INT32_MAX;
+    if (scaled < -2147483648.0)
+        return INT32_MIN;
+    return scaled >= 0.0 ? (int32_t)(scaled + 0.5) : (int32_t)(scaled - 0.5);
+}
+
 void *tc_gui_surface_create(int32_t width, int32_t height, int32_t *error) {
     TcGuiSurface *surface = (TcGuiSurface *)malloc(sizeof(*surface));
     int result;
