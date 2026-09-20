@@ -55,12 +55,16 @@ int main() {
     scroll.y = 5;
     scroll.scrollX = 0.5;
     scroll.scrollY = -1.25;
+    scroll.modifiers = GuiModifier.Shift | GuiModifier.Alt;
     assert(window.post(scroll) == 0);
     GuiEvent scrolled = window.nextEvent(timeout: 0);
     assert(scrolled.kind == GuiEventKind.Scroll);
     assert(scrolled.x == 4 && scrolled.y == 5);
     assert(scrolled.scrollX == 0.5 && scrolled.scrollY == -1.25);
     assert(GuiInput.scroll(scrolled));
+    assert(GuiInput.hasModifier(scrolled, GuiModifier.Shift));
+    assert(GuiInput.hasModifier(scrolled, GuiModifier.Alt));
+    assert(!GuiInput.hasModifier(scrolled, GuiModifier.Control));
 
     window.close();
     assert(!window.isOpen());
@@ -182,6 +186,11 @@ int main() {
     assert(GuiEventKind.Key == 1);
     assert(GuiEventKind.Close == 5);
     assert(GuiMouseButton.Left == 1);
+    assert(GuiModifier.Shift == 1);
+    assert(GuiModifier.Control == 2);
+    assert(GuiModifier.Alt == 4);
+    assert(GuiModifier.Super == 8);
+    assert(GuiModifier.CapsLock == 16);
     assert(InputKey.Left == 1001);
     assert(InputKey.Right == 1002);
     assert(InputKey.Delete == 1007);
