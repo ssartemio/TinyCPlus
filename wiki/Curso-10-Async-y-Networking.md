@@ -146,4 +146,8 @@ límites y errores con mayor formalidad.
 
 [`examples/tutorial/10_async_network.tc`](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/10_async_network.tc)
 
+La [solución de los ejercicios](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/solutions/10_exercises.tc)
+acumula una lectura TCP dividida en dos escrituras y cancela una espera de
+conexión. El buffer y el token viven hasta que finalizan sus tareas.
+
 La CI ejecuta esta solución como parte de `tests/test_tutorial.py`.

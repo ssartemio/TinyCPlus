@@ -1,4 +1,6 @@
 build/
+bin/tiny
+bin/tinyc
 __pycache__/
 *.pyc
 *.tmp

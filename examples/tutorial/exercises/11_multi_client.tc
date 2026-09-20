@@ -1,0 +1,55 @@
+import std.net;
+
+// The accepted socket belongs to this worker. Passing it by value transfers
+// responsibility for close(); main only keeps the listener and client sockets.
+int serveClient(TcpSocket socket, int score)
+{
+    defer socket.close();
+
+    byte[1] request = {};
+    if (socket.read(request[:]) != 1 || request[0] != 1)
+        return 1;
+
+    byte[2] response = {1, cast<byte>(score)};
+    if (socket.write(response[:]) != 2)
+        return 2;
+    return 0;
+}
+
+int main()
+{
+    var listener, listenError = TcpSocket.listen("127.0.0.1", 0);
+    assert(listenError == 0);
+    defer listener.close();
+
+    var clientA, errorA = TcpSocket.connect("127.0.0.1", listener.port());
+    assert(errorA == 0);
+    defer clientA.close();
+    var socketA, acceptErrorA = listener.accept();
+    assert(acceptErrorA == 0);
+    var workerA = spawn serveClient(socketA, 72);
+    defer workerA.destroy();
+
+    var clientB, errorB = TcpSocket.connect("127.0.0.1", listener.port());
+    assert(errorB == 0);
+    defer clientB.close();
+    var socketB, acceptErrorB = listener.accept();
+    assert(acceptErrorB == 0);
+    var workerB = spawn serveClient(socketB, 73);
+    defer workerB.destroy();
+
+    byte[1] request = {1};
+    byte[2] responseA = {};
+    byte[2] responseB = {};
+    assert(clientA.write(request[:]) == 1);
+    assert(clientB.write(request[:]) == 1);
+    assert(clientA.read(responseA[:]) == 2);
+    assert(clientB.read(responseB[:]) == 2);
+    assert(workerA.get() == 0);
+    assert(workerB.get() == 0);
+    assert(responseA[0] == 1 && responseB[0] == 1);
+
+    println(responseA[1]);
+    println(responseB[1]);
+    return 0;
+}

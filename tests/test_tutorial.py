@@ -8,6 +8,9 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 TINY = ROOT / "bin" / ("tiny.exe" if os.name == "nt" else "tiny")
+# File exercises write their temporary state here. The suite is also runnable
+# directly after build.py, which does not create the build directory.
+(ROOT / "build").mkdir(exist_ok=True)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--cc", help="Use an external C compiler for tutorial runs")
@@ -34,7 +37,7 @@ SOLUTION_CASES = [
     ("04_exercises.tc", "first\nsecond\nthird\nbody\ncleanup\n42\n"),
     ("05_exercises.tc", "61\n0\n"),
     ("06_exercises.tc", "95\n1\n42\n"),
-    ("08_exercises.tc", "missing\n73\n"),
+    ("08_exercises.tc", "missing\n73\n73\n74\n"),
     ("09_exercises.tc", "20\n4\n42\nclosed\n"),
     ("10_exercises.tc", "10\n"),
     ("11_exercises.tc", "1\n73\n1\n"),
@@ -108,6 +111,7 @@ for filename, expected in [
     ("04_defer_return.tc", "body\ncleanup\n42\n"),
     ("08_corrupt_file.tc", "parse error\n"),
     ("09_channel_closed.tc", "closed\n"),
+    ("11_multi_client.tc", "72\n73\n"),
 ]:
     path = tutorial / "exercises" / filename
     result = check_case(path)

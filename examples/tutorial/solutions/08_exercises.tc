@@ -25,12 +25,37 @@ Error saveScore(string path, int score)
     return (cast<int>(value), 0);
 }
 
+// Keep one score per line; read the existing file before replacing it
+// atomically, so a failed replacement leaves the old history intact.
+Error appendHistory(string path, int score)
+{
+    var number = String.fromInt(score);
+    defer number.destroy();
+    var line = String.concat(number.view(), "\n");
+    defer line.destroy();
+
+    if (!File.exists(path))
+        return File.writeAtomic(path, line.view());
+
+    var previous, readError = File.readAll(path);
+    if (readError != 0)
+        return readError;
+    defer previous.destroy();
+
+    var updated = String.concat(previous.view(), line.view());
+    defer updated.destroy();
+    return File.writeAtomic(path, updated.view());
+}
+
 int main()
 {
     string path = "build/tutorial-solution-status.txt";
+    string historyPath = "build/tutorial-solution-history.txt";
 
     if (File.exists(path))
         File.remove(path);
+    if (File.exists(historyPath))
+        File.remove(historyPath);
 
     var missing, missingError = loadScoreOrZero(path);
     assert(missingError == 0 && missing == 0);
@@ -42,6 +67,16 @@ int main()
     assert(error == 0 && value == 73);
     println(value);
 
+    assert(appendHistory(historyPath, 73) == 0);
+    assert(appendHistory(historyPath, 74) == 0);
+    var history, historyError = File.readAll(historyPath);
+    assert(historyError == 0);
+    defer history.destroy();
+    assert(history.view() == "73\n74\n");
+    println(73);
+    println(74);
+
     assert(File.remove(path) == 0);
+    assert(File.remove(historyPath) == 0);
     return 0;
 }

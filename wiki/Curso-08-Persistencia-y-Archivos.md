@@ -114,4 +114,8 @@ Slice<byte>       prestada sobre un buffer
 
 [`examples/tutorial/08_persistence_files.tc`](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/08_persistence_files.tc)
 
+Archivo ausente, escritura atómica e historial de dos muestras:
+[`solutions/08_exercises.tc`](https://github.com/ssartemio/TinyCPlus/blob/main/examples/tutorial/solutions/08_exercises.tc).
+Archivo corrupto: `examples/tutorial/exercises/08_corrupt_file.tc`.
+
 La CI ejecuta esta solución como parte de `tests/test_tutorial.py`.
