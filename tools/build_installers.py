@@ -92,6 +92,16 @@ def stage(target: str, destination: Path) -> None:
             raise SystemExit("Missing compiled libtcc.so; run tools/bootstrap.py")
         if not (tcc / "posix" / "tcc").is_file():
             raise SystemExit("Missing compiled TCC executable in posix/")
+        # Bootstrap uses the build checkout as its configure prefix. Those
+        # absolute RUNPATHs are invalid after relocation, and Fedora correctly
+        # rejects them. Resolve shared libraries beside the installed binary.
+        patcher = shutil.which("patchelf")
+        if not patcher:
+            raise SystemExit("Install patchelf to create relocatable Linux installers")
+        for lib in (tcc / "posix").rglob("*"):
+            if lib.is_file() and (lib.name == "tcc" or
+                                 lib.name.startswith("libtcc.so")):
+                execute([patcher, "--set-rpath", "$ORIGIN", lib])
     else:
         # Windows portable TCC tree contains its runtime objects, SDK headers,
         # libtcc.dll and original source for license compliance.

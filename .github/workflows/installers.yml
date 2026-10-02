@@ -79,7 +79,7 @@ jobs:
       - name: Compile TinyC+ and TinyEdit
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc make dpkg-dev
+          sudo apt-get install -y gcc make dpkg-dev patchelf
           python tools/bootstrap.py --cc gcc
           python build.py --cc gcc
           ./bin/tiny build apps/tinyedit.tc -o bin/tinyedit --cc gcc
@@ -109,7 +109,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install build dependencies
-        run: dnf install -y python3 gcc make rpm-build rpm glibc-devel git tar gzip
+        run: dnf install -y python3 gcc make rpm-build rpm glibc-devel git tar gzip patchelf
       - name: Compile TinyC+ and TinyEdit
         run: |
           python3 tools/bootstrap.py --cc gcc
