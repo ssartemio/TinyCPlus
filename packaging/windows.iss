@@ -75,7 +75,8 @@ begin
     Exit;
   if RegQueryStringValue(HKCU, EnvironmentKey, 'Path', Current) then
   begin
-    Updated := StringChangeEx(';' + Current + ';', ';' + Segment + ';', ';', True);
+    Updated := ';' + Current + ';';
+    StringChangeEx(Updated, ';' + Segment + ';', ';', True);
     if Length(Updated) >= 2 then
       Updated := Copy(Updated, 2, Length(Updated) - 2)
     else
