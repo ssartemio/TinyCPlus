@@ -28,9 +28,118 @@ jobs:
       - name: Configure compiler
         shell: pwsh
         run: |
-          $folder = 'C:\msys64\mingw64\bin'
-          if (Test-Path "$folder\gcc.exe") { $folder | Out-File -FilePath $env:GITHUB_PATH -Append }
-          else { throw 'gcc x64 missing' }
+          # setup-msys2 uses its own runner-temp installation directory,
+          # not necessarily C:\msys64 on hosted runners.
+          $gcc = Get-ChildItem -Path $env:RUNNER_TEMP -Filter gcc.exe -File -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '[\\/]mingw64[\\/]bin[\\/]gcc.exe
+      - name: Compile TinyC+ and TinyEdit
+        shell: pwsh
+        run: |
+          python tools/bootstrap.py --cc gcc
+          python build.py --cc gcc
+          .\bin\tiny.exe build apps\tinyedit.tc -o bin\tinyedit.exe --cc gcc
+          if ($LASTEXITCODE -ne 0) { throw 'tinyedit build failed' }
+      - name: Build installer
+        shell: pwsh
+        run: |
+          choco install innosetup --yes --no-progress
+          python tools/build_installers.py stage --target windows
+          python tools/build_installers.py windows
+      - name: Install + smoke test + uninstall
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $items = @(Get-ChildItem dist -Filter '*.exe')
+          if ($items.Count -ne 1) { throw 'Expected one installer' }
+          $target = Join-Path $env:RUNNER_TEMP 'TinyCPlusSmoke'
+          $args = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$target",'/TASKS=!addtopath')
+          $p = Start-Process -FilePath $items[0].FullName -ArgumentList $args -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "install error $($p.ExitCode)" }
+          & "$target\bin\tiny.exe" --version
+          if ($LASTEXITCODE -ne 0) { throw 'version smoke failed' }
+          & "$target\bin\tiny.exe" run "$target\examples\hello.tc"
+          if ($LASTEXITCODE -ne 0) { throw 'run smoke failed' }
+          & "$target\bin\tinyc.exe" check "$target\examples\hello.tc"
+          if ($LASTEXITCODE -ne 0) { throw 'check smoke failed' }
+          $uninstaller = Join-Path $target 'unins000.exe'
+          if (-not (Test-Path $uninstaller)) { throw 'Uninstaller missing' }
+          $p = Start-Process -FilePath $uninstaller -ArgumentList @('/VERYSILENT','/NORESTART') -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "uninstall error $($p.ExitCode)" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tinycplus-windows-x64-installer
+          path: dist/*.exe
+          if-no-files-found: error
+  debian:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile TinyC+ and TinyEdit
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc make dpkg-dev patchelf
+          python tools/bootstrap.py --cc gcc
+          python build.py --cc gcc
+          ./bin/tiny build apps/tinyedit.tc -o bin/tinyedit --cc gcc
+      - name: Build Debian package
+        run: |
+          python tools/build_installers.py stage --target linux
+          python tools/build_installers.py deb
+          dpkg-deb --info dist/*.deb
+      - name: Install + smoke test + uninstall
+        run: |
+          sudo dpkg -i dist/*.deb
+          tiny --version
+          tiny check /usr/lib/tinycplus/examples/hello.tc
+          tiny run /usr/lib/tinycplus/examples/hello.tc
+          tinyc check /usr/lib/tinycplus/examples/hello.tc
+          test -x /usr/bin/tinyedit
+          sudo dpkg -r tinycplus
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tinycplus-debian-amd64
+          path: dist/*.deb
+          if-no-files-found: error
+  fedora:
+    runs-on: ubuntu-24.04
+    container:
+      image: fedora:42
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: dnf install -y python3 gcc make rpm-build rpm glibc-devel git tar gzip patchelf
+      - name: Compile TinyC+ and TinyEdit
+        run: |
+          python3 tools/bootstrap.py --cc gcc
+          python3 build.py --cc gcc
+          ./bin/tiny build apps/tinyedit.tc -o bin/tinyedit --cc gcc
+      - name: Build Fedora package
+        run: |
+          python3 tools/build_installers.py stage --target linux
+          python3 tools/build_installers.py rpm
+          rpm -qpi dist/*.rpm
+      - name: Install + smoke test + uninstall
+        run: |
+          dnf install -y dist/*.rpm
+          tiny --version
+          tiny check /usr/lib/tinycplus/examples/hello.tc
+          tiny run /usr/lib/tinycplus/examples/hello.tc
+          tinyc check /usr/lib/tinycplus/examples/hello.tc
+          test -x /usr/bin/tinyedit
+          dnf remove -y tinycplus
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tinycplus-fedora-x86_64
+          path: dist/*.rpm
+          if-no-files-found: error
+ } |
+            Select-Object -First 1
+          if (-not $gcc) { throw 'MSYS2 MinGW64 gcc was not found' }
+          $gcc.DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Append
+          Write-Host "Using $($gcc.FullName)"
       - name: Compile TinyC+ and TinyEdit
         shell: pwsh
         run: |
