@@ -23,24 +23,15 @@ jobs:
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
+          path-type: inherit
           update: true
           install: mingw-w64-x86_64-gcc
-      - name: Configure compiler
-        shell: pwsh
-        run: |
-          $found = Get-ChildItem -Path $env:RUNNER_TEMP -Filter gcc.exe -File -Recurse -ErrorAction SilentlyContinue |
-            Where-Object { $_.Directory.Name -eq 'bin' -and $_.Directory.Parent.Name -eq 'mingw64' } |
-            Select-Object -First 1
-          if (-not $found) { throw 'MSYS2 GCC not found' }
-          $found.Directory.FullName | Out-File -FilePath $env:GITHUB_PATH -Append
-          Write-Host 'MinGW compiler configured'
       - name: Compile TinyC+ and TinyEdit
-        shell: pwsh
+        shell: msys2 {0}
         run: |
           python tools/bootstrap.py --cc gcc
           python build.py --cc gcc
-          .\bin\tiny.exe build apps\tinyedit.tc -o bin\tinyedit.exe --cc gcc
-          if ($LASTEXITCODE -ne 0) { throw 'tinyedit build failed' }
+          ./bin/tiny.exe build apps/tinyedit.tc -o bin/tinyedit.exe --cc gcc
       - name: Build installer
         shell: pwsh
         run: |
