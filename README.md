@@ -142,6 +142,7 @@ git reset --hard
 - [Índice de API estándar](docs/API.md)
 - [Plan de autohospedaje](docs/SELFHOSTING.md)
 - [Dependencias y licencias](THIRD_PARTY.md)
+- [Instaladores nativos Windows, Debian y Fedora](docs/INSTALLERS.md)
 - [Wiki completa del proyecto](wiki/Home.md)
 
 La especificación original se conserva en [docs/SPEC.md](docs/SPEC.md) como
