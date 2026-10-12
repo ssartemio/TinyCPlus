@@ -1,3 +1,6 @@
+// Copyright (c) 2026 TinyC+ contributors
+// SPDX-License-Identifier: Apache-2.0
+
 #ifndef TINY_RUNTIME_H
 #define TINY_RUNTIME_H
 #ifdef _WIN32

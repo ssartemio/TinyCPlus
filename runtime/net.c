@@ -1,3 +1,6 @@
+// Copyright (c) 2026 TinyC+ contributors
+// SPDX-License-Identifier: Apache-2.0
+
 #ifndef TC_NET_IMPLEMENTATION
 #define TC_NET_IMPLEMENTATION
 #include "tiny_runtime.h"

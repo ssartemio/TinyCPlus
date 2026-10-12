@@ -1,3 +1,6 @@
+// Copyright (c) 2026 TinyC+ contributors
+// SPDX-License-Identifier: Apache-2.0
+
 module std.process;
 import std.collections;
 extern C { int tc_process_spawn(string* arguments, u64 count, int* error); int tc_process_command(string command); string tc_environment(string name); int tc_argument_count(); string tc_argument(int index); }

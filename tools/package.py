@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 TinyC+ contributors
+# SPDX-License-Identifier: Apache-2.0
 """Create a relocatable archive, omitting scratch builds and test binaries."""
 import argparse
 import hashlib

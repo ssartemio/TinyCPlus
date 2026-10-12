@@ -149,3 +149,16 @@ La especificación original se conserva en [docs/SPEC.md](docs/SPEC.md) como
 referencia de requisitos. El comportamiento implementado se describe en estos
 documentos y en las pruebas; los ejemplos de intención de la especificación no
 se presentan como pruebas de funcionalidad.
+
+## Licencia
+
+El código y la documentación propios de TinyC+ se distribuyen bajo
+[Apache License 2.0](LICENSE), salvo donde un archivo indique expresamente otra
+licencia. Consulte también [NOTICE](NOTICE). Los componentes de `third_party/`
+conservan sus licencias y avisos originales; se detallan en [THIRD_PARTY.md](THIRD_PARTY.md).
+
+Usar el compilador no impone Apache-2.0 al código de sus propias aplicaciones.
+Al distribuir una aplicación que incorpore código del runtime o de la librería
+estándar de TinyC+, incluya una copia de `LICENSE` y los avisos de `NOTICE` que
+correspondan a ese código, y cumpla las condiciones de redistribución de Apache-2.0.
+Si incorpora dependencias como nghttp2, conserve además sus licencias y avisos.

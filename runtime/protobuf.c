@@ -1,3 +1,6 @@
+// Copyright (c) 2026 TinyC+ contributors
+// SPDX-License-Identifier: Apache-2.0
+
 #ifndef TC_PROTOBUF_IMPLEMENTATION
 #define TC_PROTOBUF_IMPLEMENTATION
 #include "library.c"

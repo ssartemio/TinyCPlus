@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 TinyC+ contributors
+# SPDX-License-Identifier: Apache-2.0
+
 """Dependency-free proto3 -> TinyC+ messages and unary gRPC bindings.
 
 Supported: all scalar wire types, enums, nested messages, repeated/packed,

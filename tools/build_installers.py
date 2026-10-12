@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 TinyC+ contributors
+# SPDX-License-Identifier: Apache-2.0
 """Build native TinyC+ installers from a verified, platform-specific build.
 
 Run tools/bootstrap.py and build.py on EACH target OS before packaging.
@@ -103,6 +105,7 @@ def stage(target: str, destination: Path) -> None:
                                  lib.name.startswith("libtcc.so")):
                 execute([patcher, "--set-rpath", "$ORIGIN", lib])
     else:
+        shutil.copy2(ROOT / "packaging" / "tiny-console.cmd", binpath / "tiny-console.cmd")
         # Windows portable TCC tree contains its runtime objects, SDK headers,
         # libtcc.dll and original source for license compliance.
         shutil.copytree(original, tcc, symlinks=True, dirs_exist_ok=True,
@@ -119,7 +122,8 @@ def stage(target: str, destination: Path) -> None:
                 if src.is_file():
                     shutil.copy2(src, binpath / name)
     copydir(ROOT / "third_party" / "nghttp2", tp / "nghttp2")
-    for name in ("THIRD_PARTY.md", "README.md"):
+    shutil.copy2(ROOT / "third_party" / "dependencies.json", tp / "dependencies.json")
+    for name in ("LICENSE", "NOTICE", "THIRD_PARTY.md", "README.md"):
         shutil.copy2(ROOT / name, destination / name)
     # Installed examples are documentation AND provide a no-network smoke test.
     print(f"Staged TinyC+ {VERSION} ({target}) in {destination}")
@@ -133,7 +137,11 @@ def check_stage(destination: Path, target: str) -> None:
         "std/core.tc", "runtime/tiny_runtime.h",
         "third_party/nghttp2/COPYING", "third_party/nghttp2/sources.txt",
         "third_party/tcc/COPYING", "examples/hello.tc",
+        "third_party/dependencies.json",
+        "LICENSE", "NOTICE", "THIRD_PARTY.md",
     ]
+    if target == "windows":
+        required.append("bin/tiny-console.cmd")
     for rel in required:
         if not (destination / rel).is_file():
             raise SystemExit("Incomplete payload: missing " + rel)
@@ -186,14 +194,13 @@ def rpm(payload: Path, out: Path) -> Path:
         for name in ("BUILD", "BUILDROOT", "RPMS", "SOURCES", "SPECS", "SRPMS"):
             (top / name).mkdir(parents=True)
         spec = top / "SPECS" / "tinycplus.spec"
-        # The project has not declared an umbrella source license yet.
-        # Do not mislabel its code as MIT/LGPL; the bundled TCC/nghttp2 notices
-        # are shipped separately and documented in THIRD_PARTY.md.
+        # Apache-2.0 covers TinyC+ code. The shipped third-party reference also
+        # covers the per-file terms in the complete upstream source archives.
         spec.write_text(
             "Name: tinycplus\n"
             f"Version: {BASE_VERSION}\nRelease: {RPM_RELEASE}%{{?dist}}\n"
             "Summary: TinyC+ native compiler and lightweight runtime\n"
-            "License: LicenseRef-TinyCPlus-Undeclared\n"
+            "License: Apache-2.0 AND LicenseRef-TinyCPlus-Bundled-Third-Party\n"
             "URL: https://github.com/ssartemio/TinyCPlus\n"
             f"BuildArch: {arch}\n"
             "AutoReqProv: yes\n"

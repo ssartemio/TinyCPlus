@@ -7,6 +7,10 @@ on:
   pull_request:
     paths:
       - 'tools/build_installers.py'
+      - 'tests/test_windows_console.py'
+      - 'LICENSE'
+      - 'NOTICE'
+      - 'THIRD_PARTY.md'
       - 'packaging/**'
       - '.github/workflows/installers.yml'
 permissions:
@@ -44,8 +48,8 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $items = @(Get-ChildItem dist -Filter '*.exe')
           if ($items.Count -ne 1) { throw 'Expected one installer' }
-          $target = Join-Path $env:RUNNER_TEMP 'TinyCPlusSmoke'
-          $args = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$target",'/TASKS=!addtopath')
+          $target = Join-Path $env:RUNNER_TEMP 'TinyCPlus Smoke'
+          $args = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$target`"",'/TASKS=!addtopath')
           $p = Start-Process -FilePath $items[0].FullName -ArgumentList $args -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "install error $($p.ExitCode)" }
           & "$target\bin\tiny.exe" --version
@@ -54,6 +58,15 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'run smoke failed' }
           & "$target\bin\tinyc.exe" check "$target\examples\hello.tc"
           if ($LASTEXITCODE -ne 0) { throw 'check smoke failed' }
+          python tests/test_windows_console.py "$target"
+          if ($LASTEXITCODE -ne 0) { throw 'console smoke failed' }
+          $shortcutPath = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\TinyC+\TinyC+ console.lnk'
+          $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcutPath)
+          if ($shortcut.WorkingDirectory -ne $target) { throw 'Console shortcut has the wrong working directory' }
+          if ($shortcut.Arguments -ne ('/K ""' + $target + '\bin\tiny-console.cmd""')) { throw 'Console shortcut has the wrong startup command' }
+          foreach ($notice in @('LICENSE','NOTICE','THIRD_PARTY.md')) {
+            if (-not (Test-Path (Join-Path $target $notice))) { throw "Missing $notice" }
+          }
           $uninstaller = Join-Path $target 'unins000.exe'
           if (-not (Test-Path $uninstaller)) { throw 'Uninstaller missing' }
           $p = Start-Process -FilePath $uninstaller -ArgumentList @('/VERYSILENT','/NORESTART') -Wait -PassThru

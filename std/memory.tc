@@ -1,3 +1,6 @@
+// Copyright (c) 2026 TinyC+ contributors
+// SPDX-License-Identifier: Apache-2.0
+
 module std.memory;
 class Memory {
     static void* allocate(u64 bytes) { return malloc(bytes); }

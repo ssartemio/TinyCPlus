@@ -1,3 +1,6 @@
+// Copyright (c) 2026 TinyC+ contributors
+// SPDX-License-Identifier: Apache-2.0
+
 #ifndef TINY_CONCURRENT_H
 #define TINY_CONCURRENT_H
 #include <stdint.h>

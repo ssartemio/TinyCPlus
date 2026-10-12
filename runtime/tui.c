@@ -1,3 +1,6 @@
+// Copyright (c) 2026 TinyC+ contributors
+// SPDX-License-Identifier: Apache-2.0
+
 #ifndef TC_TUI_IMPLEMENTATION
 #define TC_TUI_IMPLEMENTATION
 #include "gapbuffer.c"

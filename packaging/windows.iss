@@ -1,4 +1,6 @@
 ; Inno Setup 6 script. Built on Windows from tools/build_installers.py.
+; Copyright (c) 2026 TinyC+ contributors
+; SPDX-License-Identifier: Apache-2.0
 #ifndef MyAppVersion
   #define MyAppVersion "1.0.0-rc.1"
 #endif
@@ -35,7 +37,7 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 [Files]
 Source: "{#PayloadDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Icons]
-Name: "{group}\TinyC+ console"; Filename: "{cmd}"; Parameters: "/K ""{app}\bin\tiny.exe"" --version"
+Name: "{group}\TinyC+ console"; Filename: "{cmd}"; Parameters: "/K """"{app}\bin\tiny-console.cmd"""""; WorkingDir: "{app}"
 Name: "{group}\TinyC+ repository"; Filename: "https://github.com/ssartemio/TinyCPlus"
 [Tasks]
 Name: "addtopath"; Description: "Agregar tiny/tinyc/tinyedit al PATH del usuario"; GroupDescription: "Integración con la terminal:"; Flags: checkedonce

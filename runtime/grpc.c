@@ -1,3 +1,6 @@
+// Copyright (c) 2026 TinyC+ contributors
+// SPDX-License-Identifier: Apache-2.0
+
 #ifndef TC_GRPC_IMPLEMENTATION
 #define TC_GRPC_IMPLEMENTATION
 #include "net.c"

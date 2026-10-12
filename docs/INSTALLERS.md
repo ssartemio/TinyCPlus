@@ -31,6 +31,12 @@ tiny --version
 tiny run "$env:LOCALAPPDATA\Programs\TinyCPlus\examples\hello.tc"
 ~~~
 
+También puede abrir **TinyC+ console** desde el menú Inicio. Esa consola empieza
+en la carpeta instalada y habilita los comandos aunque no haya elegido agregar
+TinyC+ al PATH. Ejecute `tiny run examples\hello.tc`; el ejemplo imprime `30`.
+Las rutas relativas se buscan desde la carpeta actual de la terminal. En una
+terminal abierta en otra carpeta, use la ruta completa del ejemplo como arriba.
+
 El instalador es por usuario y no pide elevación. La desinstalación elimina la entrada PATH únicamente si fue añadida por el instalador.
 
 ### Debian y Ubuntu
@@ -87,11 +93,16 @@ Los paquetes terminados se escriben en dist/. La salida temporal está en build/
 
 Los instaladores incluyen bin/, std/, runtime/, ejemplos, las dependencias TinyCC/libtcc de la plataforma y el código necesario de nghttp2 para compilar programas gRPC. El compilador calcula su raíz desde la ruta del ejecutable; en Linux los enlaces /usr/bin apuntan al bin/ real para que /proc/self/exe encuentre /usr/lib/tinycplus. No es necesario fijar TINY_HOME.
 
-Los paquetes incluyen avisos de terceros, fuentes redistribuibles y THIRD_PARTY.md. La distribución no depende de Python, aunque las herramientas de desarrollo sí lo utilizan.
+Los paquetes incluyen LICENSE (Apache-2.0 para el código propio), NOTICE, avisos de terceros, fuentes redistribuibles y THIRD_PARTY.md. La distribución no depende de Python, aunque las herramientas de desarrollo sí lo utilizan.
 
 ## Estado y licencias
 
-**El repositorio principal todavía no declara una licencia general para su propio código.** Los metadatos RPM lo señalan con LicenseRef-TinyCPlus-Undeclared en lugar de atribuir una licencia que no ha sido concedida. Antes de ofrecer estos binarios como release oficial, el propietario del proyecto debe escoger una licencia, revisar los avisos por archivo de TinyCC, definir la política de distribución y, de ser posible, firmar Windows con Authenticode y RPM con GPG.
+El código propio de TinyC+ se distribuye bajo **Apache License 2.0**, con los
+avisos de atribución de NOTICE. Las dependencias conservan sus licencias:
+TinyCC/libtcc y sus componentes según COPYING y sus avisos por archivo, y
+nghttp2 bajo MIT. Consulte THIRD_PARTY.md; Apache-2.0 no sustituye esos términos.
+Para una release oficial sigue siendo recomendable firmar Windows con
+Authenticode y RPM con GPG.
 
 Estos instaladores son artefactos de prueba de GitHub Actions, no paquetes aceptados por los repositorios oficiales de Debian o Fedora.
 
