@@ -55,6 +55,14 @@ case "$format" in
 esac
 no_external_compiler
 
+# Fedora's minimal container omits su. Install the test harness helper only
+# after TinyC+ has resolved its own dependencies; it is not a product dependency.
+if ! command -v su >/dev/null 2>&1; then
+    [ "$format" = rpm ] || fail 'The clean test container needs su'
+    dnf install -y --setopt=install_weak_deps=False /usr/bin/su
+    no_external_compiler
+fi
+
 work=$(mktemp -d '/tmp/tinycplus user program.XXXXXX')
 trap 'rm -rf -- "$work"' EXIT HUP INT TERM
 # Package installation needs root; running and compiling must work for an
