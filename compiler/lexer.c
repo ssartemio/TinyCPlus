@@ -1,3 +1,6 @@
+// Copyright (c) 2026 TinyC+ contributors
+// SPDX-License-Identifier: Apache-2.0
+
 #include "tiny.h"
 
 static void push(Context *c, TokenKind k, const char *s, size_t n, Loc l) {

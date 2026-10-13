@@ -66,7 +66,7 @@ No. Las funciones async usan frames/continuaciones y el runtime comparte workers
 
 ## ¿gRPC usa TLS?
 
-No en 1.0 RC. Usa h2c.
+No en 1.0. Usa h2c.
 
 ## ¿Existe GUI gráfica?
 

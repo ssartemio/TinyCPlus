@@ -21,7 +21,7 @@ repintarse. Usado por la GUI experimental.
 
 **Headless** — ejecución sin terminal/ventana real, útil para tests.
 
-**h2c** — HTTP/2 sin TLS. Transporte del gRPC 1.0 RC.
+**h2c** — HTTP/2 sin TLS. Transporte del gRPC 1.0.
 
 **Interface estructural** — interfaz satisfecha por tener las firmas requeridas,
 sin `implements` obligatorio.

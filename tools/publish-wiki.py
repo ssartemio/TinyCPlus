@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 TinyC+ contributors
+# SPDX-License-Identifier: Apache-2.0
+
 """Publish ./wiki to the repository's native GitHub Wiki using git.
 
 Requires:

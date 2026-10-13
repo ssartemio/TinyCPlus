@@ -1,3 +1,6 @@
+// Copyright (c) 2026 TinyC+ contributors
+// SPDX-License-Identifier: Apache-2.0
+
 #ifndef TINY_COMPILER_H
 #define TINY_COMPILER_H
 #include <stdio.h>

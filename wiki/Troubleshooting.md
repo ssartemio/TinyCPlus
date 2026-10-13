@@ -56,7 +56,7 @@ Prefiera `await` dentro de flujos async.
 
 ## gRPC no funciona contra un endpoint TLS
 
-La implementación 1.0 RC es h2c. TLS no forma parte todavía del transporte
+La implementación 1.0 es h2c. TLS no forma parte todavía del transporte
 entregado.
 
 ## TinyEdit deja la terminal extraña después de matar el proceso
@@ -76,7 +76,7 @@ Confirme que:
 
 ## GUI experimental no abre ventana
 
-Primero confirme la rama/PR que está usando. `main` 1.0 RC no incluye todavía
+Primero confirme la rama/PR que está usando. TinyC+ 1.0 no incluye todavía
 la GUI gráfica.
 
 Win32, X11 y Cocoa se desarrollan en líneas post-1.0 separadas.

@@ -15,9 +15,11 @@ compilados.
 
 ## Estado
 
-La rama `main` corresponde a **TinyC+ 1.0.0-rc.1**. La matriz de CI ha sido
-validada en Windows x64/GCC, Ubuntu x86-64/GCC, Ubuntu ARM64/GCC, macOS
-ARM64/Clang y Ubuntu/Clang con ASan/UBSan.
+Esta documentación corresponde a **TinyC+ 1.0.0**. Los instaladores se publican
+para Windows x64, Ubuntu 24.04 amd64 y Fedora 42 x86_64; otras plataformas se
+construyen desde fuentes. Consulte las
+[notas de la versión](https://github.com/ssartemio/TinyCPlus/blob/main/docs/releases/1.0.0.md)
+para conocer el alcance y los registros de validación.
 
 La GUI gráfica se desarrolla como trabajo **post-1.0 experimental** en PRs
 separados. La TUI y TinyEdit sí forman parte del alcance 1.0.
@@ -109,7 +111,7 @@ modelo de TinyC+.
 
 ## Capacidades principales
 
-| Área | Estado en 1.0 RC |
+| Área | Estado en 1.0 |
 |---|---|
 | Frontend C11 + AST + tipos | Implementado |
 | Lowering a C11 | Implementado |

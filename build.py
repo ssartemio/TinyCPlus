@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 TinyC+ contributors
+# SPDX-License-Identifier: Apache-2.0
+
 """Build the dependency-free C11 frontend. No packages are required."""
 import argparse
 import os

@@ -89,7 +89,7 @@ TinyC+ implementa encima el framing gRPC, rutas, content-type y grpc-status.
 
 ## Límites actuales
 
-La entrega 1.0 RC no incluye:
+La entrega 1.0 no incluye:
 
 ```text
 TLS

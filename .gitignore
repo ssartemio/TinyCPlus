@@ -9,3 +9,4 @@ third_party/tcc/posix/
 bin/tiny
 bin/tinyc
 bin/tinyedit
+dist/

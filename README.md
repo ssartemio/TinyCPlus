@@ -1,19 +1,36 @@
-# TinyC+ 1.0.0-rc.1
+# TinyC+ 1.0.0
 
 Compilador nativo de TinyC+, escrito en C11, con librería estándar, concurrencia,
 async/await, red, generación Protobuf, gRPC unary sobre HTTP/2, TUI y el editor
 `tinyedit`. El frontend genera C inspeccionable y utiliza libtcc o un compilador
 C externo. No requiere LLVM, VM, GC ni Python para ejecutar el compilador o las aplicaciones.
 
-Esta entrega implementa las áreas del roadmap hasta 1.0. Sigue identificada como
-**candidata de entrega** hasta completar la integración/release formal, pero la
-matriz CI ya fue validada en Windows x64/GCC, Ubuntu x86-64/GCC, Ubuntu ARM64/GCC,
-macOS ARM64/Clang y Ubuntu x86-64 con ASan/UBSan. Consulte
-[cobertura y límites](docs/STATUS.md) y [evidencia CI](docs/validation/ci-2026-09-19.md).
+Esta entrega cubre el roadmap hasta 1.0, incluidos los instaladores nativos y
+la licencia Apache-2.0 para el código propio. Consulte las
+[notas de la versión](docs/releases/1.0.0.md) y la [cobertura y límites](docs/STATUS.md).
+
+## Descargar e instalar
+
+Los paquetes de una versión publicada se descargan desde
+[GitHub Releases](https://github.com/ssartemio/TinyCPlus/releases):
+
+- **Windows x64:** instalador `.exe` por usuario, con consola desde el menú Inicio.
+- **Ubuntu 24.04 amd64:** paquete `.deb` con las dependencias de desarrollo C necesarias.
+- **Fedora 42 x86_64:** paquete `.rpm` con las dependencias de desarrollo C necesarias.
+- **Otras plataformas:** código fuente; se requiere un compilador C y el SDK del sistema.
+
+La extensión `.deb` no garantiza compatibilidad con cualquier versión de Debian
+o Ubuntu. Consulte [instalación, requisitos y primer programa](docs/INSTALLERS.md).
+Los paquetes no tienen firma Authenticode/GPG; la publicación incluye sumas SHA-256.
 
 ## Empezar en Windows x64
 
-Abra PowerShell en esta carpeta. Los ejecutables y TinyCC están incluidos:
+Con el instalador, abra **TinyC+ console** y ejecute `tiny run examples\hello.tc`;
+el ejemplo imprime `30`. Para crear su propio «Hola mundo», siga la
+[guía de primer programa](docs/INSTALLERS.md#crear-su-primer-programa).
+
+Si trabaja desde el código fuente, reconstruya primero el frontend con
+`python build.py`; TinyCC está incluido. Abra PowerShell en la raíz del repositorio:
 
 ```powershell
 .\bin\tiny.exe --version
@@ -52,7 +69,8 @@ python tools/bootstrap.py --cc "C:\ruta\a\gcc.exe"
 nghttp2 **sin descargar nada**. Las fuentes originales, licencias y el parche
 local de nghttp2 están en `third_party`. No se modificó el núcleo de TinyCC.
 
-Para Linux/macOS, se incluyen rutas POSIX, pero no binarios para esos sistemas:
+Para compilar desde fuentes en Linux/macOS (por ejemplo, en plataformas sin
+instalador de esta entrega):
 
 ```sh
 python3 tools/bootstrap.py --cc cc
@@ -142,9 +160,24 @@ git reset --hard
 - [Índice de API estándar](docs/API.md)
 - [Plan de autohospedaje](docs/SELFHOSTING.md)
 - [Dependencias y licencias](THIRD_PARTY.md)
+- [Instaladores nativos Windows, Debian y Fedora](docs/INSTALLERS.md)
+- [Notas de TinyC+ 1.0.0](docs/releases/1.0.0.md)
 - [Wiki completa del proyecto](wiki/Home.md)
 
 La especificación original se conserva en [docs/SPEC.md](docs/SPEC.md) como
 referencia de requisitos. El comportamiento implementado se describe en estos
 documentos y en las pruebas; los ejemplos de intención de la especificación no
 se presentan como pruebas de funcionalidad.
+
+## Licencia
+
+El código y la documentación propios de TinyC+ se distribuyen bajo
+[Apache License 2.0](LICENSE), salvo donde un archivo indique expresamente otra
+licencia. Consulte también [NOTICE](NOTICE). Los componentes de `third_party/`
+conservan sus licencias y avisos originales; se detallan en [THIRD_PARTY.md](THIRD_PARTY.md).
+
+Usar el compilador no impone Apache-2.0 al código de sus propias aplicaciones.
+Al distribuir una aplicación que incorpore código del runtime o de la librería
+estándar de TinyC+, incluya una copia de `LICENSE` y los avisos de `NOTICE` que
+correspondan a ese código, y cumpla las condiciones de redistribución de Apache-2.0.
+Si incorpora dependencias como nghttp2, conserve además sus licencias y avisos.

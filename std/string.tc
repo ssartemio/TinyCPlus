@@ -1,3 +1,6 @@
+// Copyright (c) 2026 TinyC+ contributors
+// SPDX-License-Identifier: Apache-2.0
+
 module std.string;
 extern C {
     string tc_string_view(const char* data, u64 length);

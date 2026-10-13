@@ -11,7 +11,8 @@ Los nombres de archivo siguen la convención de GitHub Wiki:
 
 La documentación distingue explícitamente entre:
 
-1. **TinyC+ 1.0.0-rc.1**, disponible en `main` y validado por CI.
+1. **TinyC+ 1.0.0**, con el alcance y la evidencia de validación descritos en
+   `docs/STATUS.md` y `docs/releases/1.0.0.md`.
 2. **Trabajo post-1.0 experimental**, especialmente la GUI gráfica desarrollada
    en ramas/PR separados.
 

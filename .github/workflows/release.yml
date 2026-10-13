@@ -1,0 +1,87 @@
+name: TinyC+ stable release
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'README.md'
+      - 'docs/releases/**'
+      - '.github/workflows/release.yml'
+  pull_request:
+    paths:
+      - 'docs/releases/**'
+      - 'tools/prepare_release.py'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: stable-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verification:
+    uses: ./.github/workflows/ci.yml
+  installers:
+    uses: ./.github/workflows/installers.yml
+  assemble:
+    needs: [verification, installers]
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: tinycplus-*
+          merge-multiple: true
+          path: release-assets
+      - name: Validate packages and assemble source and checksums
+        id: version
+        run: python tools/prepare_release.py --artifacts release-assets
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tinycplus-release
+          path: release-assets/*
+          if-no-files-found: error
+  publish:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: assemble
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v5
+        with:
+          name: tinycplus-release
+          path: release-assets
+      - name: Publish the verified commit and its packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.assemble.outputs.version }}
+        run: |
+          set -euo pipefail
+          (cd release-assets && sha256sum --check SHA256SUMS.txt)
+          tag="v$VERSION"
+          # Never replace assets or move an already published tag.
+          if draft=$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null); then
+            if [ "$draft" = true ]; then
+              echo "An incomplete draft exists for $tag; inspect it before retrying." >&2
+              exit 1
+            fi
+            echo "Release $tag already exists; leaving it unchanged."
+            exit 0
+          fi
+          tag_status=0
+          git ls-remote --exit-code --tags origin "refs/tags/$tag" > /dev/null || tag_status=$?
+          if [ "$tag_status" -eq 0 ]; then
+            echo "Tag $tag already exists without a release; inspect it before publishing." >&2
+            exit 1
+          elif [ "$tag_status" -ne 2 ]; then
+            echo 'Cannot verify whether the release tag exists.' >&2
+            exit "$tag_status"
+          fi
+          gh release create "$tag" release-assets/* --target "$GITHUB_SHA" \
+            --title "TinyC+ $VERSION" --notes-file "docs/releases/$VERSION.md" --latest

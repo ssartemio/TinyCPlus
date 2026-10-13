@@ -1,3 +1,6 @@
+// Copyright (c) 2026 TinyC+ contributors
+// SPDX-License-Identifier: Apache-2.0
+
 #include "tiny.h"
 static const char *names[] = {"void", "bool", "i8",    "u8",     "i16",  "u16",    "i32", "u32",
                               "i64",  "u64",  "float", "double", "char", "string", "null"};

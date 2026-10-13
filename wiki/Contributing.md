@@ -3,6 +3,19 @@
 TinyC+ valora más una implementación pequeña y demostrable que una feature
 ambiciosa difícil de razonar.
 
+## Licencia de las contribuciones
+
+El código y la documentación propios del proyecto usan
+[Apache-2.0](../LICENSE). Salvo indicación expresa en contrario, las contribuciones
+enviadas intencionalmente para su inclusión se ofrecen bajo esa misma licencia,
+según su sección 5. Aporte únicamente material que tenga derecho a contribuir.
+
+Conserve los avisos de copyright y licencia existentes. En nuevos archivos de
+código propio, añada `SPDX-License-Identifier: Apache-2.0` en un comentario.
+Los componentes de `third_party/` conservan sus licencias: no les añada la cabecera
+Apache del proyecto. Documente cualquier nueva dependencia y sus avisos en
+[THIRD_PARTY.md](../THIRD_PARTY.md).
+
 ## Antes de escribir código
 
 Defina:

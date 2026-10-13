@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 TinyC+ contributors
+# SPDX-License-Identifier: Apache-2.0
 """Create a relocatable archive, omitting scratch builds and test binaries."""
 import argparse
 import hashlib
@@ -8,7 +10,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 parser=argparse.ArgumentParser()
-parser.add_argument('--output',default=str(ROOT.parent/'tinycplus-1.0.0-rc.1-windows-x64.zip'))
+parser.add_argument('--output',default=str(ROOT.parent/'tinycplus-1.0.0-windows-x64.zip'))
 args=parser.parse_args()
 output=Path(args.output).resolve()
 output.parent.mkdir(parents=True,exist_ok=True)

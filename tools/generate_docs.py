@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 TinyC+ contributors
+# SPDX-License-Identifier: Apache-2.0
+
 """Regenerate the API reference from the shipped standard library."""
 import os
 from pathlib import Path

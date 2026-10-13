@@ -1,3 +1,6 @@
+// Copyright (c) 2026 TinyC+ contributors
+// SPDX-License-Identifier: Apache-2.0
+
 #include "concurrent.h"
 #include <stdlib.h>
 #include <string.h>

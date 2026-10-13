@@ -1,3 +1,6 @@
+// Copyright (c) 2026 TinyC+ contributors
+// SPDX-License-Identifier: Apache-2.0
+
 #include "tiny.h"
 /* Windows uses the committed portable package; POSIX hosts build theirs with
    tools/bootstrap.py into an untracked subdirectory. */
