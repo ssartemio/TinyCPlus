@@ -77,7 +77,10 @@ for file in LICENSE NOTICE THIRD_PARTY.md third_party/tcc/COPYING third_party/ng
     [ -s "$installed/$file" ] || fail "Missing installed license notice: $file"
 done
 for executable in tiny tinyc tinyedit; do
-    [ "$(command -v "$executable")" = "/usr/bin/$executable" ] || fail "Missing command: $executable"
+    # su may put /bin before /usr/bin; both name the same directory on Fedora.
+    command_path=$(command -v "$executable") || fail "Missing command: $executable (PATH=$PATH)"
+    printf '%s -> %s\n' "$executable" "$command_path"
+    [ "$(readlink -f "$command_path")" = "$installed/bin/$executable" ] || fail "Wrong installed command: $command_path"
     [ -x "/usr/bin/$executable" ] || fail "Command is not executable: $executable"
 done
 for binary in "$installed"/bin/tiny "$installed"/bin/tinyc "$installed"/bin/tinyedit \
