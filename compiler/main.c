@@ -198,7 +198,7 @@ int main(int argc, char **argv) {
             usage(stdout);
             return 0;
         } else if (!strcmp(a, "--version")) {
-            puts("TinyC+ 1.0.0-rc.1 (C11 frontend; libtcc backend)");
+            puts("TinyC+ 1.0.0 (C11 frontend; libtcc backend)");
             return 0;
         } else if (a[0] == '-') {
             fprintf(stderr, "tiny: unknown option '%s'\n", a);

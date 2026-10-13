@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import uuid
@@ -11,6 +12,7 @@ if os.name != "nt":
     raise SystemExit("This test requires Windows")
 
 root = Path(sys.argv[1]).resolve()
+version = re.search(r"^# TinyC\+ ([^\s]+)", (root / "README.md").read_text(encoding="utf-8"))[1]
 launcher = root / "bin" / "tiny-console.cmd"
 assert launcher.is_file(), launcher
 env = os.environ.copy()
@@ -34,6 +36,7 @@ command = (f'"{system32 / "cmd.exe"}" /D /Q /C '
 result = subprocess.run(command, cwd=other_directory, env=env,
                         capture_output=True, text=True, timeout=30)
 assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
+assert f"TinyC+ {version} (" in result.stdout, result.stdout
 assert "30" in result.stdout.splitlines(), result.stdout
 assert result.stdout.splitlines().count("Hola mundo") == 2, result.stdout
 assert "CONSOLE_SMOKE_OK" in result.stdout.splitlines(), result.stdout

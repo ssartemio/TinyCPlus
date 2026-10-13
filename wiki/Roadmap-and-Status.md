@@ -1,8 +1,8 @@
 # Roadmap y estado
 
-## 1.0.0-rc.1
+## 1.0.0
 
-La rama `main` cubre el roadmap funcional hasta 1.0:
+La versión 1.0.0 cubre este roadmap funcional:
 
 ```text
 0.0 frontend/bootstrap
@@ -19,8 +19,11 @@ La rama `main` cubre el roadmap funcional hasta 1.0:
 1.0 integración, pruebas y release qualification
 ```
 
-La matriz multiplataforma requerida quedó verde. La etiqueta RC permanece hasta
-completar la integración/release formal.
+La distribución incluye instaladores para Windows x64, Ubuntu 24.04 amd64 y
+Fedora 42 x86_64, además de fuentes. La validación del compilador también cubre
+Ubuntu ARM64 y macOS ARM64 desde fuentes. Los informes identifican el commit
+probado; consulte
+[estado y evidencia](https://github.com/ssartemio/TinyCPlus/blob/main/docs/STATUS.md).
 
 ## Límites contractuales de 1.0
 

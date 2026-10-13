@@ -2,7 +2,7 @@
 ; Copyright (c) 2026 TinyC+ contributors
 ; SPDX-License-Identifier: Apache-2.0
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.0-rc.1"
+  #define MyAppVersion "1.0.0"
 #endif
 #ifndef PayloadDir
   #error PayloadDir is required

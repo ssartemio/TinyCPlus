@@ -32,7 +32,7 @@ Los handles tienen ciclos de vida explícitos.
 
 Los límites de buffers, operaciones pendientes y conexiones son deliberados.
 
-La versión gRPC 1.0 RC usa h2c: **no proporciona cifrado de transporte**.
+La versión gRPC 1.0 usa h2c: **no proporciona cifrado de transporte**.
 
 No use esa ruta para datos sensibles a través de redes no confiables sin una
 capa segura adecuada.

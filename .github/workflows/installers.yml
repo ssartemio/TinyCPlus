@@ -1,6 +1,7 @@
 name: TinyC+ native installers
 on:
   workflow_dispatch:
+  workflow_call:
   push:
     branches: [feature/native-installers]
     tags: ['v*']
@@ -8,6 +9,7 @@ on:
     paths:
       - 'tools/build_installers.py'
       - 'tests/test_windows_console.py'
+      - 'tests/test_linux_install.sh'
       - 'LICENSE'
       - 'NOTICE'
       - 'THIRD_PARTY.md'
@@ -19,8 +21,8 @@ jobs:
   windows:
     runs-on: windows-2025
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Provision MinGW x64 via MSYS2
@@ -36,12 +38,31 @@ jobs:
           python tools/bootstrap.py --cc gcc
           python build.py --cc gcc
           ./bin/tiny.exe build apps/tinyedit.tc -o bin/tinyedit.exe --cc gcc
-      - name: Build installer
+      - name: Provision installer builder
         shell: pwsh
+        run: choco install innosetup --yes --no-progress
+      - name: Build installer with the same compiler environment
+        shell: msys2 {0}
         run: |
-          choco install innosetup --yes --no-progress
           python tools/build_installers.py stage --target windows
           python tools/build_installers.py windows
+      - name: Verify packaged imports and toolchain notices
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          for binary in build/installers/payload/bin/*.exe build/installers/payload/third_party/tcc/tcc.exe build/installers/payload/third_party/tcc/libtcc.dll; do
+            objdump -p "$binary" > imports.txt
+            imports=$(sed -n 's/.*DLL Name: //p' imports.txt | tr -d '\r' | tr '[:upper:]' '[:lower:]')
+            test -n "$imports"
+            printf '%s: %s\n' "$binary" "$imports"
+            if printf '%s\n' "$imports" | grep -Ev '^(kernel32|msvcrt|user32|advapi32|ws2_32|shell32|ole32|bcrypt|ucrtbase)\.dll$|^api-ms-win-.*\.dll$'; then
+              echo 'Unexpected non-system DLL dependency' >&2
+              exit 1
+            fi
+          done
+          test -s build/installers/payload/third_party/mingw-runtime/COPYING.MinGW-w64-runtime.txt
+          test -s build/installers/payload/third_party/mingw-runtime/COPYING.RUNTIME
+          test -s build/installers/payload/third_party/mingw-runtime/COPYING3
       - name: Install + smoke test + uninstall
         shell: pwsh
         run: |
@@ -50,7 +71,7 @@ jobs:
           if ($items.Count -ne 1) { throw 'Expected one installer' }
           $target = Join-Path $env:RUNNER_TEMP 'TinyCPlus Smoke'
           $args = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$target`"",'/TASKS=!addtopath')
-          $p = Start-Process -FilePath $items[0].FullName -ArgumentList $args -Wait -PassThru
+          $p = Start-Process -FilePath $items[0].FullName -ArgumentList $args -WindowStyle Hidden -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "install error $($p.ExitCode)" }
           & "$target\bin\tiny.exe" --version
           if ($LASTEXITCODE -ne 0) { throw 'version smoke failed' }
@@ -69,7 +90,7 @@ jobs:
           }
           $uninstaller = Join-Path $target 'unins000.exe'
           if (-not (Test-Path $uninstaller)) { throw 'Uninstaller missing' }
-          $p = Start-Process -FilePath $uninstaller -ArgumentList @('/VERYSILENT','/NORESTART') -Wait -PassThru
+          $p = Start-Process -FilePath $uninstaller -ArgumentList @('/VERYSILENT','/NORESTART') -WindowStyle Hidden -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "uninstall error $($p.ExitCode)" }
       - uses: actions/upload-artifact@v4
         with:
@@ -79,8 +100,8 @@ jobs:
   debian:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Compile TinyC+ and TinyEdit
@@ -95,15 +116,11 @@ jobs:
           python tools/build_installers.py stage --target linux
           python tools/build_installers.py deb
           dpkg-deb --info dist/*.deb
-      - name: Install + smoke test + uninstall
+      - name: Install and test in a clean Ubuntu container
         run: |
-          sudo dpkg -i dist/*.deb
-          tiny --version
-          tiny check /usr/lib/tinycplus/examples/hello.tc
-          tiny run /usr/lib/tinycplus/examples/hello.tc
-          tinyc check /usr/lib/tinycplus/examples/hello.tc
-          test -x /usr/bin/tinyedit
-          sudo dpkg -r tinycplus
+          docker run --rm -v "$PWD/dist:/packages:ro" \
+            -v "$PWD/tests/test_linux_install.sh:/test-install.sh:ro" \
+            ubuntu:24.04 sh -c 'sh /test-install.sh deb /packages/*.deb'
       - uses: actions/upload-artifact@v4
         with:
           name: tinycplus-debian-amd64
@@ -114,7 +131,7 @@ jobs:
     container:
       image: fedora:42
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install build dependencies
         run: dnf install -y python3 gcc make rpm-build rpm glibc-devel git tar gzip patchelf
       - name: Compile TinyC+ and TinyEdit
@@ -141,3 +158,17 @@ jobs:
           name: tinycplus-fedora-x86_64
           path: dist/*.rpm
           if-no-files-found: error
+  fedora-clean:
+    needs: fedora
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v5
+        with:
+          name: tinycplus-fedora-x86_64
+          path: dist
+      - name: Install and test in a clean Fedora container
+        run: |
+          docker run --rm -v "$PWD/dist:/packages:ro" \
+            -v "$PWD/tests/test_linux_install.sh:/test-install.sh:ro" \
+            fedora:42 sh -c 'sh /test-install.sh rpm /packages/*.rpm'

@@ -1,11 +1,15 @@
 # Primeros pasos
 
-Esta página lleva desde un checkout limpio hasta ejecutar y compilar programas
-TinyC+.
+Esta página explica cómo ejecutar y compilar programas TinyC+ 1.0.0 desde el
+repositorio. Para instalar sin construir el compilador, descargue el paquete de
+[GitHub Releases](https://github.com/ssartemio/TinyCPlus/releases) para Windows
+x64, Ubuntu 24.04 amd64 o Fedora 42 x86_64 y siga la
+[guía de instalación y primer programa](https://github.com/ssartemio/TinyCPlus/blob/main/docs/INSTALLERS.md).
 
 ## Windows x64
 
 El repositorio distribuye `tiny.exe` y TinyCC junto con el árbol del proyecto.
+Si modifica el compilador, reconstruya con `python build.py` antes de usarlo.
 
 ```powershell
 .\bin\tiny.exe --version
@@ -29,7 +33,9 @@ No copie únicamente `tiny.exe`. El compilador espera encontrar `runtime`,
 
 ## Linux y macOS
 
-Reconstruya primero las dependencias empaquetadas y el frontend:
+Para trabajar desde fuentes, instale un compilador C, `make`, Python y el SDK o
+los archivos de desarrollo C de su sistema. Reconstruya primero las dependencias
+empaquetadas y el frontend:
 
 ```bash
 python3 tools/bootstrap.py --cc cc

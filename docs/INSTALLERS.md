@@ -1,24 +1,58 @@
 # Instaladores nativos de TinyC+
 
-Este proyecto genera **tres paquetes nativos** desde builds realizados en cada sistema:
+TinyC+ 1.0.0 genera **tres paquetes nativos** desde builds realizados en cada sistema:
 
 | Plataforma | Archivo | Ubicación |
 |---|---|---|
 | Windows x64 | Instalador Inno Setup .exe | Carpeta del usuario: LocalAppData/Programs/TinyCPlus |
-| Debian/Ubuntu amd64 | .deb | /usr/lib/tinycplus |
-| Fedora x86_64 | .rpm | /usr/lib/tinycplus |
+| Ubuntu 24.04 amd64 | .deb | /usr/lib/tinycplus |
+| Fedora 42 x86_64 | .rpm | /usr/lib/tinycplus |
 
 El instalador Windows ofrece añadir la carpeta bin al PATH del usuario (opcional). Los paquetes Linux crean enlaces en /usr/bin para los comandos tiny, tinyc y tinyedit.
 
+Se requiere un sistema de 64 bits y una terminal con soporte ANSI para TinyEdit.
+Los paquetes Linux contienen TinyCC/libtcc, pero necesitan las cabeceras,
+bibliotecas y objetos de inicio C del sistema: `libc6-dev` en Ubuntu y
+`glibc-devel` en Fedora. El gestor de paquetes instala esas dependencias.
+
+El `.deb` se construye para Ubuntu 24.04; sus dependencias expresan el mínimo
+de glibc requerido por los binarios. No se garantiza que funcione en versiones
+anteriores de Ubuntu o en cualquier Debian solo por usar el mismo formato.
+El RPM de Fedora 42 tampoco se anuncia para otras distribuciones RPM. Para
+otros sistemas o arquitecturas, use las fuentes y compile en el sistema destino.
+Ubuntu ARM64 y macOS ARM64 tienen pruebas desde fuentes, pero no instaladores
+nativos en esta entrega.
+
 ## Obtener los instaladores
 
-En GitHub vaya a **Actions → TinyC+ native installers → ejecución exitosa → Artifacts**. Aparecerán los artefactos:
+Para una versión publicada, abra
+[GitHub Releases](https://github.com/ssartemio/TinyCPlus/releases) y descargue el
+`.exe`, `.deb` o `.rpm` correspondiente, junto con `SHA256SUMS.txt`. También se
+publica un archivo de fuentes para reconstruir en otros sistemas. Consulte las
+[notas de 1.0.0](releases/1.0.0.md) para conocer el alcance.
+
+Compruebe la suma del archivo antes de instalar. En PowerShell:
+
+~~~powershell
+Get-FileHash .\TinyCPlus-1.0.0-windows-x64.exe -Algorithm SHA256
+~~~
+
+Compare el resultado con la línea del mismo nombre en `SHA256SUMS.txt`. En Linux,
+para comprobar solo los archivos que descargó:
+
+~~~bash
+sha256sum --check --ignore-missing SHA256SUMS.txt
+~~~
+
+Los builds de desarrollo también están disponibles en **Actions → TinyC+ native
+installers → ejecución exitosa → Artifacts**, con estos nombres:
 
 - tinycplus-windows-x64-installer
 - tinycplus-debian-amd64
 - tinycplus-fedora-x86_64
 
-Cada artefacto de Actions contiene el instalador nativo correspondiente.
+Cada artefacto de Actions contiene el instalador nativo correspondiente; un
+artefacto de una rama de desarrollo no equivale a una versión publicada.
 
 ## Instalar
 
@@ -78,16 +112,19 @@ tiny build hola.tc -o hola.exe
 .\hola.exe
 ~~~
 
-### Debian y Ubuntu
+### Ubuntu 24.04
 
 ~~~bash
-sudo apt install ./tinycplus_1.0.0~rc.1_amd64.deb
+sudo apt install ./tinycplus_1.0.0_amd64.deb
 tiny --version
 tiny run /usr/lib/tinycplus/examples/hello.tc
 sudo apt remove tinycplus
 ~~~
 
-### Fedora
+Use `apt install` con el archivo local para resolver dependencias. Un `dpkg -i`
+aislado puede dejar el paquete sin configurar si faltan las cabeceras de libc.
+
+### Fedora 42
 
 ~~~bash
 sudo dnf install ./tinycplus-*.x86_64.rpm
@@ -98,12 +135,17 @@ sudo dnf remove tinycplus
 
 Los archivos Fedora incluyen el sufijo de distribución, por ejemplo .fc42.
 
+En ambos sistemas Linux también puede crear un archivo propio `hola.tc` con el
+programa mostrado arriba y ejecutar `tiny run hola.tc`, o generar un ejecutable
+con `tiny build hola.tc -o hola` y abrirlo con `./hola`.
+
 ## Construcción local desde el código fuente
 
-Primero instale GCC, make, Python 3.12 y, según el sistema:
+Primero instale GCC, make, Python 3.12, las cabeceras y bibliotecas de desarrollo
+del sistema y, según el formato:
 - Windows: Inno Setup 6, con ISCC.exe disponible;
-- Debian/Ubuntu: dpkg-deb;
-- Fedora: rpm-build.
+- Debian/Ubuntu: dpkg-dev y patchelf;
+- Fedora: rpm-build y patchelf.
 
 Windows:
 
@@ -140,11 +182,18 @@ El código propio de TinyC+ se distribuye bajo **Apache License 2.0**, con los
 avisos de atribución de NOTICE. Las dependencias conservan sus licencias:
 TinyCC/libtcc y sus componentes según COPYING y sus avisos por archivo, y
 nghttp2 bajo MIT. Consulte THIRD_PARTY.md; Apache-2.0 no sustituye esos términos.
-Para una release oficial sigue siendo recomendable firmar Windows con
-Authenticode y RPM con GPG.
-
-Estos instaladores son artefactos de prueba de GitHub Actions, no paquetes aceptados por los repositorios oficiales de Debian o Fedora.
+Los instaladores 1.0.0 se distribuyen **sin firma Authenticode/GPG**. Las sumas
+SHA-256 permiten comprobar que la descarga coincide con el archivo publicado;
+no sustituyen una firma del editor. Windows puede mostrar un aviso de editor
+desconocido. Estos son paquetes del proyecto y no paquetes aceptados por los
+repositorios oficiales de Debian, Ubuntu o Fedora.
 
 ## Diagnóstico
 
-Si tiny --version funciona pero tiny run falla, revise std/, runtime/ y third_party/ dentro de la carpeta instalada. Para usar repl en Linux debe existir libtcc.so en third_party/tcc/posix. Si un paquete no puede instalarse en una distribución más antigua, reconstruya en la distribución más antigua compatible; el glibc mínimo no se garantiza entre sistemas.
+Si `tiny --version` funciona pero `tiny run` falla, revise `std/`, `runtime/` y
+`third_party/` dentro de la carpeta instalada. Para usar `repl` en Linux debe
+existir `libtcc.so` en `third_party/tcc/posix`. Un error sobre `stdio.h`,
+`stdint.h`, `crt1.o` o `crti.o` suele indicar que faltan archivos de desarrollo
+de libc: reinstale el paquete con `apt` o `dnf` y permita resolver sus
+dependencias. No copie solo los ejecutables ni fuerce una instalación que
+rechace la versión de glibc; reconstruya desde fuentes en el sistema destino.

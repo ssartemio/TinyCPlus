@@ -324,7 +324,7 @@ permite luego sustituir esa capa conservando el modelo async/UI.
 
 ## Fin de la ruta estable
 
-Los capítulos 1–12 usan capacidades de TinyC+ 1.0 RC.
+Los capítulos 1–12 usan capacidades de TinyC+ 1.0.
 
 El siguiente capítulo enseña cómo portar esta idea a la GUI gráfica que se está
 desarrollando post-1.0.

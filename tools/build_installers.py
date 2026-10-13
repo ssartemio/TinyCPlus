@@ -113,14 +113,23 @@ def stage(target: str, destination: Path) -> None:
         for name in ("tcc.exe", "libtcc.dll", "COPYING", "tinycc-source.zip"):
             if not (tcc / name).is_file():
                 raise SystemExit("Missing Windows toolchain component: " + name)
-        # MinGW may dynamically import these depending on toolchain flags.
-        # Bundle known redistributable GCC runtime DLLs, not arbitrary PATH DLLs.
+        # The release's PE imports are checked in CI: this C-only build needs
+        # Windows system libraries, not separate GCC or winpthreads DLLs.
+        # Do not redistribute unrelated toolchain binaries found on PATH.
         gcc = shutil.which("gcc")
         if gcc:
-            for name in ("libgcc_s_seh-1.dll", "libwinpthread-1.dll"):
-                src = Path(gcc).parent / name
-                if src.is_file():
-                    shutil.copy2(src, binpath / name)
+            licenses = Path(gcc).resolve().parent.parent / "share" / "licenses"
+            crt_notice = licenses / "crt" / "COPYING.MinGW-w64-runtime.txt"
+            # MSYS2 split gcc-libs into individual runtime packages in GCC 16.
+            gcc_notices = next((licenses / name for name in ("libgcc", "gcc-libs")
+                                if all((licenses / name / text).is_file()
+                                       for text in ("COPYING.RUNTIME", "COPYING3"))), None)
+            if not crt_notice.is_file() or gcc_notices is None:
+                raise SystemExit("Missing MinGW runtime license texts under " + str(licenses))
+            notice_dir = tp / "mingw-runtime"
+            notice_dir.mkdir()
+            for source in (crt_notice, gcc_notices / "COPYING.RUNTIME", gcc_notices / "COPYING3"):
+                shutil.copy2(source, notice_dir / source.name)
     copydir(ROOT / "third_party" / "nghttp2", tp / "nghttp2")
     shutil.copy2(ROOT / "third_party" / "dependencies.json", tp / "dependencies.json")
     for name in ("LICENSE", "NOTICE", "THIRD_PARTY.md", "README.md"):
@@ -154,6 +163,39 @@ def link_aliases(root: Path) -> None:
         (executable_dir / name).symlink_to("../lib/tinycplus/bin/" + name)
 
 
+def deb_dependencies(root: Path, work: Path) -> str:
+    """Calculate ABI dependencies and add headers needed by the bundled compiler."""
+    scanner = shutil.which("dpkg-shlibdeps")
+    if not scanner:
+        raise SystemExit("Install dpkg-dev to calculate Debian library dependencies")
+    # dpkg-shlibdeps reads source-package metadata even when printing to stdout.
+    metadata = work / "debian"
+    metadata.mkdir()
+    (metadata / "control").write_text(
+        "Source: tinycplus\nSection: devel\nPriority: optional\n\n"
+        "Package: tinycplus\nArchitecture: any\n"
+        "Description: TinyC+ native compiler and lightweight runtime\n",
+        encoding="utf-8",
+    )
+    installed = root / LINUX_ROOT
+    private = installed / "third_party" / "tcc" / "posix"
+    # libtcc is loaded dynamically by the frontend, so scan it explicitly too.
+    # Its private, unversioned libtcc.so dependency is shipped in this package.
+    binaries = [installed / "bin" / name for name in ("tiny", "tinyc", "tinyedit")]
+    binaries += [private / "tcc", private / "libtcc.so"]
+    command = [scanner, "-O", "-l" + str(private), *map(str, binaries)]
+    print("+", " ".join(command), flush=True)
+    result = subprocess.run(command, cwd=work, check=True, text=True,
+                            stdout=subprocess.PIPE)
+    dependencies = next((line.partition("=")[2] for line in result.stdout.splitlines()
+                         if line.startswith("shlibs:Depends=")), "")
+    if not dependencies:
+        raise SystemExit("dpkg-shlibdeps did not report runtime library dependencies")
+    # ELF scanning cannot discover headers, startup objects or linker scripts
+    # required when a user runs, builds or opens the REPL on a clean machine.
+    return dependencies + ", libc6-dev"
+
+
 def deb(payload: Path, out: Path) -> Path:
     verify_platform("linux")
     if not shutil.which("dpkg-deb"):
@@ -163,15 +205,17 @@ def deb(payload: Path, out: Path) -> Path:
     arch = linux_arch("deb")
     artifact = out / f"tinycplus_{DEB_VERSION}_{arch}.deb"
     with tempfile.TemporaryDirectory(prefix="tinycplus-deb-") as tmp:
-        root = Path(tmp) / "package"
+        work = Path(tmp)
+        root = work / "package"
         copydir(payload, root / LINUX_ROOT)
         link_aliases(root)
         control = root / "DEBIAN"
         control.mkdir()
+        dependencies = deb_dependencies(root, work)
         (control / "control").write_text(
             f"Package: tinycplus\nVersion: {DEB_VERSION}\n"
             f"Architecture: {arch}\nMaintainer: TinyC+ contributors\n"
-            "Section: devel\nPriority: optional\nDepends: libc6\n"
+            f"Section: devel\nPriority: optional\nDepends: {dependencies}\n"
             "Description: TinyC+ native compiler and lightweight runtime\n"
             " C11-lowered language compiler with manual ownership, standard\n"
             " library, bundled TinyCC backend, and terminal editor.\n",
@@ -204,6 +248,9 @@ def rpm(payload: Path, out: Path) -> Path:
             "URL: https://github.com/ssartemio/TinyCPlus\n"
             f"BuildArch: {arch}\n"
             "AutoReqProv: yes\n"
+            # AutoReqProv finds ELF dependencies, but cannot see headers and
+            # startup objects used later by libtcc to compile user programs.
+            "Requires: glibc-devel%{?_isa}\n"
             "%description\n"
             "Native TinyC+ frontend with bundled TinyCC and standard runtime.\n\n"
             "%prep\n"

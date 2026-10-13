@@ -1,6 +1,6 @@
 # GUI gráfica — trabajo post-1.0
 
-> **Estado: experimental. No forma parte del contrato TinyC+ 1.0.0-rc.1 de main.**
+> **Estado: experimental. No forma parte del contrato TinyC+ 1.0.0.**
 
 La GUI gráfica se desarrolla después de estabilizar lenguaje, concurrencia,
 networking y TUI.

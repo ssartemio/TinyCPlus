@@ -71,7 +71,7 @@ gRPC se prueba contra grpcio en ambas direcciones.
 Esto evita el sesgo de verificar dos implementaciones que compartan el mismo
 error.
 
-## Matriz 1.0 RC
+## Matriz 1.0
 
 La release qualification incluye:
 
