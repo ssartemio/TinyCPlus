@@ -39,6 +39,45 @@ terminal abierta en otra carpeta, use la ruta completa del ejemplo como arriba.
 
 El instalador es por usuario y no pide elevación. La desinstalación elimina la entrada PATH únicamente si fue añadida por el instalador.
 
+#### Crear su primer programa
+
+Abra **TinyC+ console** desde Inicio. Cree una carpeta propia y abra un archivo
+nuevo (estos comandos corresponden a esa consola de Windows):
+
+~~~bat
+mkdir "%USERPROFILE%\Mis programas TinyCPlus"
+cd /d "%USERPROFILE%\Mis programas TinyCPlus"
+tinyedit hola.tc
+~~~
+
+Si la carpeta ya existe, omita `mkdir`. También puede usar otra carpeta donde
+pueda guardar archivos; conserve las comillas si la ruta contiene espacios.
+Escriba este programa:
+
+~~~c
+int main() {
+    println("Hola mundo");
+    return 0;
+}
+~~~
+
+Pulse **Ctrl-S** para guardar y **Ctrl-Q** para salir del editor. TinyEdit edita
+y guarda el archivo; para ejecutarlo, escriba en la consola:
+
+~~~bat
+tiny run hola.tc
+~~~
+
+La salida será `Hola mundo`. Si utiliza otro editor, guarde el archivo como
+`hola.tc`, con codificación **UTF-8** y sin añadir `.txt` al nombre.
+
+Para crear un ejecutable y abrirlo desde esta misma consola:
+
+~~~bat
+tiny build hola.tc -o hola.exe
+.\hola.exe
+~~~
+
 ### Debian y Ubuntu
 
 ~~~bash
