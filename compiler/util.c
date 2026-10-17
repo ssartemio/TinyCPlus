@@ -1,3 +1,9 @@
+/*
+ * Infraestructura del frontend: arena, cadenas, buffers e I/O de fuentes.
+ * tc_alloc devuelve memoria asociada a Context; tc_free libera la unidad.
+ * Buffer crece con reserva propia. tc_error informa Loc y salta al manejador
+ * establecido por el llamador; no se debe usar sin inicializar failure.
+ */
 #include "tiny.h"
 
 struct Arena {
@@ -55,15 +61,144 @@ void tc_free(Context *c) {
     free(c->tokens);
     c->tokens = NULL;
     c->arena = NULL;
+    c->sources = NULL;
+    c->diagnostic_trace = NULL;
+}
+void tc_source(Context *c, const char *file, const char *text) {
+    SourceFile *source;
+    for (source = c->sources; source; source = source->next)
+        if (!strcmp(source->file, file))
+            return;
+    source = (SourceFile *)tc_alloc(c, sizeof(*source));
+    source->file = tc_str(c, file);
+    if (strlen(text) >= 3 && (unsigned char)text[0] == 0xef &&
+        (unsigned char)text[1] == 0xbb && (unsigned char)text[2] == 0xbf) text += 3;
+    source->text = tc_str(c, text);
+    source->next = c->sources;
+    c->sources = source;
+}
+/* Render bounded source excerpts; columns from the lexer are byte offsets.
+   Tabs expand at 8-column stops, controls are escaped, UTF-8 continuation bytes
+   do not consume an extra caret column. No terminal color/escape sequences. */
+static size_t diagnostic_width(unsigned char ch, size_t column, int print) {
+    size_t width = 1, i;
+    if (ch == '\t') {
+        width = 8 - column % 8;
+        if (print) for (i = 0; i < width; i++) fputc(' ', stderr);
+    } else if (ch < 32 || ch == 127) {
+        width = 4;
+        if (print) fprintf(stderr, "\\x%02x", ch);
+    } else {
+        if ((ch & 0xc0) == 0x80) width = 0;
+        if (print) fputc(ch, stderr);
+    }
+    return width;
+}
+static void diagnostic_source(Context *c, Loc loc) {
+    SourceFile *source;
+    const char *line, *end;
+    size_t size, offset, start, stop, i, column = 0, caret = 0, width = 1, token_end;
+    int number, digits;
+    if (!loc.file || loc.line < 1 || loc.col < 1) return;
+    for (source = c->sources; source; source = source->next)
+        if (!strcmp(source->file, loc.file)) break;
+    if (!source) return;
+    line = source->text;
+    for (number = 1; number < loc.line; number++) {
+        line = strchr(line, '\n');
+        if (!line) return;
+        line++;
+    }
+    end = strchr(line, '\n');
+    size = end ? (size_t)(end - line) : strlen(line);
+    if (size && line[size - 1] == '\r') size--;
+    offset = (size_t)loc.col - 1;
+    if (offset > size) offset = size;
+    start = offset > 60 ? offset - 60 : 0;
+    while (start && ((unsigned char)line[start] & 0xc0) == 0x80) start--;
+    stop = size < start + 140 ? size : start + 140;
+    while (stop < size && ((unsigned char)line[stop] & 0xc0) == 0x80) stop++;
+    token_end = offset;
+    while (token_end < stop && (isalnum((unsigned char)line[token_end]) || line[token_end] == '_'))
+        token_end++;
+    if (offset < stop && (line[offset] == '"' || line[offset] == '\'')) {
+        char quote = line[offset];
+        token_end = offset + 1;
+        while (token_end < stop) {
+            char ch = line[token_end++];
+            if (ch == quote) break;
+            if (ch == '\\' && token_end < stop) token_end++;
+        }
+    }
+    fprintf(stderr, " %d | %s", loc.line, start ? "..." : "");
+    for (i = start; i < stop; i++) {
+        if (i == offset) caret = column;
+        column += diagnostic_width((unsigned char)line[i], column, 1);
+    }
+    if (offset == stop) caret = column;
+    digits = snprintf(NULL, 0, "%d", loc.line);
+    fprintf(stderr, "%s\n %*s | %s", stop < size ? "..." : "", digits, "", start ? "   " : "");
+    for (i = 0; i < caret; i++) fputc(' ', stderr);
+    fputc('^', stderr);
+    if (token_end > offset) {
+        width = 0;
+        for (i = offset; i < token_end; i++)
+            width += diagnostic_width((unsigned char)line[i], caret + width, 0);
+    }
+    for (i = 1; i < width; i++) fputc('~', stderr);
+    fputc('\n', stderr);
+}
+void tc_json_string(FILE *out, const char *text) {
+    const unsigned char *p = (const unsigned char *)(text ? text : "");
+    fputc('"', out);
+    for (; *p; p++) {
+        if (*p == '"' || *p == '\\') { fputc('\\', out); fputc(*p, out); }
+        else if (*p < 32) fprintf(out, "\\u%04x", *p);
+        else fputc(*p, out);
+    }
+    fputc('"', out);
 }
 void tc_error(Context *c, Loc l, const char *fmt, ...) {
     va_list a;
-    if (!c->quiet) {
+    if (c->diagnostic_json && !c->quiet) {
+        char message[4096];
+        va_start(a, fmt); vsnprintf(message, sizeof(message), fmt, a); va_end(a);
+        fputs("{\"schemaVersion\":1,\"ok\":false,\"diagnostics\":[{\"severity\":\"error\",\"file\":", stdout);
+        tc_json_string(stdout, l.file);
+        fprintf(stdout, ",\"line\":%d,\"column\":%d,\"message\":", l.line, l.col);
+        tc_json_string(stdout, message);
+        fputs(",\"instantiations\":[", stdout);
+        {
+            Instantiation *trace = c->diagnostic_trace;
+            int depth = 0;
+            while (trace && depth < 16) {
+                if (depth++) fputc(',', stdout);
+                fputs("{\"name\":", stdout); tc_json_string(stdout, trace->name);
+                fputs(",\"file\":", stdout); tc_json_string(stdout, trace->loc.file);
+                fprintf(stdout, ",\"line\":%d,\"column\":%d}", trace->loc.line, trace->loc.col);
+                trace = trace->parent;
+            }
+        }
+        fputs("]}]}\n", stdout);
+    } else if (!c->quiet) {
         fprintf(stderr, "%s:%d:%d: error: ", l.file ? l.file : "<source>", l.line, l.col);
         va_start(a, fmt);
         vfprintf(stderr, fmt, a);
         va_end(a);
         fputc('\n', stderr);
+        diagnostic_source(c, l);
+        {
+            Instantiation *trace = c->diagnostic_trace;
+            int depth = 0;
+            while (trace && depth++ < 16) {
+                fprintf(stderr, "%s:%d:%d: note: while instantiating '%s'\n",
+                        trace->loc.file ? trace->loc.file : "<source>", trace->loc.line,
+                        trace->loc.col, trace->name);
+                diagnostic_source(c, trace->loc);
+                trace = trace->parent;
+            }
+            if (trace) fputs("note: further generic instantiation context omitted\n", stderr);
+        }
     }
     c->errors++;
     longjmp(c->failure, 1);

@@ -1,3 +1,9 @@
+/*
+ * Lectura y escritura del formato binario Protobuf.
+ * Implementa varints, enteros de ancho fijo, bytes, UTF-8 y salto de campos.
+ * Reader conserva una vista de entrada; writer acumula almacenamiento propio.
+ * Consultar std/protobuf.tc para el contrato de take y destroy.
+ */
 #ifndef TC_PROTOBUF_IMPLEMENTATION
 #define TC_PROTOBUF_IMPLEMENTATION
 #include "library.c"

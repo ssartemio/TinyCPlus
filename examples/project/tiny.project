@@ -1,0 +1,6 @@
+# Run tiny build / tiny test from this directory, or pass --project from elsewhere.
+entry = src/main.tc
+module_path = modules
+c_source = native/answer.c
+include = include
+test = src/tests.tc

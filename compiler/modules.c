@@ -1,3 +1,8 @@
+/*
+ * Carga de fuentes e imports, prelude y calificación de nombres.
+ * load_program reúne módulos en un programa y normaliza sus tipos.
+ * La detección de tareas incorpora std.concurrent cuando es necesario.
+ */
 #include "tiny.h"
 #ifdef _WIN32
 #include <windows.h>
@@ -6,6 +11,22 @@
 #include <limits.h>
 extern char *realpath(const char *, char *);
 #endif
+
+static const char *search_paths[32];
+static int search_path_count;
+int module_path_option(const char *path) {
+    if (search_path_count == 32)
+        return 1;
+    search_paths[search_path_count++] = path;
+    return 0;
+}
+static int module_exists(const char *path) {
+    FILE *file = fopen(path, "rb");
+    if (!file)
+        return 0;
+    fclose(file);
+    return 1;
+}
 
 const char *module_name(Context *c, const char *file) {
     Node *m;
@@ -100,7 +121,19 @@ static Node *load_module(Context *c, const char *path, const char *root) {
                 dirlen = slash ? (size_t)(slash - path) : 0;
                 import_path = dirlen ? tc_format(c, "%.*s/%s.tc", (int)dirlen, path, relative)
                                      : tc_format(c, "%s.tc", relative);
+                if (!module_exists(import_path)) {
+                    int i;
+                    for (i = 0; i < search_path_count; i++) {
+                        const char *candidate = tc_format(c, "%s/%s.tc", search_paths[i], relative);
+                        if (module_exists(candidate)) {
+                            import_path = candidate;
+                            break;
+                        }
+                    }
+                }
             }
+            if (!module_exists(import_path))
+                tc_error(c, n->loc, "cannot find module '%s'", n->name);
             dep = load_module(c, import_path, root);
             if (dep) {
                 *tail = dep->body;
@@ -140,25 +173,90 @@ static void qualified_types(Context *c) {
     Type *t, *actual;
     TypeLink *a, *b;
     for (t = c->types; t; t = t->next)
-        if (t->kind == TY_NAMED && !t->decl && strchr(t->name, '.')) {
+        if (t->kind == TY_NAMED && !t->decl) {
             const char *dot = strrchr(t->name, '.');
+            const char *short_name = dot ? dot + 1 : t->name;
+            Type *selected = NULL;
+            int matches = 0;
             for (actual = c->types; actual; actual = actual->next)
-                if (actual->decl && !strcmp(actual->name, dot + 1)) {
+                if (actual->decl && !actual->items && !strcmp(actual->name, short_name)) {
                     const char *module = module_name(c, actual->decl->loc.file);
-                    if (strlen(module) == (size_t)(dot - t->name) &&
-                        !strncmp(module, t->name, (size_t)(dot - t->name)))
-                        break;
+                    if (dot && (strlen(module) != (size_t)(dot - t->name) ||
+                        strncmp(module, t->name, (size_t)(dot - t->name)))) continue;
+                    if (!dot && t->module_file && !strcmp(actual->decl->loc.file, t->module_file)) {
+                        selected = actual; matches = 1; break;
+                    }
+                    selected = actual; matches++;
                 }
-            if (!actual) {
-                Loc l = {c->active_file, 1, 1};
-                tc_error(c, l, "unknown qualified type '%s'", t->name);
+            if (matches > 1) {
+                Loc loc = t->origin.file ? t->origin : (Loc){t->module_file, 1, 1};
+                tc_error(c, loc, "ambiguous imported type '%s'; qualify it with its module", t->name);
             }
-            if (!t->items)
-                t->alias = actual;
+            if (!selected && t->items) {
+                Node *function, *match = NULL;
+                int functions = 0;
+                for (function = c->program->body; function; function = function->next)
+                    if (function->kind == N_FUNCTION && function->args && !strcmp(function->name, short_name)) {
+                        const char *module = module_name(c, function->loc.file);
+                        if (dot && (strlen(module) != (size_t)(dot - t->name) ||
+                            strncmp(module, t->name, (size_t)(dot - t->name)))) continue;
+                        match = function; functions++;
+                        if (!dot && t->module_file && !strcmp(t->module_file, function->loc.file)) { functions = 1; break; }
+                    }
+                if (functions > 1) tc_error(c, t->origin, "ambiguous imported generic '%s'; qualify it with its module", t->name);
+                if (match) {
+                    t->name = match->name; t->module_file = match->loc.file;
+                    t->cname = tc_format(c, "tc_%s_%d", match->name, t->id);
+                    continue;
+                }
+            }
+            if (!selected) {
+                if (dot) tc_error(c, t->origin, "unknown qualified type '%s'", t->name);
+                continue; /* Type parameters and unknown types are checked later. */
+            }
+            if (!t->items) t->alias = selected;
             else {
-                t->name = actual->name;
-                t->cname = tc_format(c, "tc_%s_%d", actual->name, t->id);
+                t->name = selected->name;
+                t->module_file = selected->module_file;
+                t->cname = tc_format(c, "tc_%s_%d", selected->name, t->id);
             }
+        }
+    /* Foreign declarations use the C namespace, shared across TinyC+ modules. */
+    for (t = c->types; t; t = t->next)
+        if (!t->alias && t->decl && !t->items && (t->decl->flags & NF_EXTERN))
+            for (actual = t->next; actual; actual = actual->next)
+                if (!actual->alias && actual->decl && !actual->items &&
+                    (actual->decl->flags & NF_EXTERN) && !strcmp(t->cname, actual->cname)) {
+                    Node *left = t->decl->body, *right = actual->decl->body;
+                    if (t->kind != actual->kind)
+                        tc_error(c, t->decl->loc, "conflicting extern C type '%s'", t->name);
+                    t->alias = actual; /* Allows recursive pointers to the same C type. */
+                    for (; left && right; left = left->next, right = right->next) {
+                        Node *lp, *rp;
+                        if (left->kind != right->kind || strcmp(left->name, right->name) ||
+                            !type_equal(canonical_type(left->decl_type), canonical_type(right->decl_type)) ||
+                            (t->kind == TY_ENUM && strcmp(left->text, right->text)))
+                            tc_error(c, t->decl->loc, "conflicting extern C layout for '%s'", t->name);
+                        for (lp = left->params, rp = right->params; lp && rp; lp = lp->next, rp = rp->next)
+                            if (!type_equal(canonical_type(lp->decl_type), canonical_type(rp->decl_type)))
+                                tc_error(c, t->decl->loc, "conflicting extern C signature for '%s'", t->name);
+                        if (lp || rp) tc_error(c, t->decl->loc, "conflicting extern C signature for '%s'", t->name);
+                    }
+                    if (left || right) tc_error(c, t->decl->loc, "conflicting extern C layout for '%s'", t->name);
+                    break;
+                }
+    /* Preserve old C names for unique declarations; disambiguate collisions. */
+    for (t = c->types; t; t = t->next)
+        if (t->decl && !t->items && !(t->decl->flags & NF_EXTERN)) {
+            for (actual = c->types; actual; actual = actual->next)
+                if (actual != t && actual->decl && !actual->items && !strcmp(actual->name, t->name)) {
+                    Node *value;
+                    t->cname = tc_format(c, "tc_%s_m%d", t->name, t->id);
+                    if (t->kind == TY_ENUM)
+                        for (value = t->decl->body; value; value = value->next)
+                            value->cname = tc_format(c, "%s_%s", t->cname, value->name);
+                    break;
+                }
         }
     for (t = c->types; t; t = t->next)
         canonical_type(t);
@@ -166,7 +264,9 @@ static void qualified_types(Context *c) {
         if (t->kind == TY_NAMED && t->items && !t->alias) {
             for (actual = t->next; actual; actual = actual->next)
                 if (actual->kind == TY_NAMED && actual->items && !actual->alias &&
-                    !strcmp(t->name, actual->name)) {
+                    !strcmp(t->name, actual->name) &&
+                    ((!t->module_file && !actual->module_file) ||
+                     (t->module_file && actual->module_file && !strcmp(t->module_file, actual->module_file)))) {
                     for (a = t->items, b = actual->items; a && b && type_equal(a->type, b->type);
                          a = a->next, b = b->next) {
                     }
@@ -176,6 +276,12 @@ static void qualified_types(Context *c) {
                     }
                 }
         }
+    /* Canonicalizing imported children can make structural wrappers equal. */
+    for (t = c->types; t; t = t->next)
+        if (!t->alias && t->kind != TY_NAMED && t->kind != TY_ENUM &&
+            t->kind >= TY_PTR)
+            for (actual = t->next; actual; actual = actual->next)
+                if (!actual->alias && type_equal(t, actual)) { t->alias = actual; break; }
     canonical_nodes(c->program);
     for (t = c->types; t; t = t->next) {
         canonical_type(t);

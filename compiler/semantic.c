@@ -1,3 +1,9 @@
+/*
+ * Resolución de símbolos, ámbitos y validación de tipos del AST.
+ * analyze anota nodos con tipos y referencias resueltas para cgen.c.
+ * Aquí se validan llamadas, retornos, control de flujo, closures y tareas;
+ * tc_error interrumpe la unidad ante un diagnóstico fatal.
+ */
 #include "tiny.h"
 #include <errno.h>
 #include <limits.h>
@@ -40,6 +46,18 @@ static Symbol *lookup(Context *c, const char *name) {
         tc_error(c, l, "ambiguous imported name '%s'; qualify it with its module", name);
     }
     return candidate;
+}
+static Type *value_type(Context *c, Node *n) {
+    Type *t, *found = NULL;
+    int matches = 0;
+    for (t = c->types; t; t = t->next)
+        if (!t->alias && t->decl && !t->items && !strcmp(t->name, n->name)) {
+            if (!strcmp(t->decl->loc.file, n->loc.file)) return t;
+            found = t; matches++;
+        }
+    if (matches > 1) tc_error(c, n->loc, "ambiguous imported type '%s'; qualify it with its module", n->name);
+    if (found) return found;
+    return type_named(c, n->name);
 }
 static Symbol *bind(Context *c, Node *n, Type *t, const char *cname) {
     Symbol *s;
@@ -451,7 +469,7 @@ static int builtin_call(Context *c, Node *n) {
         return 1;
     if (n->a->kind == N_MEMBER && (!strcmp(n->a->name, "get") || !strcmp(n->a->name, "result") ||
                                    !strcmp(n->a->name, "retain") || !strcmp(n->a->name, "ready") ||
-                                   !strcmp(n->a->name, "destroy"))) {
+                                   !strcmp(n->a->name, "destroy") || !strcmp(n->a->name, "nativeError"))) {
         Type *receiver = check_expr(c, n->a->a, NULL);
         if (receiver->kind == TY_CLOSURE && !strcmp(n->a->name, "destroy")) {
             if (n->args)
@@ -467,6 +485,7 @@ static int builtin_call(Context *c, Node *n) {
             n->type = !strcmp(n->a->name, "get")
                           ? receiver->items->type
                           : type_primitive(c, !strcmp(n->a->name, "ready") ? TY_BOOL : TY_VOID);
+            if (!strcmp(n->a->name, "nativeError")) n->type = type_primitive(c, TY_I32);
             if (!strcmp(n->a->name, "result")) {
                 if (receiver->items->type->kind == TY_VOID)
                     n->type = type_primitive(c, TY_I32);
@@ -567,7 +586,13 @@ static Type *check_expr(Context *c, Node *n, Type *expected) {
     case N_ID: {
         if (n->flags & NF_CHECKED)
             break;
-        Symbol *s = lookup(c, n->name);
+        Symbol *s = NULL;
+        Scope *local;
+        for (local = c->scope; local && local != c->global && !s; local = local->parent) {
+            Symbol *candidate;
+            for (candidate = local->symbols; candidate; candidate = candidate->next)
+                if (!strcmp(candidate->name, n->name)) { s = candidate; break; }
+        }
         if (n->decl_type && n->decl_type->decl && n->decl_type->decl->kind == N_FUNCTION)
             s = lookup(c, n->decl_type->decl->name);
         if (!s && c->current_class) {
@@ -580,13 +605,14 @@ static Type *check_expr(Context *c, Node *n, Type *expected) {
                 break;
             }
         }
+        if (!s) s = lookup(c, n->name);
         if (!s) {
             if (!strcmp(n->name, "this") && c->current_class) {
                 n->type = type_derive(c, TY_PTR, c->current_class->type, 0);
                 n->cname = "tc_self";
                 break;
             }
-            a = n->decl_type ? n->decl_type : type_named(c, n->name);
+            a = n->decl_type ? n->decl_type : value_type(c, n);
             if (a->decl || a->items) {
                 n->type = a;
                 n->flags |= NF_STATIC;
@@ -1101,7 +1127,7 @@ static void check_stmt(Context *c, Node *n) {
         if (t->kind != TY_VOID && !n->a)
             tc_error(c, n->loc, "return value required");
         if (n->a) {
-            require(c, t, check_expr(c, n->a, t), n->loc);
+            require(c, t, check_expr(c, n->a, t), n->a->loc);
             if (t->kind == TY_CLOSURE && !(n->a->flags & NF_OWNED))
                 tc_error(
                     c, n->loc,
@@ -1135,20 +1161,49 @@ static void check_stmt(Context *c, Node *n) {
         break;
     case N_RANGE: {
         Node *index, *value;
+        Type *key_type = type_primitive(c, TY_U64), *value_type;
         t = check_expr(c, n->a, NULL);
-        if (!collection(t))
-            tc_error(c, n->loc, "range requires array, slice or string");
+        n->resolved = member(t, "iterator");
+        if (n->resolved) {
+            Node *method = n->resolved, *next;
+            Type *result;
+            if (!(n->a->flags & NF_LVALUE) && t->kind != TY_PTR)
+                tc_error(c, n->loc, "iteration requires a collection variable or pointer");
+            if (method->kind != N_FUNCTION || (method->flags & (NF_STATIC | NF_ASYNC)) ||
+                method->params || method->decl_type->kind != TY_NAMED ||
+                !method->decl_type->decl || method->decl_type->decl->kind != N_CLASS ||
+                !method->owner || method->owner->kind != N_CLASS)
+                tc_error(c, n->loc, "iterator() must be an instance method returning an iterator value");
+            n->type = method->decl_type;
+            next = member(n->type, "next");
+            if (!next || next->kind != N_FUNCTION || (next->flags & (NF_STATIC | NF_ASYNC)) ||
+                next->params)
+                tc_error(c, n->loc, "iterator requires an instance next() method with no arguments");
+            result = next->decl_type;
+            if (result->kind != TY_TUPLE || !result->items || !result->items->next ||
+                !result->items->next->next || result->items->next->next->next ||
+                result->items->next->next->type->kind != TY_BOOL)
+                tc_error(c, n->loc, "next() must return (key/index, value, bool)");
+            n->parameter = next;
+            n->decl_type = result;
+            key_type = result->items->type;
+            value_type = result->items->next->type;
+        } else {
+            if (!collection(t))
+                tc_error(c, n->loc, "range requires array, slice, string or iterator() protocol");
+            value_type = t->kind == TY_STRING ? type_primitive(c, TY_CHAR) : element(t);
+        }
         scope_push(c);
         index = node(c, N_VAR, n->loc);
         index->name = n->name;
         if (n->text) {
-            bind(c, index, type_primitive(c, TY_U64), NULL);
+            bind(c, index, key_type, NULL);
             n->b = index;
             value = node(c, N_VAR, n->loc);
             value->name = n->text;
         } else
             value = index;
-        bind(c, value, t->kind == TY_STRING ? type_primitive(c, TY_CHAR) : element(t), NULL);
+        bind(c, value, value_type, NULL);
         n->c = value;
         c->loop_depth++;
         body_scope(c, n->body);
@@ -1207,6 +1262,7 @@ static int returns(Node *n) {
 }
 static void check_function(Context *c, Node *n) {
     Node *p;
+    c->diagnostic_trace = n->trace;
     if ((n->flags & NF_ASYNC) && !n->body)
         tc_error(c, n->loc, "async function requires a body");
     if ((n->flags & NF_ASYNC) && (n->flags & NF_STDCALL))
@@ -1233,6 +1289,7 @@ void analyze(Context *c) {
     scope_push(c);
     c->global = c->scope;
     for (n = c->program->body; n; n = n->next) {
+        c->diagnostic_trace = n->trace;
         if (n->kind == N_EXTENSION) {
             Node **tail;
             if (!n->type->decl)
@@ -1250,6 +1307,7 @@ void analyze(Context *c) {
         }
     }
     for (n = c->program->body; n; n = n->next) {
+        c->diagnostic_trace = n->trace;
         if (n->kind == N_FUNCTION) {
             if (n->args)
                 continue;
@@ -1298,10 +1356,12 @@ void analyze(Context *c) {
     }
     for (n = c->program->body; n; n = n->next)
         if (n->kind == N_VAR) {
+            c->diagnostic_trace = n->trace;
             c->active_file = n->loc.file;
             check_stmt(c, n);
         }
     for (n = c->program->body; n; n = n->next) {
+        c->diagnostic_trace = n->trace;
         if (n->kind == N_FUNCTION && !n->args)
             check_function(c, n);
         else if (n->kind == N_CLASS && !n->params)
@@ -1309,10 +1369,12 @@ void analyze(Context *c) {
                 if (m->kind == N_FUNCTION)
                     check_function(c, m);
                 if (m->kind == N_PROPERTY && m->a) {
+                    c->diagnostic_trace = m->trace;
                     c->current_class = n;
                     require(c, m->decl_type, check_expr(c, m->a, m->decl_type), m->loc);
                     c->current_class = NULL;
                 }
             }
     }
+    c->diagnostic_trace = NULL;
 }

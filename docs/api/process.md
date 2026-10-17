@@ -4,6 +4,30 @@ Source: `std/process.tc`
 
 Module: `std.process`
 
+## tc_process_start
+
+```c
+void* tc_process_start(string* arguments, u64 count, i32* error);
+```
+
+## tc_process_wait
+
+```c
+i32 tc_process_wait(void* process, u64 timeout, i32* error);
+```
+
+## tc_process_cancel
+
+```c
+i32 tc_process_cancel(void* process);
+```
+
+## tc_process_destroy
+
+```c
+void tc_process_destroy(void* process);
+```
+
 ## tc_process_spawn
 
 ```c
@@ -58,9 +82,17 @@ static string get(i32 index);
 class Process
 ```
 
-### Process.run
+### Process.runShell
 
 Executes a shell command explicitly; return status follows the host C runtime.
+
+```c
+static i32 runShell(string command);
+```
+
+### Process.run
+
+Compatibility alias for runShell. Prefer argv via spawn/start.
 
 ```c
 static i32 run(string command);
@@ -82,5 +114,46 @@ Borrowed environment view; no allocation.
 
 ```c
 static string environment(string name);
+```
+
+## ProcessHandle
+
+Owned child. destroy kills and reaps a running child; wait does not consume it.
+Methods require a live handle and must not be called concurrently.
+
+```c
+class ProcessHandle
+```
+
+### ProcessHandle.handle
+
+```c
+void* handle;
+```
+
+### ProcessHandle.start
+
+```c
+static (ProcessHandle, i32) start(Array<string>* arguments);
+```
+
+### ProcessHandle.wait
+
+timeout=0 means no deadline; timeout returns (-1, 4) and leaves the child alive.
+
+```c
+(i32, i32) wait(u64 timeout = 0);
+```
+
+### ProcessHandle.cancel
+
+```c
+i32 cancel();
+```
+
+### ProcessHandle.destroy
+
+```c
+void destroy();
 ```
 

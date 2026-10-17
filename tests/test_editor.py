@@ -33,4 +33,8 @@ replay('first\nsecond\n', '\x06second\r\x18\x071\r\x15\x13\x11', 'second\nfirst\
 replay('keep\n', 'discard\x11\x11', 'keep\n')
 # Backspace deletes a complete multibyte character.
 replay('', 'ñ日\x08\x13\x11', 'ñ')
+replay('', 'ñ日\x1a\x19\x13\x11', 'ñ日')
+replay('', 'ab\x1aZ\x19\x13\x11', 'aZ')
+replay('x', '\x18\x1a\x13\x11', 'x')
+replay('', 'a\x13b\x1a\x11', 'a')
 print('TinyEdit verified: open/edit/atomic save/quit, Unicode, search, goto, cut/paste, discard confirmation')

@@ -1,3 +1,5 @@
+// Reloj y esperas: sleep bloquea al llamador, after devuelve una tarea.
+// Las duraciones se expresan en milisegundos; liberar el handle de la tarea.
 module std.time;
 import std.net;
 class Timer {

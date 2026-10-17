@@ -47,6 +47,8 @@ RUN = [
     ('extension', 'class Box{int n;}extension Box{int twice(){return n*2;}}int main(){Box b(8);println(b.twice());}', '16\n'),
     ('large_integer', 'int main(){i64 x=5000000000;println(x);}', '5000000000\n'),
     ('generic_class', 'class Box<T>{T value;T get(){return value;}}int main(){Box<int> x(42);Box<string> s("generic");println(x.get());println(s.get());}', '42\ngeneric\n'),
+    ('generic_callback_signature', 'class Callbacks<T>{func<T()> make;func<T(T)> transform;T call(T x){return transform(x)+make();}}int seed(){return 2;}int twice(int x){return x*2;}int main(){Callbacks<int> c;c.make=seed;c.transform=twice;println(c.call(20));}', '42\n'),
+    ('generic_closure_signature', 'class Apply<T>{closure<T(T)> transform;T call(T x){return transform(x);}}int main(){int n=2;Apply<int> a;a.transform=(int x)=>x*n;println(a.call(21));}', '42\n'),
     ('generic_function', 'T identity<T>(T x){return x;}int main(){println(identity<int>(42));println(identity<string>("yes"));}', '42\nyes\n'),
     ('array', 'import std.collections;int main(){var a=Array<int>.create();defer a.destroy();a.push(10);a.push(20);a[0]=11;for(i,v in a){println(v);}println(a.pop());}', '11\n20\n20\n'),
     ('interface', 'interface Reader{int read();}class Box{int n;int read(){return n;}}int consume(Reader r){return r.read();}int main(){Box b(42);Reader r=&b;println(r.read());println(consume(&b));}', '42\n42\n'),

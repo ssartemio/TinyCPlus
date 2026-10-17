@@ -1,3 +1,9 @@
+/*
+ * Sockets TCP/UDP, DNS y operaciones asíncronas de red y archivos.
+ * Adapta errores y handles entre Winsock y POSIX. Las peticiones asíncronas
+ * se coordinan con futures y el reactor; conservar los buffers prestados
+ * hasta que finalice la operación. Véase docs/CONCURRENCY.md.
+ */
 #ifndef TC_NET_IMPLEMENTATION
 #define TC_NET_IMPLEMENTATION
 #include "tiny_runtime.h"
@@ -212,21 +218,47 @@ int64_t tc_socket_write(int64_t handle, void *data, uint64_t length) {
             return -1;
     }
 }
+/* Transfer results always preserve bytes completed before an OS error or EOF. */
+int64_t tc_socket_transfer(int64_t handle, void *data, uint64_t length,
+                            int32_t writing, int32_t exactly, int32_t *error) {
+    uint64_t offset = 0;
+    *error = 0;
+    if (length > SIZE_MAX || length > INT64_MAX || (!data && length)) {
+        *error = EINVAL; return 0;
+    }
+    while (offset < length) {
+        int64_t count = writing ? tc_socket_write(handle, (char *)data + offset, length - offset)
+                                : tc_socket_read(handle, (char *)data + offset, length - offset);
+        if (count < 0) { *error = tc_socket_error(); break; }
+        if (count == 0) break;
+        offset += (uint64_t)count;
+        if (!exactly) break;
+    }
+    return (int64_t)offset;
+}
 int32_t tc_socket_close(int64_t handle) {
     int result;
     if (handle < 0)
-        return 1;
+        return 0;
     result = tc_close_socket((TcSocket)handle);
+    result = result ? tc_socket_error() : 0;
     tc_network_cleanup();
-    return result ? 1 : 0;
+    return result;
 }
 int64_t tc_udp_send(int64_t handle, TinyString host, int32_t port, void *data, uint64_t size) {
-    struct addrinfo *addresses = NULL;
-    int result;
-    if (size > 65507 || tc_resolve(host, port, SOCK_DGRAM, 0, &addresses))
+    struct addrinfo *addresses = NULL, *a;
+    struct sockaddr_storage local;
+    TcSockLen local_size = sizeof(local);
+    int result = -1;
+    if (size > 65507 || getsockname((TcSocket)handle, (struct sockaddr *)&local, &local_size) ||
+        tc_resolve(host, port, SOCK_DGRAM, 0, &addresses))
         return -1;
-    result = sendto((TcSocket)handle, (const char *)data, (int)size, 0, addresses->ai_addr,
-                    (TcSockLen)addresses->ai_addrlen);
+    for (a = addresses; a; a = a->ai_next) {
+        if (a->ai_family != local.ss_family) continue;
+        result = sendto((TcSocket)handle, (const char *)data, (int)size, 0, a->ai_addr,
+                        (TcSockLen)a->ai_addrlen);
+        if (result >= 0) break;
+    }
     freeaddrinfo(addresses);
     return result;
 }
@@ -271,28 +303,58 @@ TinyString tc_dns_resolve(TinyString host, int32_t *error) {
     return result;
 }
 
-enum { TC_IO_READ, TC_IO_WRITE, TC_IO_ACCEPT, TC_IO_CONNECT, TC_IO_TIMER };
+enum { TC_IO_READ, TC_IO_WRITE, TC_IO_ACCEPT, TC_IO_CONNECT, TC_IO_TIMER, TC_IO_READ_EXACT, TC_IO_WRITE_SOME };
 typedef struct TcIoRequest {
-    int kind, error, done;
+    int kind, error, done, native_error;
     TcSocket socket;
     void *data, *token, *future;
     size_t length, offset;
     uint64_t deadline;
     int64_t result;
+    struct addrinfo *addresses, *candidate;
     struct TcIoRequest *next;
 } TcIoRequest;
 static void *tc_io_lock, *tc_io_thread, *tc_resolver_pool;
 static TcIoRequest *tc_io_requests;
 static int tc_io_stopping, tc_io_count;
 static void tc_io_complete(TcIoRequest *r) {
+    tc_future_set_native_error(r->future, r->native_error);
     tc_future_complete(r->future, &r->result, r->error);
     tc_future_release(r->future);
     tc_task_end();
+    if (r->addresses) freeaddrinfo(r->addresses);
     free(r);
+}
+/* Return 1 for pending, 2 for connected, 0 when every address failed. */
+static int tc_connect_next(TcIoRequest *r) {
+    struct addrinfo *a;
+    while ((a = r->candidate) != NULL) {
+        TcSocket socket;
+        int result;
+        r->candidate = a->ai_next;
+        socket = tc_create_socket(a->ai_family, a->ai_socktype, a->ai_protocol);
+        if (socket == TC_BAD_SOCKET) continue;
+        if (tc_nonblock(socket)
+#ifndef _WIN32
+            || socket >= FD_SETSIZE
+#endif
+        ) { tc_close_socket(socket); continue; }
+        result = connect(socket, a->ai_addr, (TcSockLen)a->ai_addrlen);
+        if (result == 0 || tc_would_block(tc_socket_error())) {
+            r->socket = socket;
+            r->result = (int64_t)socket;
+            return result == 0 ? 2 : 1;
+        }
+        r->error = r->native_error = tc_socket_error();
+        tc_close_socket(socket);
+    }
+    r->socket = TC_BAD_SOCKET;
+    if (!r->error) r->error = 13;
+    return 0;
 }
 static void tc_io_enqueue(TcIoRequest *r) {
     tc_mutex_lock(tc_io_lock);
-    if (tc_io_count >= 32) {
+    if (tc_io_stopping || tc_io_count >= 32) {
         tc_mutex_unlock(tc_io_lock);
         r->error = 8;
         if (r->kind == TC_IO_CONNECT)
@@ -324,7 +386,7 @@ static void tc_io_loop(void *unused) {
         }
         for (r = tc_io_requests; r; r = r->next)
             if (r->kind != TC_IO_TIMER) {
-                if (r->kind == TC_IO_WRITE || r->kind == TC_IO_CONNECT)
+                if (r->kind == TC_IO_WRITE || r->kind == TC_IO_WRITE_SOME || r->kind == TC_IO_CONNECT)
                     FD_SET(r->socket, &writes);
                 else
                     FD_SET(r->socket, &reads);
@@ -344,7 +406,7 @@ static void tc_io_loop(void *unused) {
         tc_mutex_lock(tc_io_lock);
         cursor = &tc_io_requests;
         while ((r = *cursor) != NULL) {
-            if (r->token && tc_atomic_load(r->token)) {
+            if (tc_io_stopping || (r->token && tc_atomic_load(r->token))) {
                 r->error = 1;
                 r->done = 1;
             } else if (r->deadline && now >= r->deadline) {
@@ -359,8 +421,15 @@ static void tc_io_loop(void *unused) {
                     if (getsockopt(r->socket, SOL_SOCKET, SO_ERROR, (char *)&error, &length))
                         error = tc_socket_error();
                     r->result = (int64_t)r->socket;
-                    r->error = error;
+                    r->error = error; r->native_error = error;
                     r->done = 1;
+                    if (error && r->candidate) {
+                        int state;
+                        tc_close_socket(r->socket);
+                        state = tc_connect_next(r);
+                        if (state) r->error = r->native_error = 0;
+                        r->done = state != 1;
+                    }
                 } else if (r->kind == TC_IO_ACCEPT) {
                     TcSocket accepted = accept(r->socket, NULL, NULL);
                     if (accepted != TC_BAD_SOCKET) {
@@ -368,29 +437,34 @@ static void tc_io_loop(void *unused) {
                         r->result = (int64_t)accepted;
                         r->done = 1;
                     } else if (!tc_would_block(tc_socket_error())) {
+                        r->native_error = tc_socket_error();
                         r->error = 13;
                         r->done = 1;
                     }
                 } else {
                     size_t remaining = r->length - r->offset;
                     int chunk = (int)(remaining > INT_MAX ? INT_MAX : remaining);
-                    if (r->kind == TC_IO_READ)
-                        n = recv(r->socket, (char *)r->data, chunk, 0);
+                    if (r->kind == TC_IO_READ || r->kind == TC_IO_READ_EXACT)
+                        n = recv(r->socket, (char *)r->data + r->offset, chunk, 0);
                     else
                         n = send(r->socket, (char *)r->data + r->offset, chunk, MSG_NOSIGNAL);
                     if (n >= 0) {
                         r->offset += (size_t)n;
-                        if (r->kind == TC_IO_READ || r->offset == r->length || n == 0) {
+                        if (r->kind == TC_IO_READ || r->kind == TC_IO_WRITE_SOME || r->offset == r->length || n == 0) {
                             r->result = (int64_t)r->offset;
                             r->done = 1;
                         }
                     } else if (!tc_would_block(tc_socket_error())) {
+                        r->native_error = tc_socket_error();
                         r->error = 13;
                         r->done = 1;
                     }
                 }
             }
             if (r->done) {
+                if (r->kind == TC_IO_READ || r->kind == TC_IO_READ_EXACT ||
+                    r->kind == TC_IO_WRITE || r->kind == TC_IO_WRITE_SOME)
+                    r->result = (int64_t)r->offset;
                 *cursor = r->next;
                 r->next = complete;
                 complete = r;
@@ -402,8 +476,11 @@ static void tc_io_loop(void *unused) {
         while (complete) {
             r = complete;
             complete = r->next;
-            if (r->kind == TC_IO_CONNECT && r->error)
-                tc_socket_close((int64_t)r->socket);
+            if (r->kind == TC_IO_CONNECT && r->error) {
+                if (r->socket != TC_BAD_SOCKET) tc_close_socket(r->socket);
+                tc_network_cleanup();
+                r->result = -1;
+            }
             tc_io_complete(r);
         }
     }
@@ -419,6 +496,11 @@ void tc_io_start(void) {
     tc_io_thread = tc_thread_start(tc_io_loop, NULL);
     if (!tc_resolver_pool || !tc_io_thread)
         abort();
+}
+void tc_io_cancel(void) {
+    tc_mutex_lock(tc_io_lock);
+    tc_io_stopping = 1;
+    tc_mutex_unlock(tc_io_lock);
 }
 void tc_io_shutdown(void) {
     tc_pool_destroy(tc_resolver_pool);
@@ -461,7 +543,7 @@ static void *tc_socket_async(int kind, int64_t handle, void *data, uint64_t leng
     ) {
         r->error = 13;
         tc_io_complete(r);
-    } else if (!length && (kind == TC_IO_READ || kind == TC_IO_WRITE))
+    } else if (!length && (kind == TC_IO_READ || kind == TC_IO_READ_EXACT || kind == TC_IO_WRITE || kind == TC_IO_WRITE_SOME))
         tc_io_complete(r);
     else
         tc_io_enqueue(r);
@@ -470,6 +552,12 @@ static void *tc_socket_async(int kind, int64_t handle, void *data, uint64_t leng
 void *tc_socket_read_async(int64_t handle, void *data, uint64_t capacity, uint64_t timeout,
                            void *token) {
     return tc_socket_async(TC_IO_READ, handle, data, capacity, timeout, token);
+}
+void *tc_socket_read_exact_async(int64_t handle, void *data, uint64_t length, uint64_t timeout, void *token) {
+    return tc_socket_async(TC_IO_READ_EXACT, handle, data, length, timeout, token);
+}
+void *tc_socket_write_some_async(int64_t handle, void *data, uint64_t length, uint64_t timeout, void *token) {
+    return tc_socket_async(TC_IO_WRITE_SOME, handle, data, length, timeout, token);
 }
 void *tc_socket_write_async(int64_t handle, void *data, uint64_t length, uint64_t timeout,
                             void *token) {
@@ -492,44 +580,15 @@ typedef struct TcConnectJob {
 static void tc_connect_resolve(void *opaque) {
     TcConnectJob *job = (TcConnectJob *)opaque;
     TcIoRequest *r = job->request;
-    struct addrinfo *addresses = NULL, *a;
     int queued = 0;
     r->error = tc_network_init();
     if (!r->error)
-        r->error = tc_resolve(job->host, job->port, SOCK_STREAM, 0, &addresses);
+        r->error = tc_resolve(job->host, job->port, SOCK_STREAM, 0, &r->addresses);
+    if (r->error) r->native_error = r->error;
     if (!r->error) {
-        for (a = addresses; a; a = a->ai_next) {
-            TcSocket s = tc_create_socket(a->ai_family, a->ai_socktype, a->ai_protocol);
-            int result;
-            if (s == TC_BAD_SOCKET)
-                continue;
-            if (tc_nonblock(s)) {
-                tc_close_socket(s);
-                continue;
-            }
-#ifndef _WIN32
-            if (s >= FD_SETSIZE) {
-                tc_close_socket(s);
-                continue;
-            }
-#endif
-            result = connect(s, a->ai_addr, (TcSockLen)a->ai_addrlen);
-            if (result == 0) {
-                r->socket = s;
-                r->result = (int64_t)s;
-                queued = 2;
-                break;
-            }
-            if (tc_would_block(tc_socket_error())) {
-                r->socket = s;
-                queued = 1;
-                break;
-            }
-            tc_close_socket(s);
-        }
-        freeaddrinfo(addresses);
-        if (!queued)
-            r->error = 13;
+        r->candidate = r->addresses;
+        queued = tc_connect_next(r);
+        if (queued) r->error = r->native_error = 0;
     }
     tc_string_free(job->host);
     free(job);
@@ -550,8 +609,10 @@ void *tc_tcp_connect_async(TinyString host, int32_t port, uint64_t timeout, void
     job->request = r;
     job->host = tc_string_copy(host);
     job->port = port;
-    if (!job->host.data || tc_pool_submit(tc_resolver_pool, tc_connect_resolve, job))
-        abort();
+    if (!job->host.data || tc_pool_submit_sized(tc_resolver_pool, tc_connect_resolve, job, host.length)) {
+        tc_string_free(job->host); free(job);
+        r->error = 8; r->result = -1; tc_io_complete(r);
+    }
     return future;
 }
 typedef struct TcFileJob {
@@ -562,6 +623,7 @@ static void tc_file_job(void *opaque) {
     TcFileJob *job = (TcFileJob *)opaque;
     int32_t error;
     TinyString data = tc_file_read_all(job->path, &error);
+    tc_future_set_native_error(job->future, error);
     tc_future_complete(job->future, &data, error);
     tc_future_release(job->future);
     tc_string_free(job->path);
@@ -576,11 +638,11 @@ void *tc_file_read_async(TinyString path) {
     tc_future_retain(future);
     job->future = future;
     job->path = tc_string_copy(path);
-    if (!job->path.data)
-        abort();
     tc_task_begin();
-    if (tc_pool_submit(tc_resolver_pool, tc_file_job, job))
-        abort();
+    if (!job->path.data || tc_pool_submit_sized(tc_resolver_pool, tc_file_job, job, path.length)) {
+        tc_future_complete(future, NULL, 8); tc_future_release(future);
+        tc_string_free(job->path); free(job); tc_task_end();
+    }
     return future;
 }
 
@@ -597,6 +659,7 @@ static void tc_blocking_io_job(void *opaque) {
         result = tc_dns_resolve(job->name, &error);
     else
         error = tc_file_write_all(job->name, job->contents);
+    tc_future_set_native_error(job->future, error);
     tc_future_complete(job->future, job->operation == 1 ? &result : NULL, error);
     tc_future_release(job->future);
     tc_string_free(job->name);
@@ -613,12 +676,14 @@ static void *tc_blocking_io(int operation, TinyString name, TinyString contents)
     job->name = tc_string_copy(name);
     job->contents = tc_string_copy(contents);
     job->future = future;
-    if (!job->name.data || !job->contents.data)
-        abort();
     tc_future_retain(future);
     tc_task_begin();
-    if (tc_pool_submit(tc_resolver_pool, tc_blocking_io_job, job))
-        abort();
+    if (!job->name.data || !job->contents.data ||
+        name.length > UINT64_MAX - contents.length ||
+        tc_pool_submit_sized(tc_resolver_pool, tc_blocking_io_job, job, name.length + contents.length)) {
+        tc_future_complete(future, NULL, 8); tc_future_release(future);
+        tc_string_free(job->name); tc_string_free(job->contents); free(job); tc_task_end();
+    }
     return future;
 }
 void *tc_dns_resolve_async(TinyString host) {

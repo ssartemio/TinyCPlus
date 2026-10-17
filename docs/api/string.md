@@ -70,6 +70,12 @@ string tc_format_double(double value);
 void tc_bytes_copy(char* destination, string source);
 ```
 
+## tc_builder_append
+
+```c
+i32 tc_builder_append(char** data, u64* length, u64* capacity, string text);
+```
+
 ## OwnedString
 
 Explicit ownership. view() borrows bytes; destroy invalidates all views.
@@ -88,6 +94,12 @@ string value;
 
 ```c
 string view();
+```
+
+### OwnedString.take
+
+```c
+OwnedString take();
 ```
 
 ### OwnedString.destroy
@@ -190,6 +202,12 @@ u64 capacity;
 
 ```c
 static StringBuilder create();
+```
+
+### StringBuilder.take
+
+```c
+StringBuilder take();
 ```
 
 ### StringBuilder.reserve

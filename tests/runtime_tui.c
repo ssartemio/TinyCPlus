@@ -68,6 +68,24 @@ static void gap_unicode(void) {
 static void increment(void *opaque) {
     (*(int *)opaque)++;
 }
+static void gap_history(void) {
+    TcGap *g = (TcGap *)tc_gap_create(TC_STRING(""));
+    int i;
+    tc_gap_history(g, 1);
+    assert(tc_gap_insert(g, TC_STRING("ñ")) == 0);
+    tc_gap_clean(g);
+    assert(tc_gap_insert(g, TC_STRING("日")) == 0);
+    assert(tc_gap_undo_redo(g, 0) == 0 && !tc_gap_dirty(g));
+    assert(tc_gap_size(g) == 2 && tc_gap_position(g) == 2);
+    assert(tc_gap_undo_redo(g, 1) == 0 && tc_gap_dirty(g));
+    assert(tc_gap_size(g) == 5);
+    assert(tc_gap_backspace(g) == 0 && tc_gap_size(g) == 2);
+    assert(tc_gap_undo_redo(g, 1) == 1);
+    for (i = 0; i < 100; i++) assert(tc_gap_insert(g, TC_STRING("x")) == 0);
+    for (i = 0; i < 64; i++) assert(tc_gap_undo_redo(g, 0) == 0);
+    assert(tc_gap_undo_redo(g, 0) == 1);
+    tc_gap_destroy(g);
+}
 int main(void) {
     TcUi *ui;
     int error = 0, clicks = 0, i;
@@ -76,6 +94,7 @@ int main(void) {
     TcUiClosure callback;
     gap_random();
     gap_unicode();
+    gap_history();
     ui = (TcUi *)tc_ui_create(30, 8, 1, &error);
     assert(ui && error == 0);
     tc_ui_clear(ui, 0xffffff, 0);

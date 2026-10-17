@@ -1,3 +1,9 @@
+/*
+ * Transporte gRPC unary sobre HTTP/2 cleartext mediante nghttp2.
+ * Gestiona frames gRPC, streams HTTP/2, rutas y respuestas del servidor.
+ * No implementa TLS, compresión ni RPC streaming; los límites y estados
+ * interoperables se describen en docs/PROTOCOLS.md.
+ */
 #ifndef TC_GRPC_IMPLEMENTATION
 #define TC_GRPC_IMPLEMENTATION
 #include "net.c"
@@ -559,12 +565,16 @@ void *tc_grpc_call_async(TinyString host, int32_t port, TinyString method, TinyS
     job->request = tc_string_copy(request);
     job->port = port;
     job->timeout = timeout;
-    if (!job->host.data || !job->path.data || !job->request.data)
-        abort();
     tc_future_retain(future);
     tc_task_begin();
-    if (tc_pool_submit(tc_resolver_pool, tc_grpc_call_job, job))
-        abort();
+    if (!job->host.data || !job->path.data || !job->request.data ||
+        host.length > UINT64_MAX - method.length ||
+        host.length + method.length > UINT64_MAX - request.length ||
+        tc_pool_submit_sized(tc_resolver_pool, tc_grpc_call_job, job, host.length + method.length + request.length)) {
+        tc_future_complete(future, NULL, 8); tc_future_release(future);
+        tc_string_free(job->host); tc_string_free(job->path); tc_string_free(job->request);
+        free(job); tc_task_end();
+    }
     return future;
 }
 void *tc_grpc_server_create(TinyString host, int32_t port, int32_t *error) {

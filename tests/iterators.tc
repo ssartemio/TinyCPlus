@@ -1,0 +1,127 @@
+import std.collections;
+import std.time;
+
+bool smaller(int a, int b) { return a < b; }
+int ownerCalls;
+Deque<int>* counted(Deque<int>* owner) { ownerCalls++; return owner; }
+async int pause(int n) { await Timer.after(1); return n; }
+async int asyncSum(Deque<int>* queue) {
+    int sum = 0;
+    for (i, value in queue) {
+        if (i == 1) continue;
+        sum += await pause(value);
+    }
+    return sum;
+}
+// The protocol is structural: custom types need no standard-library base class.
+class CounterIterator {
+    int position;
+    (int, int, bool) next() {
+        position++;
+        return (position * 10, position, position <= 3);
+    }
+}
+class Counter {
+    CounterIterator iterator() { CounterIterator result; return result; }
+}
+int main() {
+    var array = Array<int>.create(); defer array.destroy();
+    array.push(4); array.push(5); array.push(6);
+    u64 expected = 0;
+    for (i, value in array) { assert(i == expected); assert(value == cast<int>(i) + 4); expected++; }
+    assert(expected == 3);
+    var cursor = array.iterator();
+    var i, value, available = cursor.next(); assert(i == 0 && value == 4 && available);
+    var independent = cursor;
+    var j, second, ok = cursor.next(); assert(j == 1 && second == 5 && ok);
+    var k, same, present = independent.next(); assert(k == 1 && same == 5 && present);
+    cursor.next();
+    var endIndex, endValue, end = cursor.next(); assert(!end);
+    var againIndex, againValue, again = cursor.next(); assert(!again);
+
+    var queue = Deque<int>.create(); defer queue.destroy();
+    for (int n = 0; n < 8; n++) queue.pushBack(n);
+    for (int n = 0; n < 5; n++) queue.popFront();
+    for (int n = 8; n < 12; n++) queue.pushBack(n);
+    expected = 0;
+    for (index, item in counted(&queue)) {
+        assert(index == expected); assert(item == cast<int>(index) + 5); expected++;
+    }
+    assert(expected == 7 && ownerCalls == 1);
+    int visited = 0;
+    for (item in queue) {
+        defer visited++;
+        if (item == 5) continue;
+        if (item == 7) break;
+    }
+    assert(visited == 3);
+    int nested = 0;
+    for (left in queue) for (right in queue) nested++;
+    assert(nested == 49);
+    var task = asyncSum(&queue); defer task.destroy(); assert(task.get() == 50);
+
+    var map = Map<string, int>.create(); defer map.destroy();
+    map.put("gone", 0); map.put("a", 10); map.put("b", 20); map.remove("gone");
+    int total = 0; int count = 0;
+    for (key, item in map) { assert(key == "a" || key == "b"); total += item; count++; }
+    assert(total == 30 && count == 2);
+    total = 0; for (item in map) total += item; assert(total == 30);
+
+    var set = Set<string>.create(); defer set.destroy();
+    set.add("gone"); set.add("a"); set.add("b"); set.remove("gone");
+    expected = 0;
+    for (index, item in set) { assert(index == expected); assert(item == "a" || item == "b"); expected++; }
+    assert(expected == 2);
+
+    var ordered = OrderedMap<string, int>.create(); defer ordered.destroy();
+    ordered.put("a", 1); ordered.put("b", 2); ordered.put("c", 3);
+    ordered.remove("b"); ordered.put("b", 4); ordered.put("a", 5);
+    count = 0;
+    for (key, item in ordered) {
+        if (count == 0) assert(key == "a" && item == 5);
+        if (count == 1) assert(key == "c" && item == 3);
+        if (count == 2) assert(key == "b" && item == 4);
+        count++;
+    }
+    assert(count == 3);
+    total = 0; for (item in ordered) total += item; assert(total == 12);
+
+    var heap = PriorityQueue<int>.create(smaller); defer heap.destroy();
+    heap.push(3); heap.push(1); heap.push(2);
+    total = 0; expected = 0;
+    for (index, item in heap) { assert(index == expected); total += item; expected++; }
+    assert(expected == 3 && total == 6 && heap.length == 3 && heap.peek() == 1);
+
+    var bits = BitSet.create(130); defer bits.destroy(); bits.set(0); bits.set(64); bits.set(129);
+    expected = 0;
+    for (index, bit in bits) {
+        assert(index == expected);
+        if (index == 0) assert(bit == 0);
+        if (index == 1) assert(bit == 64);
+        if (index == 2) assert(bit == 129);
+        expected++;
+    }
+    assert(expected == 3);
+    for (bit in bits) assert(bits.contains(bit));
+
+    // Empty owners, including a nonempty universe with no active bits.
+    array.clear(); queue.clear(); map.clear(); set.clear(); ordered.clear(); heap.clear(); bits.clear();
+    for (v in array) assert(false);
+    for (v in queue) assert(false);
+    for (v in map) assert(false);
+    for (v in set) assert(false);
+    for (v in ordered) assert(false);
+    for (v in heap) assert(false);
+    for (v in bits) assert(false);
+    var zero = BitSet.create(0); defer zero.destroy(); for (v in zero) assert(false);
+    // Existing fixed-array, slice and string iteration keeps its behavior.
+    int[2] fixed = {7, 8}; total = 0;
+    for (v in fixed) total += v;
+    for (v in fixed[:]) total += v;
+    for (index, ch in "ab") assert(cast<int>(ch) == 97 + cast<int>(index));
+    assert(total == 30);
+    Counter counter; total = 0;
+    for (key, item in counter) { assert(key == item * 10); total += item; }
+    assert(total == 6);
+    println("iterators verified"); return 0;
+}

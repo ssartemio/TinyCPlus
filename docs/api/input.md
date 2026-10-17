@@ -1,0 +1,24 @@
+# API reference
+
+Source: `std/input.tc`
+
+Module: `std.input`
+
+## InputKey
+
+Stable special-key codes shared by graphical and terminal input.
+Printable/control keys continue to use their ordinary integer codes.
+
+```c
+enum InputKey {
+    Left = 1001,
+    Right = 1002,
+    Up = 1003,
+    Down = 1004,
+    Home = 1005,
+    End = 1006,
+    Delete = 1007,
+    PageUp = 1008,
+    PageDown = 1009
+}
+```

@@ -1,3 +1,6 @@
+// Cliente y servidor gRPC unary sobre HTTP/2 cleartext (h2c).
+// Destruir respuestas y servidores; comprobar estados. No ofrece TLS,
+// compresión ni RPC streaming. Límites: docs/PROTOCOLS.md.
 module std.grpc;
 import std.net;
 extern C {

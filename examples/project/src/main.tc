@@ -1,0 +1,13 @@
+import model;
+import std.collections;
+
+int main() {
+    var source = Array<int>.create();
+    defer source.destroy();
+    source.push(model.answer());
+    var copy = source.clone();
+    defer copy.destroy();
+    source.clear();
+    for (value in copy) println(value);
+    return 0;
+}

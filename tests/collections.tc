@@ -1,0 +1,160 @@
+import std.collections;
+bool ascending(int a, int b) { return a < b; }
+bool descending(int a, int b) { return a > b; }
+class Job { int priority; int id; }
+bool earlier(Job a, Job b) { return a.priority < b.priority; }
+int main() {
+    var set = Set<int>.create(); defer set.destroy();
+    for (int i = 0; i < 1000; i++) { assert(set.add(i)); assert(!set.add(i)); }
+    for (int i = 0; i < 1000; i = i + 2) assert(set.remove(i));
+    assert(set.length == 500); assert(!set.remove(1001));
+    for (int i = 0; i < 1000; i++) assert(set.contains(i) == (i % 2 != 0));
+    var strings = Set<string>.create(); defer strings.destroy();
+    assert(strings.add("abc")); assert(!strings.add("abc"));
+    bool[100] members;
+    var randomSet = Set<int>.create(); defer randomSet.destroy();
+    u64 seed = 77; u64 memberCount = 0;
+    for (int step = 0; step < 4000; step++) {
+        seed = (seed * 1664525 + 1013904223) & 4294967295;
+        int key = cast<int>((seed >> 16) % 100);
+        if (seed % 2 == 0) {
+            assert(randomSet.add(key) == !members[key]);
+            if (!members[key]) memberCount++;
+            members[key] = true;
+        } else {
+            assert(randomSet.remove(key) == members[key]);
+            if (members[key]) memberCount--;
+            members[key] = false;
+        }
+        assert(randomSet.length == memberCount);
+        for (int i = 0; i < 100; i++) assert(randomSet.contains(i) == members[i]);
+    }
+    var snapshot = Array<int>.create(); defer snapshot.destroy();
+    set.values(&snapshot); assert(snapshot.length == set.length);
+    set.clear(); assert(set.length == 0); assert(set.add(7));
+
+    var deque = Deque<int>.create(); defer deque.destroy();
+    for (int i = 0; i < 8; i++) deque.pushBack(i);
+    for (int i = 0; i < 5; i++) assert(deque.popFront() == i);
+    for (int i = 8; i < 25; i++) deque.pushBack(i);
+    for (int i = 5; i < 25; i++) assert(deque.popFront() == i);
+    // A simple contiguous model exercises wraparound, growth and mixed ends.
+    int[2048] model; u64 size = 0; u64 random = 12345;
+    for (int step = 0; step < 10000; step++) {
+        random = (random * 1664525 + 1013904223) & 4294967295;
+        int op = cast<int>((random >> 16) % 6);
+        int value = cast<int>(random % 10000);
+        if (size == 0 || (op == 0 && size < 2048)) {
+            deque.pushBack(value); model[size] = value; size++;
+        } else if (op == 1 && size < 2048) {
+            for (u64 i = size; i > 0; i--) model[i] = model[i - 1];
+            model[0] = value; deque.pushFront(value); size++;
+        } else if (op == 2) {
+            assert(deque.popFront() == model[0]);
+            for (u64 i = 1; i < size; i++) model[i - 1] = model[i];
+            size--;
+        } else if (op == 3) { size--; assert(deque.popBack() == model[size]); }
+        else if (op == 4) { u64 index = random % size; deque.set(index, value); model[index] = value; }
+        else deque.reserve(deque.capacity);
+        assert(deque.length == size);
+        for (u64 i = 0; i < size; i++) assert(deque.get(i) == model[i]);
+    }
+    deque.clear(); deque.reserve(100); deque.pushFront(42); assert(deque.popBack() == 42);
+    deque.pushBack(13); assert(deque.popFront() == 13);
+
+    var min = PriorityQueue<int>.create(ascending); defer min.destroy();
+    var max = PriorityQueue<int>.create(descending); defer max.destroy();
+    int[500] counts;
+    for (int i = 0; i < 2000; i++) {
+        random = (random * 1664525 + 1013904223) & 4294967295;
+        int value = cast<int>(random % 500); counts[value]++;
+        min.push(value); max.push(value);
+    }
+    for (int i = 0; i < 500; i++) for (int j = 0; j < counts[i]; j++) {
+        assert(min.peek() == i); assert(min.pop() == i);
+    }
+    for (int i = 499; i >= 0; i--) for (int j = 0; j < counts[i]; j++) assert(max.pop() == i);
+    assert(min.length == 0 && max.length == 0);
+    min.push(1); min.clear(); min.push(2); assert(min.pop() == 2);
+    // Interleaved insert/extract: a linear model does not share heap logic.
+    int[2048] pending; u64 pendingCount = 0;
+    for (int step = 0; step < 4000; step++) {
+        random = (random * 1664525 + 1013904223) & 4294967295;
+        if (pendingCount == 0 || (random % 3 != 0 && pendingCount < 2048)) {
+            int value = cast<int>((random >> 16) % 500);
+            pending[pendingCount] = value; pendingCount++; min.push(value);
+        } else {
+            u64 best = 0;
+            for (u64 i = 1; i < pendingCount; i++) if (pending[i] < pending[best]) best = i;
+            assert(min.pop() == pending[best]); pendingCount--; pending[best] = pending[pendingCount];
+        }
+        assert(min.length == pendingCount);
+    }
+    min.clear();
+    var jobs = PriorityQueue<Job>.create(earlier); defer jobs.destroy();
+    Job a; a.priority = 3; a.id = 42; Job b; b.priority = 1; b.id = 7;
+    jobs.push(a); jobs.push(b); var first = jobs.pop(); assert(first.id == 7);
+
+    var bits = BitSet.create(130); defer bits.destroy();
+    var other = BitSet.create(130); defer other.destroy();
+    bits.set(0); bits.set(63); bits.set(64); bits.set(129);
+    assert(bits.count() == 4 && bits.contains(129)); bits.reset(63); assert(!bits.contains(63));
+    other.set(64); other.set(65); bits.unionWith(&other); assert(bits.count() == 4);
+    bits.intersectWith(&other); assert(bits.count() == 2);
+    bits.differenceWith(&other); assert(bits.count() == 0);
+    bits.set(129); bits.unionWith(&bits); assert(bits.count() == 1);
+    bits.differenceWith(&bits); assert(bits.count() == 0);
+    bits.set(0); bits.clear(); assert(bits.count() == 0);
+    bool[130] bitModel;
+    for (int step = 0; step < 2000; step++) {
+        random = (random * 1664525 + 1013904223) & 4294967295;
+        u64 index = (random >> 16) % 130;
+        if (random % 2 == 0) { bits.set(index); bitModel[index] = true; }
+        else { bits.reset(index); bitModel[index] = false; }
+        u64 expectedCount = 0;
+        for (u64 i = 0; i < 130; i++) {
+            assert(bits.contains(i) == bitModel[i]); if (bitModel[i]) expectedCount++;
+        }
+        assert(bits.count() == expectedCount);
+    }
+    var empty = BitSet.create(0); defer empty.destroy(); assert(empty.count() == 0);
+
+    var ordered = OrderedMap<int, int>.create(); defer ordered.destroy();
+    // Independent ordered model, including updates and remove/reinsert.
+    int[100] keys; int[100] values; u64 length = 0;
+    for (int step = 0; step < 5000; step++) {
+        random = (random * 1664525 + 1013904223) & 4294967295;
+        int key = cast<int>((random >> 16) % 100);
+        u64 found = length;
+        for (u64 i = 0; i < length; i++) if (keys[i] == key) found = i;
+        if (random % 3 == 0) {
+            assert(ordered.remove(key) == (found < length));
+            if (found < length) {
+                for (u64 i = found + 1; i < length; i++) { keys[i - 1] = keys[i]; values[i - 1] = values[i]; }
+                length--;
+            }
+        } else {
+            int value = cast<int>(random % 10000);
+            assert(ordered.put(key, value) == (found == length));
+            if (found == length) { keys[length] = key; length++; }
+            values[found] = value;
+        }
+        assert(ordered.length == length);
+        for (u64 i = 0; i < length; i++) {
+            assert(ordered.keyAt(i) == keys[i]); assert(ordered.valueAt(i) == values[i]);
+            var value, present = ordered.get(keys[i]); assert(present && value == values[i]);
+        }
+    }
+    assert(!ordered.contains(999)); assert(ordered.getOr(999, -1) == -1);
+    var missing, present = ordered.get(999); assert(!present && missing == 0);
+    var outputKeys = Array<int>.create(); defer outputKeys.destroy();
+    var outputValues = Array<int>.create(); defer outputValues.destroy();
+    ordered.keys(&outputKeys); ordered.values(&outputValues);
+    for (u64 i = 0; i < length; i++) { assert(outputKeys.get(i) == keys[i]); assert(outputValues.get(i) == values[i]); }
+    ordered.clear(); assert(ordered.length == 0); assert(ordered.put(5, 7));
+    var named = OrderedMap<string, int>.create(); defer named.destroy();
+    named.put("a", 1); named.put("b", 2); named.put("a", 3);
+    assert(named.keyAt(0) == "a" && named.valueAt(0) == 3);
+    named.remove("a"); named.put("a", 4); assert(named.keyAt(1) == "a");
+    println("collections verified"); return 0;
+}

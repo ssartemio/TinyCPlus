@@ -40,9 +40,9 @@ def run(label, command, timeout=600):
         return False
 
 run('Language, diagnostics, lowering and deterministic fuzzing', [sys.executable, ROOT/'tests/test_compiler.py', '--fuzz', args.fuzz, *(['--cc',args.cc] if args.cc else [])])
-for name in ('test_modules_ffi.py', 'test_tools.py', 'test_stdlib.py', 'test_editor.py', 'test_golden.py', 'test_tutorial.py'):
+for name in ('test_modules_ffi.py', 'test_tools.py', 'test_stdlib.py', 'test_editor.py', 'test_golden.py', 'test_tutorial.py', 'test_gui.py', 'test_improvements.py', 'test_distribution.py'):
     command = [sys.executable, ROOT/'tests'/name]
-    if name in ('test_tutorial.py', 'test_stdlib.py') and args.cc:
+    if name in ('test_tutorial.py', 'test_stdlib.py', 'test_improvements.py') and args.cc:
         command += ['--cc', args.cc]
     run(name, command)
 bundled = ROOT/'third_party/tcc'/('tcc.exe' if os.name == 'nt' else 'posix/tcc')
@@ -50,13 +50,15 @@ compilers = [str(bundled)] if bundled.exists() else [shutil.which('cc') or 'cc']
 if args.cc and args.cc not in compilers:
     compilers.append(args.cc)
 for cc in compilers:
-    for name in ('concurrent', 'network', 'tui'):
+    for name in ('concurrent', 'network', 'tui', 'gui', 'review'):
         output = native/('runtime_'+name+ext)
         flags = ['-std=c11', '-I'+str(ROOT/'runtime')]
         if os.name != 'nt':
             flags += ['-D_POSIX_C_SOURCE=200809L', '-pthread', '-lm']
-        elif name == 'network':
+        elif name in ('network', 'review'):
             flags += ['-lws2_32']
+        if os.name == 'nt' and name == 'gui':
+            flags += ['-luser32', '-lgdi32']
         if run('Build runtime '+name+' with '+Path(cc).name, [cc, ROOT/'tests'/('runtime_'+name+'.c'), *flags, '-o', output]):
             run('Run runtime '+name+' with '+Path(cc).name, [output], timeout=30)
 if not args.skip_interop:
@@ -64,6 +66,9 @@ if not args.skip_interop:
         for name in ('test_protobuf.py','test_grpc.py'):
             run(name+(' / '+Path(cc).name if cc else ' / default backend'),
                 [sys.executable, ROOT/'tests'/name, *(['--cc',cc] if cc else [])])
+run('Module bench runner contracts', [sys.executable, ROOT/'tests/test_module_bench.py'])
+run('Developed modules test bench', [sys.executable, ROOT/'tests/run_modules.py', '--no-build',
+                                   *(['--cc', args.cc] if args.cc else ['--backend', 'default'])])
 if args.cc:
     run('External compiler module and FFI ABI checks', [sys.executable,ROOT/'tests/test_modules_ffi.py','--cc',args.cc])
 report = Path(args.report)

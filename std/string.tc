@@ -1,3 +1,5 @@
+// Vistas y almacenamiento de strings. OwnedString y StringBuilder requieren destroy;
+// las vistas dejan de ser válidas al liberar o modificar el almacenamiento que las respalda.
 module std.string;
 extern C {
     string tc_string_view(const char* data, u64 length);
@@ -11,11 +13,13 @@ extern C {
     string tc_format_int(i64 value);
     string tc_format_double(double value);
     void tc_bytes_copy(char* destination, string source);
+    Error tc_builder_append(char** data, u64* length, u64* capacity, string text);
 }
 /// Explicit ownership. view() borrows bytes; destroy invalidates all views.
 class OwnedString {
     string value;
     string view() { return value; }
+    OwnedString take() { OwnedString result(value); value = ""; return result; }
     void destroy() { tc_string_free(value); value = ""; }
 }
 class String {
@@ -44,6 +48,8 @@ class StringBuilder {
         return builder;
     }
 
+    StringBuilder take() { StringBuilder result; result.data = data; result.length = length; result.capacity = capacity; data = null; length = 0; capacity = 0; return result; }
+
     /// Ensures room for extra more bytes plus a terminating NUL.
     void reserve(u64 extra) {
         assert(extra < 18446744073709551615 - length);
@@ -59,11 +65,8 @@ class StringBuilder {
     }
 
     void append(string text) {
-        if (text.length == 0) return;
-        reserve(text.length);
-        tc_bytes_copy(&data[length], text);
-        length = length + text.length;
-        data[length] = '\0';
+        var error = tc_builder_append(&data, &length, &capacity, text);
+        assert(error == 0);
     }
 
     void appendChar(char value) {

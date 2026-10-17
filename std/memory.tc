@@ -1,3 +1,5 @@
+// Reserva explícita de memoria mediante malloc/calloc/realloc/free.
+// Comprobar el resultado antes de usarlo y conservar el puntero original si falla resize.
 module std.memory;
 class Memory {
     static void* allocate(u64 bytes) { return malloc(bytes); }

@@ -133,12 +133,18 @@ git reset --hard
 
 ## Documentación
 
+- [Guía del código: archivos, contratos y pruebas](docs/CODE_GUIDE.md)
+
 - [Lenguaje, memoria y ejemplos](docs/LANGUAGE.md)
 - [Arquitectura y costes](docs/ARCHITECTURE.md)
 - [Concurrencia y asincronía](docs/CONCURRENCY.md)
 - [Protocolos y generación](docs/PROTOCOLS.md)
 - [TUI y editor](docs/TUI.md)
 - [Cobertura del roadmap y límites](docs/STATUS.md)
+- [Colecciones, iteradores y copias independientes](docs/COLLECTIONS.md)
+- [Proyectos con tiny.project](docs/PROJECTS.md)
+- [Diagnósticos y contexto de genéricos](docs/DIAGNOSTICS.md)
+- [Banco de pruebas de los módulos desarrollados](tests/MODULE_BENCH.md)
 - [Índice de API estándar](docs/API.md)
 - [Plan de autohospedaje](docs/SELFHOSTING.md)
 - [Dependencias y licencias](THIRD_PARTY.md)
@@ -148,3 +154,5 @@ La especificación original se conserva en [docs/SPEC.md](docs/SPEC.md) como
 referencia de requisitos. El comportamiento implementado se describe en estos
 documentos y en las pruebas; los ejemplos de intención de la especificación no
 se presentan como pruebas de funcionalidad.
+
+La [revisión funcional implementada](docs/FUNCTIONAL_IMPROVEMENTS.md) describe namespaces, errores recuperables, I/O, herramientas CLI, GUI y límites de validación.

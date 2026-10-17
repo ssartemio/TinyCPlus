@@ -1,3 +1,9 @@
+/*
+ * Análisis sintáctico y construcción del AST.
+ * Las expresiones usan precedencia; las declaraciones y sentencias son
+ * recursivas. parse consume los tokens de Context y establece program.
+ * La resolución de nombres y tipos pertenece a semantic.c.
+ */
 #include "tiny.h"
 #include <errno.h>
 
@@ -52,9 +58,27 @@ static void enter(Context *c) {
 static void leave(Context *c) {
     c->depth--;
 }
+static int generic_declaration_ahead(Context *c) {
+    size_t p = c->pos;
+    int depth = 0;
+    if (c->tokens[p].kind != TK_ID) return 0;
+    while (p + 2 < c->ntokens && !strcmp(c->tokens[p + 1].text, ".") && c->tokens[p + 2].kind == TK_ID) p += 2;
+    if (!isupper((unsigned char)c->tokens[p].text[0]) || p + 1 >= c->ntokens || strcmp(c->tokens[p + 1].text, "<")) return 0;
+    for (p++; p < c->ntokens; p++) {
+        const char *s = c->tokens[p].text;
+        if (!strcmp(s, "<")) depth++;
+        else if (!strcmp(s, ">")) depth--;
+        else if (!strcmp(s, ">>")) depth -= 2;
+        else if (!strcmp(s, ";") || !strcmp(s, "{")) return 0;
+        if (depth <= 0) return p + 1 < c->ntokens &&
+            (c->tokens[p + 1].kind == TK_ID || !strcmp(c->tokens[p + 1].text, "*") || !strcmp(c->tokens[p + 1].text, "["));
+    }
+    return 0;
+}
 static int type_start(Context *c) {
     const char *s = peek(c)->text;
     Type *t;
+    if (generic_declaration_ahead(c)) return 1;
     if (c->pos + 1 < c->ntokens && !strcmp(c->tokens[c->pos + 1].text, ".")) {
         size_t p = c->pos;
         while (p + 2 < c->ntokens && !strcmp(c->tokens[p + 1].text, ".") &&
@@ -101,6 +125,7 @@ static TypeLink *type_items(Context *c, const char *end) {
 }
 static Type *parse_type(Context *c) {
     Type *t;
+    Loc origin = peek(c)->loc;
     int cn = eat(c, "const");
     (void)cn;
     enter(c);
@@ -133,6 +158,8 @@ static Type *parse_type(Context *c) {
         } else
             t = type_named(c, name);
     }
+    if (!t->origin.file)
+        t->origin = origin;
     if (cn)
         t = type_const(c, t);
     while (1) {
@@ -232,6 +259,12 @@ static int generic_call_ahead(Context *c) {
                    (!strcmp(c->tokens[p].text, "(") || !strcmp(c->tokens[p].text, "."));
     }
     return 0;
+}
+static const char *qualified_expression_name(Context *c, Node *n) {
+    const char *base;
+    if (n->kind == N_ID) return n->name;
+    if (n->kind != N_MEMBER || !(base = qualified_expression_name(c, n->a))) return NULL;
+    return tc_format(c, "%s.%s", base, n->name);
 }
 static Node *primary(Context *c) {
     Token *t = peek(c);
@@ -333,6 +366,8 @@ static Node *primary(Context *c) {
             } else if (generic_call_ahead(c)) {
                 expect(c, "<");
                 n->decl_type = type_generic(c, t->text, type_items(c, ">"));
+                if (!n->decl_type->origin.file)
+                    n->decl_type->origin = t->loc;
             }
         } else {
             tc_error(c, t->loc, "expected expression, found '%s'", t->text);
@@ -350,6 +385,14 @@ static Node *primary(Context *c) {
             Node *m = node(c, N_MEMBER, peek(c)->loc);
             m->a = n;
             m->name = ident(c);
+            if (generic_call_ahead(c)) {
+                const char *name = qualified_expression_name(c, m);
+                if (!name) tc_error(c, m->loc, "generic qualification requires a module name");
+                expect(c, "<");
+                m->decl_type = type_generic(c, name, type_items(c, ">"));
+                m->decl_type->origin = m->loc;
+                m->kind = N_ID; m->a = NULL; m->name = name;
+            }
             n = m;
         } else if (eat(c, "[")) {
             Node *idx = node(c, N_INDEX, peek(c)->loc);
@@ -752,6 +795,7 @@ static Node *declaration(Context *c, int flags, Node *owner) {
 Node *parse(Context *c) {
     Node *p = node(c, N_PROGRAM, peek(c)->loc);
     c->program = p;
+    c->type_file = p->loc.file;
     while (peek(c)->kind != TK_EOF) {
         if (eat(c, "extern")) {
             Token *t = take(c);
@@ -763,6 +807,7 @@ Node *parse(Context *c) {
         } else
             append(&p->body, declaration(c, 0, NULL));
     }
+    c->type_file = NULL;
     return p;
 }
 void dump_ast(Node *n, FILE *out, int indent) {

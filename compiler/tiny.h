@@ -1,3 +1,9 @@
+/*
+ * Contrato compartido del frontend: tokens, AST, tipos, ámbitos y Context.
+ * Los punteros de AST y tipos pertenecen normalmente a la arena de la unidad.
+ * Node reutiliza campos según NodeKind; consulte parser.c y semantic.c antes
+ * de interpretar un enlace. Véase docs/CODE_GUIDE.md para el recorrido completo.
+ */
 #ifndef TINY_COMPILER_H
 #define TINY_COMPILER_H
 #include <stdio.h>
@@ -15,14 +21,27 @@ typedef struct Node Node;
 typedef struct Symbol Symbol;
 typedef struct Scope Scope;
 typedef struct Context Context;
+typedef struct SourceFile SourceFile;
+typedef struct Instantiation Instantiation;
+/* Buffer de texto con reserva propia: len excluye el terminador NUL. */
 typedef struct Buffer {
     char *data;
     size_t len, cap;
 } Buffer;
+/* Ubicación original conservada en tokens, AST y diagnósticos. */
 typedef struct Loc {
     const char *file;
     int line, col;
 } Loc;
+struct SourceFile {
+    const char *file, *text;
+    SourceFile *next;
+};
+struct Instantiation {
+    const char *name;
+    Loc loc;
+    Instantiation *parent;
+};
 typedef enum TokenKind { TK_EOF, TK_ID, TK_INT, TK_FLOAT, TK_STRING, TK_CHAR, TK_OP } TokenKind;
 typedef struct Token {
     TokenKind kind;
@@ -59,9 +78,10 @@ typedef struct TypeLink {
     Type *type;
     struct TypeLink *next;
 } TypeLink;
+/* Descriptor de tipo; base/items/count se interpretan según kind. */
 struct Type {
     TypeKind kind;
-    const char *name, *cname;
+    const char *name, *cname, *module_file;
     Type *base;
     TypeLink *items;
     size_t count;
@@ -69,6 +89,8 @@ struct Type {
     Node *decl;
     Type *alias;
     Type *next;
+    Loc origin;
+    Instantiation *trace;
 };
 typedef enum NodeKind {
     N_PROGRAM,
@@ -131,6 +153,8 @@ enum {
     NF_OWNED = 2048,
     NF_STDCALL = 4096
 };
+/* Nodo etiquetado por kind; next enlaza listas, no es un hijo genérico.
+ * El análisis añade type/sym/resolved; el emisor consume esas anotaciones. */
 struct Node {
     NodeKind kind;
     Loc loc;
@@ -140,6 +164,7 @@ struct Node {
     Node *owner, *resolved, *parameter;
     Symbol *sym;
     int flags, id;
+    Instantiation *trace;
 };
 struct Symbol {
     const char *name, *cname;
@@ -148,11 +173,20 @@ struct Symbol {
     Node *function;
     Symbol *next;
 };
+/* Ámbito léxico: la búsqueda continúa en parent si no hay símbolo local. */
 struct Scope {
     Scope *parent;
     Symbol *symbols;
 };
+/* Estado de una unidad. La arena retiene AST, símbolos y tipos hasta tc_free.
+ * failure debe inicializarse con setjmp antes de cualquier tc_error. */
 struct Context {
+    int test_isolate, explain;
+    Node *test_function;
+    const char *test_filter;
+    const char *type_file;
+    int diagnostic_json;
+    int uses_gui;
     Arena *arena;
     Token *tokens;
     size_t ntokens, tokcap, pos;
@@ -160,6 +194,8 @@ struct Context {
     Node *program, *current_fn, *current_class;
     Node *loaded_modules, *adapters, *lambdas, *spawns;
     const char *active_file;
+    SourceFile *sources;
+    Instantiation *diagnostic_trace;
     Scope *global, *scope;
     int next_id, errors, loop_depth, switch_loop, depth, test_mode, bounds, uses_tasks, uses_io, uses_grpc,
         repl_mode, quiet;
@@ -172,6 +208,7 @@ char *tc_strn(Context *, const char *, size_t);
 char *tc_format(Context *, const char *, ...);
 void tc_free(Context *);
 void tc_error(Context *, Loc, const char *, ...);
+void tc_source(Context *, const char *, const char *);
 void buf_add(Buffer *, const char *);
 void buf_printf(Buffer *, const char *, ...);
 char *read_file(const char *);
@@ -203,5 +240,18 @@ int tc_format_file(const char *, const char *);
 int tc_document_file(const char *, const char *);
 int tc_repl(const char *);
 void tc_repl_clear(void);
+int backend_gui_backend(const char *);
 int backend_option(int, const char *);
+int module_path_option(const char *);
+int tc_project(const char *, const char *, int, int, const char *, int, char **, const char *);
+
+void tc_json_string(FILE *, const char *);
+void dump_typed_ast(Node *, FILE *);
+
+int backend_capabilities(const char *, const char *);
+int test_selected(Context *, Node *);
+
+void check_local_ownership(Context *);
+
+int tc_json_mode(void);
 #endif

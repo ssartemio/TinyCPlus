@@ -1,9 +1,18 @@
+/*
+ * Construcción, comparación e internado de tipos de una unidad.
+ * Los tipos primitivos, derivados, genéricos y const viven en Context.
+ * type_equal compara compatibilidad estructural de representación; las
+ * conversiones permitidas se deciden en el análisis semántico.
+ */
 #include "tiny.h"
 static const char *names[] = {"void", "bool", "i8",    "u8",     "i16",  "u16",    "i32", "u32",
                               "i64",  "u64",  "float", "double", "char", "string", "null"};
 static const char *cnames[] = {"void",     "bool",    "int8_t",   "uint8_t",    "int16_t",
                                "uint16_t", "int32_t", "uint32_t", "int64_t",    "uint64_t",
                                "float",    "double",  "char",     "TinyString", "void *"};
+static int same_module(const char *a, const char *b) {
+    return (!a && !b) || (a && b && !strcmp(a, b));
+}
 static Type *add_type(Context *c, TypeKind kind) {
     Type *t = (Type *)tc_alloc(c, sizeof(Type));
     t->kind = kind;
@@ -63,17 +72,19 @@ Type *type_named(Context *c, const char *name) {
     if (!strcmp(name, "var"))
         return type_primitive(c, TY_AUTO);
     for (t = c->types; t; t = t->next)
-        if ((t->kind == TY_NAMED || t->kind == TY_ENUM) && !t->items && !strcmp(t->name, name))
-            return t;
+        if ((t->kind == TY_NAMED || t->kind == TY_ENUM) && !t->items && !strcmp(t->name, name) &&
+            (!c->type_file || same_module(t->module_file, c->type_file)))
+            { while (t->alias) t = t->alias; return t; }
     t = add_type(c, TY_NAMED);
     t->name = name;
+    t->module_file = c->type_file;
     t->cname = tc_format(c, "tc_%s", name);
     return t;
 }
 Type *type_derive(Context *c, TypeKind k, Type *base, size_t count) {
     Type *t;
     for (t = c->types; t; t = t->next)
-        if (t->kind == k && t->base == base && t->count == count)
+        if (!t->alias && t->kind == k && t->base == base && t->count == count)
             return t;
     t = add_type(c, k);
     t->base = base;
@@ -96,7 +107,7 @@ int type_equal(Type *a, Type *b) {
     if (a->kind == TY_PTR || a->kind == TY_ARRAY || a->kind == TY_SLICE)
         return a->count == b->count && type_equal(a->base, b->base);
     if (a->kind == TY_ENUM)
-        return !strcmp(a->name, b->name);
+        return !strcmp(a->name, b->name) && same_module(a->module_file, b->module_file);
     if (a->kind == TY_TUPLE || a->kind == TY_FUNC || a->kind == TY_CLOSURE) {
         if (a->callconv != b->callconv)
             return 0;
@@ -108,7 +119,7 @@ int type_equal(Type *a, Type *b) {
         return !x && !y;
     }
     if (a->kind == TY_NAMED) {
-        if (strcmp(a->name, b->name))
+        if (strcmp(a->name, b->name) || !same_module(a->module_file, b->module_file))
             return 0;
         for (x = a->items, y = b->items; x && y; x = x->next, y = y->next)
             if (!type_equal(x->type, y->type))
@@ -123,7 +134,7 @@ Type *type_tuple(Context *c, TypeLink *items) {
     probe.kind = TY_TUPLE;
     probe.items = items;
     for (t = c->types; t; t = t->next)
-        if (type_equal(t, &probe))
+        if (!t->alias && type_equal(t, &probe))
             return t;
     t = add_type(c, TY_TUPLE);
     t->items = items;
@@ -137,18 +148,20 @@ const char *type_name(Context *c, Type *t) {
 }
 Type *type_generic(Context *c, const char *name, TypeLink *items) {
     Type *t;
+    const char *file = !strcmp(name, "Task") ? NULL : c->type_file;
     TypeLink *a, *b;
     for (t = c->types; t; t = t->next) {
-        if (t->kind != TY_NAMED || !t->items || strcmp(t->name, name))
+        if (t->kind != TY_NAMED || !t->items || strcmp(t->name, name) ||
+            !same_module(t->module_file, file))
             continue;
         for (a = t->items, b = items; a && b && type_equal(a->type, b->type);
              a = a->next, b = b->next) {
         }
-        if (!a && !b)
-            return t;
+        if (!a && !b) { while (t->alias) t = t->alias; return t; }
     }
     t = add_type(c, TY_NAMED);
     t->name = name;
+    t->module_file = file;
     t->items = items;
     t->cname = tc_format(c, "tc_%s_%d", name, t->id);
     return t;

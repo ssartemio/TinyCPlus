@@ -1,5 +1,8 @@
+// Operaciones de archivo y handles explícitos. Revisar los errores devueltos;
+// cerrar los handles abiertos y destruir los strings obtenidos de lecturas.
 module std.fs;
 import std.string;
+import std.errors;
 extern C {
     string tc_file_read_all(string path, Error* error);
     Error tc_file_write_all(string path, string contents);
@@ -9,18 +12,31 @@ extern C {
     void* tc_file_open(string path, string mode);
     i64 tc_file_read(void* handle, void* data, u64 length);
     i64 tc_file_write(void* handle, void* data, u64 length);
+    int tc_file_last_error();
+    int tc_file_atomic_category(int error);
+    i64 tc_file_transfer(void* handle, void* data, u64 length, int writing, int exactly, Error* error);
     Error tc_file_close(void* handle);
 }
 class File {
     void* handle;
-    static (File, Error) open(string path, string mode = "rb") { File file; file.handle = tc_file_open(path, mode); if (file.handle == null) return (file, 1); return (file, 0); }
+    static (File, Error) open(string path, string mode = "rb") { File file; file.handle = tc_file_open(path, mode); if (file.handle == null) return (file, tc_file_last_error()); return (file, 0); }
     static (OwnedString, Error) readAll(string path) { Error error; OwnedString result; result.value = tc_file_read_all(path, &error); return (result, error); }
     static Error writeAll(string path, string contents) { return tc_file_write_all(path, contents); }
-    /// Writes a sibling temporary file, flushes it, then replaces the destination.
+    /// Atomic replacement after flushing the file. POSIX does not fsync the parent
+    /// directory: this does not promise directory-entry durability after power loss.
     static Error writeAtomic(string path, string contents) { return tc_file_write_atomic(path, contents); }
+    static ErrorInfo writeAtomicResult(string path, string contents) {
+        var code = tc_file_write_atomic(path, contents); ErrorInfo result;
+        result.category = cast<ErrorCategory>(tc_file_atomic_category(code)); result.nativeError = code; result.context = path;
+        return result;
+    }
     static bool exists(string path) { return tc_file_exists(path) != 0; }
     static Error remove(string path) { return tc_file_remove(path); }
     i64 read(Slice<byte> destination) { return tc_file_read(handle, destination.data, destination.length); }
     i64 write(Slice<byte> source) { return tc_file_write(handle, source.data, source.length); }
+    (i64, Error) readSome(Slice<byte> destination) { Error error; var count = tc_file_transfer(handle, destination.data, destination.length, 0, 0, &error); return (count, error); }
+    (i64, Error) readExactly(Slice<byte> destination) { Error error; var count = tc_file_transfer(handle, destination.data, destination.length, 0, 1, &error); return (count, error); }
+    (i64, Error) writeSome(Slice<byte> source) { Error error; var count = tc_file_transfer(handle, source.data, source.length, 1, 0, &error); return (count, error); }
+    (i64, Error) writeBytes(Slice<byte> source) { Error error; var count = tc_file_transfer(handle, source.data, source.length, 1, 1, &error); return (count, error); }
     Error close() { var error = tc_file_close(handle); handle = null; return error; }
 }

@@ -1,3 +1,6 @@
+// Editor de terminal: carga un archivo, procesa eventos y guarda de forma explícita.
+// El modo replay permite pruebas sin terminal; --snapshot exporta el estado visual.
+// Strings y ventana se liberan con defer; el bucle conserva el estado del prompt.
 import std.tui;
 import std.fs;
 import std.process;
@@ -36,14 +39,16 @@ int main() {
     var column = Ui.column();
     var title = Ui.label(path); column.add(title);
     var text = Ui.textBox(initial.view()); column.add(text);
-    var status = Ui.label("Ctrl-S Save | Ctrl-Q Quit | Ctrl-F Find | Ctrl-G Line | Ctrl-X Cut | Ctrl-U Paste"); column.add(status);
+    var status = Ui.label("Ctrl-S Save | Ctrl-Q Quit | Ctrl-Z Undo | Ctrl-Y Redo | Ctrl-F Find"); column.add(status);
     var prompt = Ui.textBox("", height: 1); column.add(prompt);
     window.setContent(column); window.focus(text);
     var buffer = text.buffer();
+    buffer.enableHistory();
     OwnedString clipboard; defer clipboard.destroy();
     bool confirmQuit = false;
     int promptMode = 0;
     u64 replayOffset = 0;
+    // Dibujar antes de consumir entrada mantiene replay y terminal en el mismo flujo.
     while (true) {
         window.draw();
         if (len(replayPath) == 0) window.refresh();
@@ -53,11 +58,18 @@ int main() {
         }
         var event = window.nextEvent();
         if (event.kind == 1) {
+            // Ctrl-Q requiere confirmación cuando el buffer contiene cambios sin guardar.
             if (event.key == 17) {
                 if (!buffer.dirty() || confirmQuit) break;
                 confirmQuit = true; status.setText("Unsaved changes. Ctrl-S saves; press Ctrl-Q again to discard."); continue;
             }
             confirmQuit = false;
+            if (promptMode == 0 && (event.key == 26 || event.key == 25)) {
+                Error historyError;
+                if (event.key == 26) historyError = buffer.undo(); else historyError = buffer.redo();
+                if (historyError == 0) status.setText("History applied."); else status.setText("No history available.");
+                continue;
+            }
             if (event.key == 19) {
                 var contents = buffer.text(); defer contents.destroy();
                 var saveError = File.writeAtomic(path, contents.view());
@@ -74,6 +86,7 @@ int main() {
             if (promptMode != 0 && event.key == 27) { promptMode = 0; window.focus(text); continue; }
             if (promptMode != 0 && (event.key == 13 || event.key == 10)) {
                 var query = prompt.text(); defer query.destroy();
+                // Buscar desde el cursor y volver al inicio si no quedan coincidencias.
                 if (promptMode == 6) {
                     var found = buffer.find(query.view(), buffer.position() + 1);
                     if (found < 0) found = buffer.find(query.view());
@@ -89,6 +102,7 @@ int main() {
             if (promptMode == 0 && event.key == 24) { clipboard.destroy(); clipboard = buffer.cutLine(); status.setText("Line cut. Ctrl-U pastes."); continue; }
             if (promptMode == 0 && event.key == 21) { if (buffer.insert(clipboard.view()) != 0) status.setText("Unable to paste."); continue; }
         }
+        // Los eventos no consumidos por atajos se delegan al widget con foco.
         if (window.dispatch(event) != 0) status.setText("Unable to apply event.");
     }
     if (len(snapshotPath) > 0) {

@@ -1,5 +1,7 @@
 import std.collections;
 
+bool smaller(int a, int b) { return a < b; }
+
 int main()
 {
     var values = Array<int>.create();
@@ -9,5 +11,49 @@ int main()
     values.push(3);
     println(values.get(1));
     println(values.pop());
+
+    var unique = Set<string>.create();
+    defer unique.destroy();
+    assert(unique.add("tiny"));
+    assert(!unique.add("tiny"));
+    assert(unique.contains("tiny"));
+
+    var queue = Deque<int>.create();
+    defer queue.destroy();
+    queue.pushBack(20);
+    queue.pushFront(10);
+    assert(queue.popFront() == 10);
+    assert(queue.popBack() == 20);
+
+    var priorities = PriorityQueue<int>.create(smaller);
+    defer priorities.destroy();
+    priorities.push(30);
+    priorities.push(10);
+    assert(priorities.peek() == 10);
+    assert(priorities.pop() == 10);
+
+    var visited = BitSet.create(130);
+    defer visited.destroy();
+    visited.set(64);
+    assert(visited.contains(64) && visited.count() == 1);
+
+    var ordered = OrderedMap<string, int>.create();
+    defer ordered.destroy();
+    ordered.put("first", 1);
+    ordered.put("second", 2);
+    ordered.put("first", 3);
+    assert(ordered.keyAt(0) == "first" && ordered.valueAt(0) == 3);
+    ordered.remove("first");
+    ordered.put("first", 4);
+    assert(ordered.keyAt(1) == "first");
+    // El recorrido no necesita acceder a las tablas o buffers internos.
+    int sum = 0;
+    for (index, value in values) sum += value;
+    assert(sum == 3);
+    for (key, value in ordered) assert(value == ordered.getOr(key, -1));
+    for (value in unique) assert(value == "tiny");
+    var cursor = visited.iterator();
+    var ordinal, bit, available = cursor.next();
+    assert(available && ordinal == 0 && bit == 64);
     return 0;
 }

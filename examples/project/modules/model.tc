@@ -1,0 +1,3 @@
+module model;
+extern C { int project_answer(); }
+int answer() { return project_answer(); }

@@ -1,0 +1,29 @@
+module std.errors;
+extern C { int tc_system_error_category(int error); }
+/// Stable categories independent of native errno/Winsock numbers.
+enum ErrorCategory { None = 0, Cancelled = 1, NotFound = 2, Invalid = 3, Timeout = 4, Exhausted = 5, Permission = 6, Io = 7, Closed = 8 }
+enum TaskError { None = 0, Cancelled = 1, Invalid = 3, Timeout = 4, Exhausted = 8, Io = 13 }
+class ErrorInfo {
+    ErrorCategory category;
+    int nativeError;
+    string context;
+    bool ok() { return category == ErrorCategory.None; }
+}
+class Errors {
+    static ErrorInfo system(int code, string context = "") {
+        ErrorInfo result; result.category = cast<ErrorCategory>(tc_system_error_category(code));
+        result.nativeError = code; result.context = context; return result;
+    }
+    /// Supply Task.nativeError() after result() to preserve a native I/O failure.
+    static ErrorInfo task(int code, int nativeError = 0, string context = "") {
+        if (nativeError != 0) return system(nativeError, context);
+        ErrorInfo result; result.context = context;
+        if (code == 0) result.category = ErrorCategory.None;
+        else if (code == 1) result.category = ErrorCategory.Cancelled;
+        else if (code == 3) result.category = ErrorCategory.Invalid;
+        else if (code == 4) result.category = ErrorCategory.Timeout;
+        else if (code == 8 || code == 2) result.category = ErrorCategory.Exhausted;
+        else result.category = ErrorCategory.Io;
+        return result;
+    }
+}

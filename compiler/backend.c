@@ -1,3 +1,9 @@
+/*
+ * Compilación y ejecución del C generado con libtcc o un compilador externo.
+ * Centraliza rutas, opciones de enlace y creación de procesos por plataforma.
+ * El REPL retiene código y slots globales entre celdas: tc_repl_clear los
+ * libera, pero no revierte efectos de una celda que ya se haya ejecutado.
+ */
 #include "tiny.h"
 /* Windows uses the committed portable package; POSIX hosts build theirs with
    tools/bootstrap.py into an untracked subdirectory. */
@@ -41,6 +47,40 @@ int backend_option(int kind, const char *value) {
         return 1;
     extra_options[kind][extra_counts[kind]++] = value;
     return 0;
+}
+
+enum { TC_GUI_BACKEND_HEADLESS, TC_GUI_BACKEND_X11, TC_GUI_BACKEND_COCOA };
+static int gui_backend;
+int backend_gui_backend(const char *value) {
+#ifdef _WIN32
+    if (!strcmp(value, "win32")) { gui_backend = TC_GUI_BACKEND_HEADLESS; return 0; }
+#endif
+    if (!strcmp(value, "headless")) {
+        gui_backend = TC_GUI_BACKEND_HEADLESS;
+        return 0;
+    }
+#ifdef __linux__
+    if (!strcmp(value, "x11")) {
+        gui_backend = TC_GUI_BACKEND_X11;
+        return 0;
+    }
+#endif
+#ifdef __APPLE__
+    if (!strcmp(value, "cocoa")) {
+        gui_backend = TC_GUI_BACKEND_COCOA;
+        return 0;
+    }
+#endif
+    fprintf(stderr, "tiny: unsupported GUI backend '%s'%s\n", value,
+#ifdef __linux__
+            " (expected headless or x11)"
+#elif defined(__APPLE__)
+            " (expected headless or cocoa)"
+#else
+            " (expected headless or win32 on Windows)"
+#endif
+    );
+    return 1;
 }
 typedef struct ReplSlot {
     char *name;
@@ -307,10 +347,40 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
             fputs("tiny: cannot create libtcc state\n", stderr);
             return 1;
         }
+        if (c->explain) {
+            fprintf(stderr, "backend: libtcc; library-root=%s; runtime=%s/runtime; GUI=%d; tasks=%d; io=%d; grpc=%d\n",
+                    libroot, root, gui_backend, c->uses_tasks, c->uses_io, c->uses_grpc);
+            for (j = 0; j < 4; j++) {
+                int option;
+                for (option = 0; option < extra_counts[j]; option++)
+                    fprintf(stderr, "backend option[%d]: %s\n", j, extra_options[j][option]);
+            }
+        }
+        if (c->explain) {
+            for (j = 0; j < source_count; j++) fprintf(stderr, "backend C source: %s\n", sources[j]);
+#ifndef _WIN32
+            fputs("backend defines: _POSIX_C_SOURCE=200809L; links: m pthread\n", stderr);
+#ifdef __linux__
+            if (c->uses_gui && gui_backend == TC_GUI_BACKEND_X11)
+                fputs("backend defines: TC_GUI_X11_BACKEND; links: X11\n", stderr);
+#endif
+#else
+            if (c->uses_io) fputs("backend links: ws2_32\n", stderr);
+            if (c->uses_gui) fputs("backend links: user32 gdi32\n", stderr);
+#endif
+        }
         api.lib_path(s, libroot);
         api.error_func(s, NULL, tcc_error);
 #ifndef _WIN32
         api.options(s, "-D_POSIX_C_SOURCE=200809L");
+#endif
+#ifdef __linux__
+        if (c->uses_gui && gui_backend == TC_GUI_BACKEND_X11)
+            api.options(s, "-DTC_GUI_X11_BACKEND");
+#endif
+#ifdef __APPLE__
+        if (c->uses_gui && gui_backend == TC_GUI_BACKEND_COCOA)
+            api.options(s, "-DTC_GUI_COCOA_BACKEND");
 #endif
         api.include_path(s, tc_format(c, "%s/runtime", root));
         for (j = 0; j < extra_counts[1]; j++)
@@ -322,7 +392,7 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
             api.include_path(s, tc_format(c, "%s/third_party/nghttp2/src/includes", root));
             api.options(s, "-DNGHTTP2_STATICLIB -DHAVE_CONFIG_H");
         }
-        if (api.output_type(s, run ? 1 : 2) >= 0 && api.compile(s, code) >= 0) {
+        if (api.output_type(s, run && !c->test_isolate ? 1 : 2) >= 0 && api.compile(s, code) >= 0) {
             if (c->repl_mode) {
                 api.symbol(s, "tc_repl_slot", (const void *)tc_repl_slot);
                 api.symbol(s, "tc_repl_initialize", (const void *)tc_repl_initialize);
@@ -342,13 +412,38 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
 #ifdef _WIN32
             if (c->uses_io)
                 api.library(s, "ws2_32");
+            if (c->uses_gui) {
+                api.library(s, "user32");
+                api.library(s, "gdi32");
+            }
 #endif
 #ifndef _WIN32
             api.library(s, "m");
             api.library(s, "pthread");
+#ifdef __linux__
+            if (c->uses_gui && gui_backend == TC_GUI_BACKEND_X11 && api.library(s, "X11") < 0) {
+                fputs("tiny: X11 backend requires libX11 development/runtime files\n", stderr);
+                api.destroy(s);
+                unload_tcc(handle);
+                return 1;
+            }
 #endif
-            result = run ? api.run(s, argc ? argc : 1, argc ? argv : default_args)
-                         : api.output_file(s, output);
+#endif
+            if (run && c->test_isolate) {
+                const char *base = temporary(c);
+                if (base) {
+#ifdef _WIN32
+                    const char *executable = tc_format(c, "%s.exe", base);
+#else
+                    const char *executable = base;
+#endif
+                    char *child[] = {(char *)executable, NULL};
+                    result = api.output_file(s, executable);
+                    if (!result) result = tc_process(child);
+                    remove(executable); remove(base);
+                }
+            } else result = run ? api.run(s, argc ? argc : 1, argc ? argv : default_args)
+                                : api.output_file(s, output);
             /* A cell can publish function pointers before returning nonzero. */
             if (c->repl_mode) {
                 ReplCode *cell = (ReplCode *)malloc(sizeof(*cell));
@@ -407,6 +502,14 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
 #ifndef _WIN32
         args[k++] = "-D_POSIX_C_SOURCE=200809L";
 #endif
+#ifdef __linux__
+        if (c->uses_gui && gui_backend == TC_GUI_BACKEND_X11)
+            args[k++] = "-DTC_GUI_X11_BACKEND";
+#endif
+#ifdef __APPLE__
+        if (c->uses_gui && gui_backend == TC_GUI_BACKEND_COCOA)
+            args[k++] = "-DTC_GUI_COCOA_BACKEND";
+#endif
         if (assembly)
             args[k++] = "-S";
         args[k++] = (char *)tmp;
@@ -446,12 +549,26 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
 #ifdef _WIN32
         if (c->uses_io)
             args[k++] = "-lws2_32";
+        if (c->uses_gui) {
+            args[k++] = "-luser32";
+            args[k++] = "-lgdi32";
+        }
 #endif
 #ifndef _WIN32
         args[k++] = "-lm";
         args[k++] = "-pthread";
+#ifdef __linux__
+        if (c->uses_gui && gui_backend == TC_GUI_BACKEND_X11)
+            args[k++] = "-lX11";
+#endif
 #endif
         args[k] = NULL;
+        if (c->explain) {
+            int option;
+            fputs("backend argv:", stderr);
+            for (option = 0; args[option]; option++) fprintf(stderr, " [%s]", args[option]);
+            fputc('\n', stderr);
+        }
         result = tc_process(args);
         remove(tmp);
         if (result == 0 && run) {
@@ -466,4 +583,30 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
         }
     }
     return result;
+}
+
+int backend_capabilities(const char *root, const char *cc) {
+    Context c = {0}; TccApi api; void *handle = NULL;
+    int available = load_tcc(&c, root, &api, &handle);
+    if (available) unload_tcc(handle);
+    fputs("{\"schemaVersion\":1,\"platform\":", stdout);
+#ifdef _WIN32
+    tc_json_string(stdout, "windows");
+#elif defined(__APPLE__)
+    tc_json_string(stdout, "macos");
+#else
+    tc_json_string(stdout, "linux");
+#endif
+    fprintf(stdout, ",\"libtccAvailable\":%s,\"externalCompiler\":", available ? "true" : "false");
+    tc_json_string(stdout, cc ? cc : "auto");
+    fputs(",\"guiBackends\":[\"headless\"", stdout);
+#ifdef __linux__
+    fputs(",\"x11\"", stdout);
+#elif defined(__APPLE__)
+    fputs(",\"cocoa\"", stdout);
+#else
+    fputs(",\"win32\"", stdout);
+#endif
+    fputs("],\"nativeGuiValidated\":false,\"ownershipAnalysis\":\"local opt-in\",\"grpcTls\":false}\n", stdout);
+    tc_free(&c); return 0;
 }

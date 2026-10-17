@@ -1,3 +1,5 @@
+// Declaraciones C incorporadas automáticamente en cada programa.
+// Reservar y liberar memoria es explícito; no hay recolector de basura.
 // Core C interoperability declarations. No implicit allocation.
 extern C {
     void* malloc(size_t size);

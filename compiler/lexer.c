@@ -1,3 +1,8 @@
+/*
+ * Análisis léxico: convierte texto en tokens con archivo, línea y columna.
+ * lex almacena el resultado en Context; dump_tokens permite inspeccionarlo.
+ * Los límites de entrada y los escapes se comprueban antes del parser.
+ */
 #include "tiny.h"
 
 static void push(Context *c, TokenKind k, const char *s, size_t n, Loc l) {
@@ -23,6 +28,7 @@ void lex(Context *c, const char *file, const char *s) {
     const char *ops[] = {">>=", "<<=", "...", "==", "!=", "<=", ">=", "&&", "||",
                          "++",  "--",  "+=",  "-=", "*=", "/=", "%=", "&=", "|=",
                          "^=",  "<<",  ">>",  "->", "=>", "::", NULL};
+    tc_source(c, file, s);
     if ((unsigned char)s[0] == 0xef && (unsigned char)s[1] == 0xbb && (unsigned char)s[2] == 0xbf)
         i = 3;
     while (s[i]) {

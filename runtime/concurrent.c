@@ -1,3 +1,9 @@
+/*
+ * Implementación Windows/POSIX de la ABI de concurrent.h.
+ * Implementa sincronización, pools, canales y futures compartidos.
+ * La vida de los argumentos de callbacks debe cubrir su ejecución; finalizar
+ * el scheduler antes de liberar recursos usados por trabajos pendientes.
+ */
 #include "concurrent.h"
 #include <stdlib.h>
 #include <string.h>
@@ -340,6 +346,7 @@ void tc_atomic_destroy(void *h) {
 typedef struct TcJob {
     TcAction action;
     void *argument;
+    size_t bytes;
     struct TcJob *next;
 } TcJob;
 typedef struct TcPool {
@@ -348,6 +355,7 @@ typedef struct TcPool {
     TcJob *head, *tail;
     void **threads;
     int workers, stopping;
+    size_t pending, pending_bytes, max_jobs, max_bytes;
 } TcPool;
 static void pool_worker(void *arg) {
     TcPool *pool = (TcPool *)arg;
@@ -362,6 +370,7 @@ static void pool_worker(void *arg) {
         }
         job = pool->head;
         pool->head = job->next;
+        pool->pending--; pool->pending_bytes -= job->bytes;
         if (!pool->head)
             pool->tail = NULL;
         mutex_unlock(&pool->lock);
@@ -383,6 +392,7 @@ void *tc_pool_create(int32_t workers) {
         return NULL;
     }
     mutex_init(&p->lock);
+    p->max_jobs = 1024; p->max_bytes = 64u * 1024u * 1024u;
     cond_init(&p->available);
     for (i = 0; i < workers; i++) {
         p->threads[i] = tc_thread_start(pool_worker, p);
@@ -394,7 +404,7 @@ void *tc_pool_create(int32_t workers) {
     }
     return p;
 }
-int32_t tc_pool_submit(void *handle, TcAction action, void *argument) {
+int32_t tc_pool_submit_sized(void *handle, TcAction action, void *argument, uint64_t bytes) {
     TcPool *p = (TcPool *)handle;
     TcJob *j;
     if (!p || !action)
@@ -405,12 +415,18 @@ int32_t tc_pool_submit(void *handle, TcAction action, void *argument) {
     j->action = action;
     j->argument = argument;
     j->next = NULL;
+    j->bytes = (size_t)bytes;
     mutex_lock(&p->lock);
     if (p->stopping) {
         mutex_unlock(&p->lock);
         free(j);
         return 3;
     }
+    if (bytes > p->max_bytes || p->pending >= p->max_jobs ||
+        bytes > p->max_bytes - p->pending_bytes) {
+        mutex_unlock(&p->lock); free(j); return 8;
+    }
+    p->pending++; p->pending_bytes += (size_t)bytes;
     if (p->tail)
         p->tail->next = j;
     else
@@ -419,6 +435,16 @@ int32_t tc_pool_submit(void *handle, TcAction action, void *argument) {
     cond_signal(&p->available);
     mutex_unlock(&p->lock);
     return 0;
+}
+int32_t tc_pool_submit(void *handle, TcAction action, void *argument) {
+    return tc_pool_submit_sized(handle, action, argument, 0);
+}
+int32_t tc_pool_limits(void *handle, uint64_t jobs, uint64_t bytes) {
+    TcPool *p = (TcPool *)handle;
+    if (!p || !jobs || jobs > SIZE_MAX || bytes > SIZE_MAX) return 3;
+    mutex_lock(&p->lock);
+    p->max_jobs = (size_t)jobs; p->max_bytes = (size_t)bytes;
+    mutex_unlock(&p->lock); return 0;
 }
 void tc_pool_destroy(void *handle) {
     TcPool *p = (TcPool *)handle;
@@ -447,7 +473,7 @@ typedef struct TcFuture {
     TcCond ready;
     uint64_t refs;
     size_t size;
-    int complete, error;
+    int complete, error, native_error;
     TcContinuation *continuations;
     unsigned char data[1];
 } TcFuture;
@@ -522,6 +548,15 @@ int32_t tc_future_ready(void *h) {
     ready = f->complete;
     mutex_unlock(&f->lock);
     return ready;
+}
+void tc_future_set_native_error(void *h, int32_t error) {
+    TcFuture *f = (TcFuture *)h;
+    mutex_lock(&f->lock); if (!f->complete) f->native_error = error; mutex_unlock(&f->lock);
+}
+int32_t tc_future_native_error(void *h) {
+    TcFuture *f = (TcFuture *)h;
+    int error;
+    mutex_lock(&f->lock); error = f->native_error; mutex_unlock(&f->lock); return error;
 }
 int32_t tc_future_get(void *h, void *destination) {
     TcFuture *f = (TcFuture *)h;
@@ -676,4 +711,21 @@ void tc_scheduler_shutdown(void) {
     tc_default_pool = NULL;
     cond_dispose(&tc_tasks_finished);
     mutex_dispose(&tc_task_lock);
+}
+
+/* Borrowed futures/token. timeout=0 waits indefinitely; no future is consumed. */
+int64_t tc_future_wait_any(void **handles, uint64_t count, uint64_t timeout, void *token,
+                           int32_t *error) {
+    uint64_t start = tc_clock_ms(), i;
+    *error = 0;
+    if (!count || !handles) { *error = 3; return -1; }
+    for (;;) {
+        if (token && tc_atomic_load(token)) { *error = 1; return -1; }
+        for (i = 0; i < count; i++) {
+            if (!handles[i]) { *error = 3; return -1; }
+            if (tc_future_ready(handles[i])) return (int64_t)i;
+        }
+        if (timeout && tc_clock_ms() - start >= timeout) { *error = 4; return -1; }
+        tc_sleep_ms(1);
+    }
 }

@@ -1,7 +1,13 @@
+// Ventanas ANSI, widgets, eventos y edición con GapBuffer.
+// Destruir ventanas para restaurar el terminal. headless/replay/snapshot
+// permiten verificar interfaces sin entrada interactiva; véase docs/TUI.md.
 module std.tui;
 import std.string;
+import std.input;
 extern C {
     void* tc_gap_create(string input);
+    void tc_gap_history(void* buffer, int enabled);
+    Error tc_gap_undo_redo(void* buffer, int redo);
     void tc_gap_destroy(void* buffer);
     u64 tc_gap_length(void* buffer);
     u64 tc_gap_position(void* buffer);
@@ -9,8 +15,8 @@ extern C {
     Error tc_gap_insert(void* buffer, string input);
     void tc_gap_left(void* buffer);
     void tc_gap_right(void* buffer);
-    void tc_gap_backspace(void* buffer);
-    void tc_gap_delete(void* buffer);
+    Error tc_gap_backspace(void* buffer);
+    Error tc_gap_delete(void* buffer);
     void tc_gap_home(void* buffer);
     void tc_gap_end(void* buffer);
     int tc_gap_line(void* buffer);
@@ -55,14 +61,17 @@ extern C {
 class GapBuffer {
     void* handle;
     static GapBuffer create(string input = "") { GapBuffer buffer(tc_gap_create(input)); assert(buffer.handle != null); return buffer; }
+    void enableHistory(bool enabled = true) { tc_gap_history(handle, cast<int>(enabled)); }
+    Error undo() { return tc_gap_undo_redo(handle, 0); }
+    Error redo() { return tc_gap_undo_redo(handle, 1); }
     u64 length() { return tc_gap_length(handle); }
     u64 position() { return tc_gap_position(handle); }
     void seek(u64 position) { tc_gap_seek(handle, position); }
     Error insert(string text) { return tc_gap_insert(handle, text); }
     void left() { tc_gap_left(handle); }
     void right() { tc_gap_right(handle); }
-    void backspace() { tc_gap_backspace(handle); }
-    void deleteNext() { tc_gap_delete(handle); }
+    Error backspace() { return tc_gap_backspace(handle); }
+    Error deleteNext() { return tc_gap_delete(handle); }
     void home() { tc_gap_home(handle); }
     void end() { tc_gap_end(handle); }
     int line() { return tc_gap_line(handle); }

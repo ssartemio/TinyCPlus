@@ -1,3 +1,8 @@
+/*
+ * Herramientas de fuente: formato, referencia Markdown y REPL.
+ * tc_format_file conserva comentarios; tc_document_file recorre declaraciones.
+ * El REPL reúne celdas y delega la compilación y el estado persistente al backend.
+ */
 #include "tiny.h"
 #ifdef _WIN32
 #include <windows.h>
@@ -166,7 +171,12 @@ int tc_format_file(const char *path, const char *output) {
         }
         fmt_comments(f, source, previous_end, strlen(source));
         fmt_newline(f);
-        result = write_file(output, f->output.data ? f->output.data : "") ? 0 : 1;
+        if (output)
+            result = write_file(output, f->output.data ? f->output.data : "") ? 0 : 1;
+        else {
+            result = strcmp(source, f->output.data ? f->output.data : "") != 0;
+            if (result) fprintf(stderr, "tiny fmt: %s needs formatting\n", path);
+        }
     }
     tc_free(c);
     free(c);
@@ -518,4 +528,31 @@ int tc_repl(const char *root) {
     free(history.data);
     free(input.data);
     return result;
+}
+
+/* Schema 1: child roles are explicit, source positions and inferred types retained. */
+static void typed_nodes(Node *n, FILE *out) {
+    int first = 1;
+    fputc('[', out);
+    for (; n; n = n->next) {
+        if (!first) fputc(',', out);
+        first = 0;
+        fprintf(out, "{\"kind\":%d,\"name\":", n->kind);
+        tc_json_string(out, n->name);
+        fputs(",\"text\":", out); tc_json_string(out, n->text);
+        fputs(",\"type\":", out); tc_json_string(out, n->type ? n->type->name : NULL);
+        fputs(",\"file\":", out); tc_json_string(out, n->loc.file);
+        fprintf(out, ",\"line\":%d,\"column\":%d", n->loc.line, n->loc.col);
+        fputs(",\"a\":", out); typed_nodes(n->a, out);
+        fputs(",\"b\":", out); typed_nodes(n->b, out);
+        fputs(",\"c\":", out); typed_nodes(n->c, out);
+        fputs(",\"parameters\":", out); typed_nodes(n->params, out);
+        fputs(",\"arguments\":", out); typed_nodes(n->args, out);
+        fputs(",\"body\":", out); typed_nodes(n->body, out);
+        fputc('}', out);
+    }
+    fputc(']', out);
+}
+void dump_typed_ast(Node *n, FILE *out) {
+    fputs("{\"schemaVersion\":1,\"nodes\":", out); typed_nodes(n, out); fputs("}\n", out);
 }

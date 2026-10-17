@@ -52,6 +52,12 @@ i64 tc_socket_read(i64 handle, void* data, u64 capacity);
 i64 tc_socket_write(i64 handle, void* data, u64 length);
 ```
 
+## tc_socket_transfer
+
+```c
+i64 tc_socket_transfer(i64 handle, void* data, u64 length, i32 writing, i32 exactly, i32* error);
+```
+
 ## tc_socket_port
 
 ```c
@@ -74,6 +80,18 @@ string tc_dns_resolve(string host, i32* error);
 
 ```c
 void* tc_socket_read_async(i64 handle, void* data, u64 capacity, u64 timeout, void* token);
+```
+
+## tc_socket_read_exact_async
+
+```c
+void* tc_socket_read_exact_async(i64 handle, void* data, u64 length, u64 timeout, void* token);
+```
+
+## tc_socket_write_some_async
+
+```c
+void* tc_socket_write_some_async(i64 handle, void* data, u64 length, u64 timeout, void* token);
 ```
 
 ## tc_socket_write_async
@@ -170,6 +188,24 @@ class TcpSocket
 i64 handle;
 ```
 
+### TcpSocket.owned
+
+```c
+bool owned;
+```
+
+### TcpSocket.init
+
+```c
+void init(i64 handle);
+```
+
+### TcpSocket.nativeHandle
+
+```c
+i64 nativeHandle();
+```
+
 ### TcpSocket.connect
 
 ```c
@@ -206,6 +242,33 @@ i64 read(Slice<u8> destination);
 i64 write(Slice<u8> source);
 ```
 
+### TcpSocket.readSome
+
+Return bytes transferred and the native OS error (0 includes clean EOF).
+readExactly may return fewer bytes at EOF; always inspect the count.
+
+```c
+(i64, i32) readSome(Slice<u8> destination);
+```
+
+### TcpSocket.readExactly
+
+```c
+(i64, i32) readExactly(Slice<u8> destination);
+```
+
+### TcpSocket.writeSome
+
+```c
+(i64, i32) writeSome(Slice<u8> source);
+```
+
+### TcpSocket.writeAll
+
+```c
+(i64, i32) writeAll(Slice<u8> source);
+```
+
 ### TcpSocket.close
 
 ```c
@@ -222,6 +285,30 @@ Task<i64> readAsync(Slice<u8> destination, u64 timeout = 30000, CancellationToke
 
 ```c
 Task<i64> writeAsync(Slice<u8> source, u64 timeout = 30000, CancellationToken* token = null);
+```
+
+### TcpSocket.readSomeAsync
+
+```c
+Task<i64> readSomeAsync(Slice<u8> destination, u64 timeout = 30000, CancellationToken* token = null);
+```
+
+### TcpSocket.writeAllAsync
+
+```c
+Task<i64> writeAllAsync(Slice<u8> source, u64 timeout = 30000, CancellationToken* token = null);
+```
+
+### TcpSocket.readExactlyAsync
+
+```c
+Task<i64> readExactlyAsync(Slice<u8> destination, u64 timeout = 30000, CancellationToken* token = null);
+```
+
+### TcpSocket.writeSomeAsync
+
+```c
+Task<i64> writeSomeAsync(Slice<u8> source, u64 timeout = 30000, CancellationToken* token = null);
 ```
 
 ### TcpSocket.acceptAsync
@@ -246,6 +333,24 @@ class UdpSocket
 
 ```c
 i64 handle;
+```
+
+### UdpSocket.owned
+
+```c
+bool owned;
+```
+
+### UdpSocket.init
+
+```c
+void init(i64 handle);
+```
+
+### UdpSocket.nativeHandle
+
+```c
+i64 nativeHandle();
 ```
 
 ### UdpSocket.bind

@@ -10,6 +10,18 @@ Module: `std.tui`
 void* tc_gap_create(string input);
 ```
 
+## tc_gap_history
+
+```c
+void tc_gap_history(void* buffer, i32 enabled);
+```
+
+## tc_gap_undo_redo
+
+```c
+i32 tc_gap_undo_redo(void* buffer, i32 redo);
+```
+
 ## tc_gap_destroy
 
 ```c
@@ -55,13 +67,13 @@ void tc_gap_right(void* buffer);
 ## tc_gap_backspace
 
 ```c
-void tc_gap_backspace(void* buffer);
+i32 tc_gap_backspace(void* buffer);
 ```
 
 ## tc_gap_delete
 
 ```c
-void tc_gap_delete(void* buffer);
+i32 tc_gap_delete(void* buffer);
 ```
 
 ## tc_gap_home
@@ -312,6 +324,24 @@ void* handle;
 static GapBuffer create(string input = "");
 ```
 
+### GapBuffer.enableHistory
+
+```c
+void enableHistory(bool enabled = true);
+```
+
+### GapBuffer.undo
+
+```c
+i32 undo();
+```
+
+### GapBuffer.redo
+
+```c
+i32 redo();
+```
+
 ### GapBuffer.length
 
 ```c
@@ -351,13 +381,13 @@ void right();
 ### GapBuffer.backspace
 
 ```c
-void backspace();
+i32 backspace();
 ```
 
 ### GapBuffer.deleteNext
 
 ```c
-void deleteNext();
+i32 deleteNext();
 ```
 
 ### GapBuffer.home

@@ -1,3 +1,9 @@
+/*
+ * Lowering del AST validado a C11 mediante generate_c.
+ * CG conserva temporales, bucles y limpiezas; Cleanup representa defer.
+ * Las funciones async se traducen a frames y estados, las interfaces a
+ * adaptadores y los streams a bucles. No es un optimizador de IR.
+ */
 #include "tiny.h"
 
 typedef struct Cleanup {
@@ -335,7 +341,13 @@ static const char *expression(CG *g, Node *n) {
             if (!strncmp(n->text, "stream_", 7))
                 return stream_expression(g, n);
             if (!strncmp(n->text, "task_", 5)) {
+                if (!strcmp(n->text, "task_destroy") && (n->a->a->flags & NF_LVALUE)) {
+                    a = expression(g, n->a->a);
+                    return tc_format(c, "(tc_future_release((%s).handle), (%s).handle = NULL)", a, a);
+                }
                 a = value(g, n->a->a);
+                if (!strcmp(n->text, "task_nativeError"))
+                    return tc_format(c, "tc_future_native_error(%s.handle)", a);
                 if (!strcmp(n->text, "task_ready"))
                     return tc_format(c, "tc_future_ready(%s.handle)", a);
                 if (!strcmp(n->text, "task_destroy"))
@@ -768,28 +780,37 @@ static void statement(CG *g, Node *n) {
     case N_RANGE: {
         Loop loop;
         Cleanup *stop = g->cleanup;
-        const char *range = NULL, *len = NULL, *index = NULL;
+        const char *range = NULL, *len = NULL, *index = NULL, *iterator = NULL;
         line(g, "{");
         g->indent++;
         if (n->kind == N_FOR && n->a)
             statement(g, n->a);
         if (n->kind == N_RANGE) {
             Type *t = n->a->type;
-            range = expression(g, n->a);
-            if (t->kind == TY_ARRAY) {
-                a = temp(g);
-                define_value(g, tc_format(c, "%s *", t->base->cname), a,
-                             tc_format(c, "(%s).data", range));
-                range = a;
-                len = tc_format(c, "%zu", t->count);
+            if (n->resolved) {
+                /* Keep a pointer to the actual owner, not a shallow copy:
+                   next() must observe mutations and remain valid across await. */
+                a = object_pointer(g, n->a);
+                iterator = temp(g);
+                define_value(g, n->type->cname, iterator,
+                             tc_format(c, "%s(%s)", n->resolved->cname, a));
             } else {
-                a = temp(g);
-                define_value(g, t->cname, a, range);
-                range = tc_format(c, "%s.data", a);
-                len = tc_format(c, "%s.length", a);
+                range = expression(g, n->a);
+                if (t->kind == TY_ARRAY) {
+                    a = temp(g);
+                    define_value(g, tc_format(c, "%s *", t->base->cname), a,
+                                 tc_format(c, "(%s).data", range));
+                    range = a;
+                    len = tc_format(c, "%zu", t->count);
+                } else {
+                    a = temp(g);
+                    define_value(g, t->cname, a, range);
+                    range = tc_format(c, "%s.data", a);
+                    len = tc_format(c, "%s.length", a);
+                }
+                index = n->b ? n->b->cname : temp(g);
+                define_value(g, "uint64_t", index, "0");
             }
-            index = n->b ? n->b->cname : temp(g);
-            define_value(g, "uint64_t", index, "0");
         }
         loop.id = ++g->serial;
         loop.parent = g->loop;
@@ -798,8 +819,18 @@ static void statement(CG *g, Node *n) {
         line(g, "for (;;) {");
         g->indent++;
         if (n->kind == N_RANGE) {
-            line(g, "if (%s >= %s) break;", index, len);
-            define_value(g, n->c->type->cname, n->c->cname, tc_format(c, "%s[%s]", range, index));
+            if (iterator) {
+                a = temp(g);
+                define_value(g, n->decl_type->cname, a,
+                             tc_format(c, "%s(&(%s))", n->parameter->cname, iterator));
+                line(g, "if (!%s.v2) break;", a);
+                if (n->b)
+                    define_value(g, n->b->type->cname, n->b->cname, tc_format(c, "%s.v0", a));
+                define_value(g, n->c->type->cname, n->c->cname, tc_format(c, "%s.v1", a));
+            } else {
+                line(g, "if (%s >= %s) break;", index, len);
+                define_value(g, n->c->type->cname, n->c->cname, tc_format(c, "%s[%s]", range, index));
+            }
         } else if ((n->kind == N_FOR && n->b) || n->kind == N_WHILE) {
             a = value(g, n->kind == N_WHILE ? n->a : n->b);
             line(g, "if (!(%s)) break;", a);
@@ -810,7 +841,7 @@ static void statement(CG *g, Node *n) {
             a = expression(g, n->c);
             line(g, "%s;", a);
         }
-        if (n->kind == N_RANGE)
+        if (n->kind == N_RANGE && !iterator)
             line(g, "++%s;", index);
         g->indent--;
         line(g, "}");
@@ -1194,7 +1225,9 @@ static void async_function(CG *g, Node *n) {
     line(g, "%s result = {tc_async->future};", n->task_type->cname);
     line(g, "tc_task_begin();");
     line(g,
-         "tc_assert(tc_pool_submit(tc_scheduler_pool(), %s_step, tc_async) == 0, \"<async>\", 0);",
+         "if (tc_pool_submit_sized(tc_scheduler_pool(), %s_step, tc_async, sizeof(*tc_async))) { "
+         "tc_future_complete(tc_async->future, NULL, 8); tc_future_release(tc_async->future); "
+         "free(tc_async); tc_task_end(); }",
          n->cname);
     line(g, "return result;");
     g->indent--;
@@ -1269,8 +1302,9 @@ static void spawns(CG *g) {
         line(g, "%s result = {frame->future};", n->type->cname);
         line(g, "tc_task_begin();");
         line(g,
-             "tc_assert(tc_pool_submit(tc_scheduler_pool(), tc_spawn_step_%d, frame) == 0, "
-             "\"<spawn>\", 0);",
+             "if (tc_pool_submit_sized(tc_scheduler_pool(), tc_spawn_step_%d, frame, sizeof(*frame))) { "
+             "tc_future_complete(frame->future, NULL, 8); tc_future_release(frame->future); "
+             "free(frame); tc_task_end(); }",
              n->id);
         line(g, "return result;");
         g->indent--;
@@ -1295,6 +1329,7 @@ char *generate_c(Context *c) {
         }
     line(&g, "/* Generated by TinyC+. Inspectable C11; do not edit. */");
     line(&g, "#include \"tiny_runtime.h\"");
+    if (c->test_isolate) line(&g, "#include \"library.c\"");
     for (n = c->program->body; n; n = n->next)
         if (n->kind == N_MODULE && !strcmp(n->name, "std.concurrent")) {
             line(&g, "#include \"concurrent.c\"");
@@ -1303,7 +1338,7 @@ char *generate_c(Context *c) {
     for (n = c->program->body; n; n = n->next)
         if (n->kind == N_MODULE &&
             (!strcmp(n->name, "std.string") || !strcmp(n->name, "std.fs") ||
-             !strcmp(n->name, "std.io") || !strcmp(n->name, "std.process"))) {
+             !strcmp(n->name, "std.io") || !strcmp(n->name, "std.errors") || !strcmp(n->name, "std.process"))) {
             line(&g, "#include \"library.c\"");
             break;
         }
@@ -1327,6 +1362,12 @@ char *generate_c(Context *c) {
     for (n = c->program->body; n; n = n->next)
         if (n->kind == N_MODULE && !strcmp(n->name, "std.tui")) {
             line(&g, "#include \"tui.c\"");
+            break;
+        }
+    for (n = c->program->body; n; n = n->next)
+        if (n->kind == N_MODULE && !strcmp(n->name, "std.gui")) {
+            line(&g, "#include \"gui.c\"");
+            c->uses_gui = 1;
             break;
         }
     if (c->repl_mode) {
@@ -1427,8 +1468,17 @@ char *generate_c(Context *c) {
         if (c->test_mode) {
             int tests = 0;
             line(&g, "int result = 0;");
+            if (c->test_isolate)
+                line(&g, "int tc_selected = argc == 3 && !strcmp(argv[1], \"--tiny-test-index\") ? atoi(argv[2]) : -1;");
             for (n = c->program->body; n; n = n->next)
-                if (n->kind == N_FUNCTION && (n->flags & NF_TEST)) {
+                if (test_selected(c, n)) {
+                    if (c->test_isolate) {
+                        line(&g, "if (tc_selected < 0) {"); g.indent++;
+                        line(&g, "TinyString child_args[] = {{argv[0], strlen(argv[0])}, TC_STRING(\"--tiny-test-index\"), TC_STRING(\"%d\")};", tests);
+                        line(&g, "int32_t child_error = 0, child_status = tc_process_spawn(child_args, 3, &child_error);");
+                        line(&g, "if (child_error || child_status) { printf(\"FAIL %s (exit=%%d, start-error=%%d)\\n\", child_status, child_error); result = 1; }", n->name);
+                        g.indent--; line(&g, "} else if (tc_selected == %d) {", tests); g.indent++;
+                    }
                     if (n->decl_type->kind == TY_VOID)
                         line(&g, "%s(); puts(\"PASS %s\");", n->cname, n->name);
                     else
@@ -1436,16 +1486,21 @@ char *generate_c(Context *c) {
                              "if (%s() != 0) { puts(\"FAIL %s\"); result = 1; } else puts(\"PASS "
                              "%s\");",
                              n->cname, n->name, n->name);
+                    if (c->test_isolate) { g.indent--; line(&g, "}"); }
                     tests++;
                 }
             if (!tests) {
                 line(&g, "puts(\"No @test functions found.\"); result = 1;");
-            } else
+            } else if (c->test_isolate)
+                line(&g, "printf(\"%%d tests executed; %%s\\n\", tc_selected < 0 ? %d : 1, result ? \"failures\" : \"passed\");", tests);
+            else
                 line(&g,
                      "printf(\"%d tests executed; %%s\\n\", result ? \"failures\" : \"passed\");",
                      tests);
         } else
             line(&g, "int result = tc_user_main();");
+        if (c->uses_io)
+            line(&g, "tc_io_cancel();");
         if (c->uses_tasks)
             line(&g, "tc_scheduler_shutdown();");
         if (c->uses_io)

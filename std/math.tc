@@ -1,3 +1,5 @@
+// Wrappers matemáticos sobre funciones C y utilidades numéricas.
+// Los dominios y la precisión dependen de las operaciones de punto flotante del host.
 module std.math;
 extern C {
     double sqrt(double value);

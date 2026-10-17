@@ -1,0 +1,16 @@
+import model;
+import std.collections;
+
+@test void nativeAnswer() {
+    assert(model.answer() == 42);
+}
+
+@test void independentCopy() {
+    var source = Array<int>.create();
+    defer source.destroy();
+    source.push(42);
+    var copy = source.clone();
+    defer copy.destroy();
+    source.set(0, 0);
+    assert(copy.get(0) == 42);
+}

@@ -1,9 +1,12 @@
+// Array y Map genéricos con almacenamiento dinámico. Destruir el contenedor
+// libera su almacenamiento; revisar por separado la propiedad de recursos de sus elementos.
 module std.collections;
 
 /// A manually owned contiguous array. Copies alias the same allocation.
 /// Call destroy exactly once after the final use of the allocation.
 class Array<T>
 {
+    u64 version;
     T* data;
     u64 length;
     u64 capacity;
@@ -16,6 +19,7 @@ class Array<T>
 
     void reserve(u64 required)
     {
+        version++;
         if (required <= capacity) return;
         u64 next = capacity * 2;
         if (next < 8) next = 8;
@@ -29,14 +33,30 @@ class Array<T>
 
     void push(T value)
     {
+        version++;
         assert(length < 18446744073709551615);
         reserve(length + 1);
         data[length] = value;
         length++;
     }
 
+    /// Empty/absent results contain a zero-initialized value and false.
+    (T, bool) tryPop() {
+        if (length > 0) return (pop(), true);
+        T empty; return (empty, false);
+    }
+    (T, bool) tryPeek() {
+        if (length > 0) return (data[length - 1], true);
+        T empty; return (empty, false);
+    }
+    (T, bool) tryGet(u64 index) {
+        if (index < length) return (data[index], true);
+        T empty; return (empty, false);
+    }
+
     T pop()
     {
+        version++;
         assert(length > 0);
         length--;
         return data[length];
@@ -50,21 +70,47 @@ class Array<T>
 
     void set(u64 index, T value)
     {
+        version++;
         assert(index < length);
         data[index] = value;
     }
 
     void clear()
     {
+        version++;
         length = 0;
     }
 
     void destroy()
     {
+        version++;
         free(data);
         data = null;
         length = 0;
         capacity = 0;
+    }
+
+    /// Copies backing storage; elements and borrowed keys are copied by value.
+    /// The caller owns the result. Source iterators remain valid.
+    /// Transfers storage, empties this owner and invalidates its iterators.
+    Array<T> take() {
+        Array<T> result(0, data, length, capacity);
+        data = null; length = 0; capacity = 0;
+        version++; return result;
+    }
+
+    Array<T> clone() {
+        Array<T> result;
+        result.reserve(length);
+        for (u64 i = 0; i < length; i++) result.push(data[i]);
+        return result;
+    }
+
+    /// Borrows this owner; keep it alive and unmodified until iteration ends.
+    ArrayIterator<T> iterator() {
+        ArrayIterator<T> result;
+        result.owner = this; result.expectedVersion = version;
+        return result;
     }
 }
 
@@ -75,6 +121,7 @@ class Array<T>
 /// Copies alias the same storage. Call destroy exactly once after the final use.
 class Map<K, V>
 {
+    u64 version;
     K* keyData;
     V* valueData;
     u8* stateData;
@@ -106,6 +153,7 @@ class Map<K, V>
 
     void rehash(u64 next)
     {
+        version++;
         assert(next <= 18446744073709551615 / sizeof(K));
         assert(next <= 18446744073709551615 / sizeof(V));
         K* oldKeys = keyData;
@@ -134,6 +182,7 @@ class Map<K, V>
     /// Stores a key known to be absent; capacity must already have room.
     void insert(K key, V value)
     {
+        version++;
         u64 mask = capacity - 1;
         u64 index = hash(key) & mask;
         while (stateData[index] == 1) index = (index + 1) & mask;
@@ -147,6 +196,7 @@ class Map<K, V>
     /// Inserts key or replaces its value. Returns true when the key is new.
     bool put(K key, V value)
     {
+        version++;
         u64 found = find(key);
         if (found < capacity)
         {
@@ -169,6 +219,7 @@ class Map<K, V>
     }
 
     /// Returns (value, true), or (zero value, false) when key is absent.
+    (V, bool) tryGet(K key) { return get(key); }
     (V, bool) get(K key)
     {
         u64 found = find(key);
@@ -192,6 +243,7 @@ class Map<K, V>
     /// Removes key. Returns true when it was present.
     bool remove(K key)
     {
+        version++;
         u64 found = find(key);
         if (found >= capacity) return false;
         K emptyKey;
@@ -220,6 +272,7 @@ class Map<K, V>
 
     void clear()
     {
+        version++;
         for (u64 i = 0; i < capacity; i++) stateData[i] = 0;
         length = 0;
         tombstones = 0;
@@ -227,6 +280,7 @@ class Map<K, V>
 
     void destroy()
     {
+        version++;
         free(keyData);
         free(valueData);
         free(stateData);
@@ -236,5 +290,547 @@ class Map<K, V>
         length = 0;
         capacity = 0;
         tombstones = 0;
+    }
+
+    /// Copies backing storage; elements and borrowed keys are copied by value.
+    /// The caller owns the result. Source iterators remain valid.
+    /// Transfers storage, empties this owner and invalidates its iterators.
+    Map<K, V> take() {
+        Map<K, V> result;
+        result.keyData = keyData; keyData = null;
+        result.valueData = valueData; valueData = null;
+        result.stateData = stateData; stateData = null;
+        result.length = length; length = 0;
+        result.capacity = capacity; capacity = 0;
+        result.tombstones = tombstones; tombstones = 0;
+        version++; return result;
+    }
+
+    Map<K, V> clone() {
+        Map<K, V> result;
+        for (u64 i = 0; i < capacity; i++)
+            if (stateData[i] == 1) result.put(keyData[i], valueData[i]);
+        return result;
+    }
+
+    /// Borrows this owner; keep it alive and unmodified until iteration ends.
+    MapIterator<K, V> iterator() {
+        MapIterator<K, V> result;
+        result.owner = this; result.expectedVersion = version;
+        return result;
+    }
+}
+
+/// Hash set with Map's key restrictions and borrowed string keys.
+/// Copies alias storage; destroy once. Elements are never destroyed recursively.
+class Set<T> {
+    u64 version;
+    Map<T, bool> entries;
+    u64 length;
+    static Set<T> create() { Set<T> result; return result; }
+    bool add(T value) { version++;
+        bool added = entries.put(value, true);
+        length = entries.length;
+        return added;
+    }
+    bool contains(T value) { return entries.contains(value); }
+    bool remove(T value) { version++;
+        bool removed = entries.remove(value);
+        length = entries.length;
+        return removed;
+    }
+    /// Appends elements in unspecified order. Destination must not alias storage.
+    void values(Array<T>* destination) { entries.keys(destination); }
+    void clear() { version++; entries.clear(); length = 0; }
+    void destroy() { version++; entries.destroy(); length = 0; }
+
+    /// Copies backing storage; elements and borrowed keys are copied by value.
+    /// The caller owns the result. Source iterators remain valid.
+    Set<T> take() { Set<T> result;
+        result.entries = entries.take();
+        result.length = length; length = 0; version++; return result;
+    }
+
+    Set<T> clone() {
+        Set<T> result;
+        result.entries = entries.clone(); result.length = length;
+        return result;
+    }
+
+    /// Borrows this owner; keep it alive and unmodified until iteration ends.
+    SetIterator<T> iterator() {
+        SetIterator<T> result;
+        result.owner = this; result.expectedVersion = version;
+        return result;
+    }
+}
+
+/// Circular buffer. End operations are O(1) amortized; reserve is O(n).
+/// Growth invalidates pointers. Copies alias storage; destroy once, not elements.
+/// Empty pops and invalid indices assert, as in Array. Not synchronized.
+class Deque<T> {
+    u64 version;
+    T* data;
+    u64 length;
+    u64 capacity;
+    u64 head;
+    static Deque<T> create() { Deque<T> result; return result; }
+    /// Maps a logical offset without overflowing head + offset.
+    u64 slot(u64 offset) {
+        u64 remaining = capacity - head;
+        if (offset < remaining) return head + offset;
+        return offset - remaining;
+    }
+    void reserve(u64 required) { version++;
+        if (required <= capacity) return;
+        u64 limit = 18446744073709551615 / sizeof(T);
+        assert(required <= limit);
+        u64 next = required;
+        if (capacity <= limit / 2 && capacity * 2 > next) next = capacity * 2;
+        if (next < 8 && limit >= 8) next = 8;
+        var allocated = malloc(next * sizeof(T));
+        assert(allocated != null);
+        T* fresh = allocated;
+        for (u64 i = 0; i < length; i++) fresh[i] = data[slot(i)];
+        free(data);
+        data = fresh; capacity = next; head = 0;
+    }
+    void pushBack(T value) { version++;
+        assert(length < 18446744073709551615);
+        reserve(length + 1);
+        data[slot(length)] = value; length++;
+    }
+    void pushFront(T value) { version++;
+        assert(length < 18446744073709551615);
+        reserve(length + 1);
+        if (head == 0) head = capacity;
+        head--; data[head] = value; length++;
+    }
+    (T, bool) tryPopFront() {
+        if (length > 0) return (popFront(), true);
+        T empty; return (empty, false);
+    }
+    (T, bool) tryPopBack() {
+        if (length > 0) return (popBack(), true);
+        T empty; return (empty, false);
+    }
+    (T, bool) tryPeek() {
+        if (length > 0) return (get(0), true);
+        T empty; return (empty, false);
+    }
+    (T, bool) tryGet(u64 index) {
+        if (index < length) return (get(index), true);
+        T empty; return (empty, false);
+    }
+    T popFront() { version++;
+        assert(length > 0);
+        T result = data[head];
+        head++; if (head == capacity) head = 0;
+        length--; if (length == 0) head = 0;
+        return result;
+    }
+    T popBack() { version++;
+        assert(length > 0);
+        length--;
+        T result = data[slot(length)];
+        if (length == 0) head = 0;
+        return result;
+    }
+    T get(u64 index) { assert(index < length); return data[slot(index)]; }
+    void set(u64 index, T value) { version++; assert(index < length); data[slot(index)] = value; }
+    void clear() { version++; length = 0; head = 0; }
+    void destroy() { version++; free(data); data = null; length = 0; capacity = 0; head = 0; }
+
+    /// Copies backing storage; elements and borrowed keys are copied by value.
+    /// The caller owns the result. Source iterators remain valid.
+    /// Transfers storage, empties this owner and invalidates its iterators.
+    Deque<T> take() {
+        Deque<T> result;
+        result.data = data; data = null;
+        result.length = length; length = 0;
+        result.capacity = capacity; capacity = 0;
+        result.head = head; head = 0;
+        version++; return result;
+    }
+
+    Deque<T> clone() {
+        Deque<T> result;
+        result.reserve(length);
+        for (u64 i = 0; i < length; i++) result.pushBack(get(i));
+        return result;
+    }
+
+    /// Borrows this owner; keep it alive and unmodified until iteration ends.
+    DequeIterator<T> iterator() {
+        DequeIterator<T> result;
+        result.owner = this; result.expectedVersion = version;
+        return result;
+    }
+}
+
+/// Binary heap. before(a,b) must define a strict weak order: true puts a first.
+/// Use a < b for a min-heap, a > b for a max-heap. Equal priorities are not stable.
+/// Construct with create before push. push/pop are O(log n), peek O(1).
+/// Copies alias storage; destroy once. Growth invalidates element pointers.
+class PriorityQueue<T> {
+    u64 version;
+    Array<T> items;
+    func<bool(T, T)> before;
+    bool initialized;
+    u64 length;
+    static PriorityQueue<T> create(func<bool(T, T)> compare) {
+        PriorityQueue<T> result; result.before = compare; result.initialized = true; return result;
+    }
+    void push(T value) { version++;
+        assert(initialized);
+        items.push(value); length = items.length;
+        u64 index = length - 1;
+        while (index > 0) {
+            u64 parent = (index - 1) / 2;
+            if (!before(value, items.data[parent])) break;
+            items.data[index] = items.data[parent]; index = parent;
+        }
+        items.data[index] = value;
+    }
+    (T, bool) tryPeek() {
+        if (length > 0) return (peek(), true);
+        T empty; return (empty, false);
+    }
+    (T, bool) tryPop() {
+        if (length > 0) return (pop(), true);
+        T empty; return (empty, false);
+    }
+    T peek() { assert(length > 0); return items.data[0]; }
+    T pop() { version++;
+        assert(length > 0);
+        T result = items.data[0];
+        T last = items.pop(); length = items.length;
+        u64 index = 0;
+        while (index < length / 2) {
+            u64 child = index * 2 + 1;
+            if (child + 1 < length && before(items.data[child + 1], items.data[child])) child++;
+            if (!before(items.data[child], last)) break;
+            items.data[index] = items.data[child]; index = child;
+        }
+        if (length > 0) items.data[index] = last;
+        return result;
+    }
+    void clear() { version++; items.clear(); length = 0; }
+    void destroy() { version++; items.destroy(); length = 0; initialized = false; }
+
+    /// Copies backing storage; elements and borrowed keys are copied by value.
+    /// The caller owns the result. Source iterators remain valid.
+    PriorityQueue<T> take() { PriorityQueue<T> result;
+        result.items = items.take();
+        result.before = before; result.initialized = initialized; result.length = length; initialized = false; length = 0; version++; return result;
+    }
+
+    PriorityQueue<T> clone() {
+        PriorityQueue<T> result;
+        result.items = items.clone(); result.before = before;
+        result.initialized = initialized; result.length = length;
+        return result;
+    }
+
+    /// Borrows this owner; keep it alive and unmodified until iteration ends.
+    PriorityQueueIterator<T> iterator() {
+        PriorityQueueIterator<T> result;
+        result.owner = this; result.expectedVersion = version;
+        return result;
+    }
+}
+
+/// Fixed-size set of bit indices [0, length). New bits are initially clear.
+/// Out-of-range indices and unequal-size binary operations assert.
+/// Copies alias storage; destroy once. Binary operations mutate this set.
+class BitSet {
+    u64 version;
+    u64* data;
+    u64 length;
+    u64 wordCount;
+    static BitSet create(u64 bits) {
+        BitSet result; result.length = bits;
+        result.wordCount = bits / 64;
+        if (bits % 64 != 0) result.wordCount++;
+        assert(result.wordCount <= 18446744073709551615 / sizeof(u64));
+        if (result.wordCount > 0) {
+            var allocated = calloc(result.wordCount, sizeof(u64));
+            assert(allocated != null); result.data = allocated;
+        }
+        return result;
+    }
+    bool contains(u64 index) {
+        assert(index < length);
+        return (data[index / 64] & (cast<u64>(1) << (index % 64))) != 0;
+    }
+    void set(u64 index) { version++; assert(index < length); data[index / 64] |= cast<u64>(1) << (index % 64); }
+    void reset(u64 index) { version++; assert(index < length); data[index / 64] &= ~(cast<u64>(1) << (index % 64)); }
+    u64 count() {
+        u64 total = 0;
+        for (u64 i = 0; i < wordCount; i++) {
+            u64 word = data[i];
+            while (word != 0) { word &= word - 1; total++; }
+        }
+        return total;
+    }
+    void unionWith(BitSet* other) { version++;
+        assert(length == other.length);
+        for (u64 i = 0; i < wordCount; i++) data[i] |= other.data[i];
+    }
+    void intersectWith(BitSet* other) { version++;
+        assert(length == other.length);
+        for (u64 i = 0; i < wordCount; i++) data[i] &= other.data[i];
+    }
+    void differenceWith(BitSet* other) { version++;
+        assert(length == other.length);
+        for (u64 i = 0; i < wordCount; i++) data[i] &= ~other.data[i];
+    }
+    void clear() { version++; for (u64 i = 0; i < wordCount; i++) data[i] = 0; }
+    void destroy() { version++; free(data); data = null; length = 0; wordCount = 0; }
+
+    /// Copies backing storage; elements and borrowed keys are copied by value.
+    /// The caller owns the result. Source iterators remain valid.
+    /// Transfers storage, empties this owner and invalidates its iterators.
+    BitSet take() {
+        BitSet result;
+        result.data = data; data = null;
+        result.length = length; length = 0;
+        result.wordCount = wordCount; wordCount = 0;
+        version++; return result;
+    }
+
+    BitSet clone() {
+        var result = BitSet.create(length);
+        for (u64 i = 0; i < wordCount; i++) result.data[i] = data[i];
+        return result;
+    }
+
+    /// Borrows this owner; keep it alive and unmodified until iteration ends.
+    BitSetIterator iterator() {
+        BitSetIterator result;
+        result.owner = this; result.expectedVersion = version;
+        return result;
+    }
+}
+
+/// Insertion-ordered hash map. Updating a key preserves its position;
+/// removing then reinserting appends it. Lookup/put are amortized O(1),
+/// removal O(n) to preserve dense order. Indexed access is O(1).
+/// Same key, borrowing and ownership rules as Map. No synchronized access.
+class OrderedMap<K, V> {
+    u64 version;
+    Map<K, u64> positions;
+    Array<K> keyData;
+    Array<V> valueData;
+    u64 length;
+    static OrderedMap<K, V> create() { OrderedMap<K, V> result; return result; }
+    bool put(K key, V value) { version++;
+        var index, found = positions.get(key);
+        if (found) { valueData.set(index, value); return false; }
+        positions.put(key, length);
+        keyData.push(key); valueData.push(value); length++;
+        return true;
+    }
+    bool contains(K key) { return positions.contains(key); }
+    (V, bool) tryGet(K key) { return get(key); }
+    (V, bool) get(K key) {
+        var index, found = positions.get(key);
+        if (found) return (valueData.get(index), true);
+        V missing; return (missing, false);
+    }
+    V getOr(K key, V fallback) {
+        var index, found = positions.get(key);
+        if (found) return valueData.get(index);
+        return fallback;
+    }
+    K keyAt(u64 index) { return keyData.get(index); }
+    V valueAt(u64 index) { return valueData.get(index); }
+    bool remove(K key) { version++;
+        var index, found = positions.get(key);
+        if (!found) return false;
+        positions.remove(key);
+        for (u64 i = index + 1; i < length; i++) {
+            K moved = keyData.get(i);
+            keyData.set(i - 1, moved); valueData.set(i - 1, valueData.get(i));
+            positions.put(moved, i - 1);
+        }
+        keyData.pop(); valueData.pop(); length--;
+        return true;
+    }
+    /// Appends a snapshot in insertion order; destination must not alias storage.
+    void keys(Array<K>* destination) { for (u64 i = 0; i < length; i++) destination.push(keyData.get(i)); }
+    void values(Array<V>* destination) { for (u64 i = 0; i < length; i++) destination.push(valueData.get(i)); }
+    void clear() { version++; positions.clear(); keyData.clear(); valueData.clear(); length = 0; }
+    void destroy() { version++; positions.destroy(); keyData.destroy(); valueData.destroy(); length = 0; }
+
+    /// Copies backing storage; elements and borrowed keys are copied by value.
+    /// The caller owns the result. Source iterators remain valid.
+    OrderedMap<K, V> take() { OrderedMap<K, V> result;
+        result.positions = positions.take();
+        result.keyData = keyData.take();
+        result.valueData = valueData.take();
+        result.length = length; length = 0; version++; return result;
+    }
+
+    OrderedMap<K, V> clone() {
+        OrderedMap<K, V> result;
+        result.positions = positions.clone();
+        result.keyData = keyData.clone(); result.valueData = valueData.clone();
+        result.length = length;
+        return result;
+    }
+
+    /// Borrows this owner; keep it alive and unmodified until iteration ends.
+    OrderedMapIterator<K, V> iterator() {
+        OrderedMapIterator<K, V> result;
+        result.owner = this; result.expectedVersion = version;
+        return result;
+    }
+}
+
+/// Borrowed cursor for Array. No allocation or destroy is required.
+/// next returns (key/index, value, available); exhausted cursors stay exhausted.
+/// Mutating owner methods invalidate the cursor, even when they do no work.
+class ArrayIterator<T> {
+    Array<T>* owner;
+    u64 expectedVersion;
+    u64 position;
+    u64 ordinal;
+    (u64, T, bool) next() {
+        assert(owner != null);
+        assert(owner.version == expectedVersion);
+        if (position < owner.length) {
+            u64 index = position; position++;
+            return (index, owner.data[index], true);
+        }
+        u64 missingKey; T missingValue;
+        return (missingKey, missingValue, false);
+    }
+}
+
+/// Borrowed cursor for Map. No allocation or destroy is required.
+/// next returns (key/index, value, available); exhausted cursors stay exhausted.
+/// Mutating owner methods invalidate the cursor, even when they do no work.
+class MapIterator<K, V> {
+    Map<K, V>* owner;
+    u64 expectedVersion;
+    u64 position;
+    u64 ordinal;
+    (K, V, bool) next() {
+        assert(owner != null);
+        assert(owner.version == expectedVersion);
+        while (position < owner.capacity) {
+            u64 slot = position; position++;
+            if (owner.stateData[slot] == 1)
+                return (owner.keyData[slot], owner.valueData[slot], true);
+        }
+        K missingKey; V missingValue;
+        return (missingKey, missingValue, false);
+    }
+}
+
+/// Borrowed cursor for Set. No allocation or destroy is required.
+/// next returns (key/index, value, available); exhausted cursors stay exhausted.
+/// Mutating owner methods invalidate the cursor, even when they do no work.
+class SetIterator<T> {
+    Set<T>* owner;
+    u64 expectedVersion;
+    u64 position;
+    u64 ordinal;
+    (u64, T, bool) next() {
+        assert(owner != null);
+        assert(owner.version == expectedVersion);
+        while (position < owner.entries.capacity) {
+            u64 slot = position; position++;
+            if (owner.entries.stateData[slot] == 1) {
+                u64 index = ordinal; ordinal++;
+                return (index, owner.entries.keyData[slot], true);
+            }
+        }
+        u64 missingKey; T missingValue;
+        return (missingKey, missingValue, false);
+    }
+}
+
+/// Borrowed cursor for Deque. No allocation or destroy is required.
+/// next returns (key/index, value, available); exhausted cursors stay exhausted.
+/// Mutating owner methods invalidate the cursor, even when they do no work.
+class DequeIterator<T> {
+    Deque<T>* owner;
+    u64 expectedVersion;
+    u64 position;
+    u64 ordinal;
+    (u64, T, bool) next() {
+        assert(owner != null);
+        assert(owner.version == expectedVersion);
+        if (position < owner.length) {
+            u64 index = position; position++;
+            return (index, owner.get(index), true);
+        }
+        u64 missingKey; T missingValue;
+        return (missingKey, missingValue, false);
+    }
+}
+
+/// Borrowed cursor for PriorityQueue. No allocation or destroy is required.
+/// next returns (key/index, value, available); exhausted cursors stay exhausted.
+/// Mutating owner methods invalidate the cursor, even when they do no work.
+class PriorityQueueIterator<T> {
+    PriorityQueue<T>* owner;
+    u64 expectedVersion;
+    u64 position;
+    u64 ordinal;
+    (u64, T, bool) next() {
+        assert(owner != null);
+        assert(owner.version == expectedVersion);
+        if (position < owner.length) {
+            u64 index = position; position++;
+            return (index, owner.items.get(index), true);
+        }
+        u64 missingKey; T missingValue;
+        return (missingKey, missingValue, false);
+    }
+}
+
+/// Borrowed cursor for BitSet. No allocation or destroy is required.
+/// next returns (key/index, value, available); exhausted cursors stay exhausted.
+/// Mutating owner methods invalidate the cursor, even when they do no work.
+class BitSetIterator {
+    BitSet* owner;
+    u64 expectedVersion;
+    u64 position;
+    u64 ordinal;
+    (u64, u64, bool) next() {
+        assert(owner != null);
+        assert(owner.version == expectedVersion);
+        while (position < owner.length) {
+            u64 bit = position; position++;
+            if (owner.contains(bit)) {
+                u64 index = ordinal; ordinal++;
+                return (index, bit, true);
+            }
+        }
+        u64 missingKey; u64 missingValue;
+        return (missingKey, missingValue, false);
+    }
+}
+
+/// Borrowed cursor for OrderedMap. No allocation or destroy is required.
+/// next returns (key/index, value, available); exhausted cursors stay exhausted.
+/// Mutating owner methods invalidate the cursor, even when they do no work.
+class OrderedMapIterator<K, V> {
+    OrderedMap<K, V>* owner;
+    u64 expectedVersion;
+    u64 position;
+    u64 ordinal;
+    (K, V, bool) next() {
+        assert(owner != null);
+        assert(owner.version == expectedVersion);
+        if (position < owner.length) {
+            u64 index = position; position++;
+            return (owner.keyAt(index), owner.valueAt(index), true);
+        }
+        K missingKey; V missingValue;
+        return (missingKey, missingValue, false);
     }
 }

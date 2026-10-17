@@ -1,0 +1,59 @@
+import std.collections;
+bool less(int a, int b) { return a < b; }
+int main() {
+    var array = Array<int>.create(); array.push(1); array.push(2);
+    var it = array.iterator();
+    var a = array.clone(); defer a.destroy();
+    var i, value, ok = it.next(); assert(ok && value == 1);
+    a.set(0, 99); a.push(3); assert(array.get(0) == 1 && array.length == 2);
+    array.destroy(); assert(a.get(1) == 2);
+    var aa = a.clone(); defer aa.destroy(); a.clear(); assert(aa.length == 3);
+
+    var map = Map<string,int>.create(); map.put("a",1); map.put("b",2); map.put("c",3); map.remove("b");
+    var m = map.clone(); defer m.destroy();
+    assert(m.length == 2 && !m.contains("b")); m.put("a",9); assert(map.getOr("a",0) == 1);
+    map.destroy(); assert(m.getOr("c",0) == 3);
+
+    var set = Set<int>.create(); set.add(1); set.add(2);
+    var s = set.clone(); defer s.destroy(); s.remove(1); assert(set.contains(1));
+    set.destroy(); assert(s.contains(2));
+
+    var deque = Deque<int>.create();
+    for(int n=0;n<8;n++) deque.pushBack(n);
+    for(int n=0;n<5;n++) deque.popFront();
+    deque.pushBack(8); deque.pushBack(9);
+    var d = deque.clone(); defer d.destroy();
+    d.set(0,99); assert(deque.get(0) == 5); deque.destroy();
+    assert(d.popBack() == 9 && d.get(1) == 6);
+
+    var heap = PriorityQueue<int>.create(less); heap.push(3); heap.push(1); heap.push(2);
+    var h = heap.clone(); defer h.destroy(); assert(h.pop() == 1 && heap.length == 3);
+    heap.destroy(); assert(h.pop() == 2 && h.pop() == 3); h.push(7); assert(h.peek() == 7);
+
+    var bits = BitSet.create(130); bits.set(64); bits.set(129);
+    var b = bits.clone(); defer b.destroy(); b.reset(64); assert(bits.contains(64));
+    bits.destroy(); assert(b.length == 130 && b.contains(129) && b.count() == 1);
+
+    var ordered = OrderedMap<string,int>.create(); ordered.put("a",1); ordered.put("b",2); ordered.put("c",3);
+    ordered.remove("b"); ordered.put("b",4);
+    var o = ordered.clone(); defer o.destroy();
+    assert(o.keyAt(0)=="a" && o.keyAt(1)=="c" && o.keyAt(2)=="b");
+    o.put("a",9); assert(ordered.getOr("a",0)==1); ordered.destroy();
+    assert(o.valueAt(2)==4); o.remove("c"); assert(o.keyAt(1)=="b");
+
+    // A clone copies storage, not resources referenced by its elements.
+    int number = 5;
+    var pointers = Array<int*>.create(); defer pointers.destroy(); pointers.push(&number);
+    var copiedPointers = pointers.clone(); defer copiedPointers.destroy();
+    var pointer = copiedPointers.get(0); *pointer = 9;
+    assert(*pointers.get(0) == 9 && pointers.data != copiedPointers.data);
+
+    var emptyA=Array<int>.create(); defer emptyA.destroy(); var ca=emptyA.clone(); defer ca.destroy(); assert(ca.length==0);
+    var emptyM=Map<int,int>.create(); defer emptyM.destroy(); var cm=emptyM.clone(); defer cm.destroy(); assert(cm.length==0);
+    var emptyS=Set<int>.create(); defer emptyS.destroy(); var cs=emptyS.clone(); defer cs.destroy(); assert(cs.length==0);
+    var emptyD=Deque<int>.create(); defer emptyD.destroy(); var cd=emptyD.clone(); defer cd.destroy(); assert(cd.length==0);
+    var emptyH=PriorityQueue<int>.create(less); defer emptyH.destroy(); var ch=emptyH.clone(); defer ch.destroy(); ch.push(1); assert(ch.pop()==1);
+    var emptyB=BitSet.create(0); defer emptyB.destroy(); var cb=emptyB.clone(); defer cb.destroy(); assert(cb.length==0);
+    var emptyO=OrderedMap<int,int>.create(); defer emptyO.destroy(); var co=emptyO.clone(); defer co.destroy(); assert(co.length==0);
+    println("clones verified"); return 0;
+}

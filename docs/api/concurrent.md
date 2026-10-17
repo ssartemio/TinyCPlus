@@ -184,6 +184,18 @@ void* tc_pool_create(i32 workers);
 i32 tc_pool_submit(void* pool, func<void(void*)> action, void* argument);
 ```
 
+## tc_pool_limits
+
+```c
+i32 tc_pool_limits(void* pool, u64 jobs, u64 bytes);
+```
+
+## tc_future_wait_any
+
+```c
+i64 tc_future_wait_any(void** handles, u64 count, u64 timeout, void* token, i32* error);
+```
+
 ## tc_pool_destroy
 
 ```c
@@ -548,6 +560,12 @@ void* handle;
 static WorkerPool create(i32 workers = 4);
 ```
 
+### WorkerPool.limits
+
+```c
+i32 limits(u64 jobs, u64 bytes);
+```
+
 ### WorkerPool.submit
 
 ```c
@@ -652,6 +670,21 @@ void retain();
 void destroy();
 ```
 
+## TaskWait
+
+Borrowed race: returns a ready index, or -1 with cancellation/timeout/error.
+Losers remain alive; cancel cooperatively and join before freeing their buffers.
+
+```c
+class TaskWait
+```
+
+### TaskWait.any
+
+```c
+static (i64, i32) any(Array<void*>* futures, u64 timeout = 0, CancellationToken* token = null);
+```
+
 ## TaskGroup
 
 Owns retained child handles. wait/destroy must run outside the child worker pool.
@@ -697,10 +730,25 @@ CancellationToken* cancellation();
 void cancel();
 ```
 
+### TaskGroup.waitAll
+
+```c
+i32 waitAll();
+```
+
 ### TaskGroup.wait
 
 ```c
 i32 wait();
+```
+
+### TaskGroup.cancelOnError
+
+Poll completed children so a later failure can cancel an earlier slow child.
+Cancellation is cooperative; this still joins all children before returning.
+
+```c
+i32 cancelOnError();
 ```
 
 ### TaskGroup.destroy

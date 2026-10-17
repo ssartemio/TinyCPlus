@@ -1,3 +1,4 @@
+// Utilidades por valor: mínimo, máximo e identidad genérica. No reservan memoria.
 module std.core;
 
 int minInt(int a, int b)

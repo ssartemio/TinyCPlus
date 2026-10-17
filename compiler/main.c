@@ -1,3 +1,8 @@
+/*
+ * Interfaz de línea de comandos y ciclo de compilación.
+ * tc_compile crea un Context por unidad, captura diagnósticos con setjmp,
+ * ejecuta las fases solicitadas y libera la arena incluso tras un error.
+ */
 #include "tiny.h"
 #ifdef _WIN32
 #include <windows.h>
@@ -8,14 +13,27 @@
 #endif
 #endif
 
+static int ownership_check;
+static int json_diagnostics, test_list, test_isolate, explain_build;
+static const char *test_filter;
 static void usage(FILE *f) {
     fputs("TinyC+ development compiler\n"
           "Usage: tiny <run|build|check|test|fmt|doc> source.tc [options] [-- args]\n"
           "       tiny repl\n"
+          "       tiny <build|run|check|test> [--project tiny.project]\n"
           "       tinyc [options] source.tc\n"
           "Options:\n"
           "  --emit-c             Print readable generated C\n"
           "  --emit-ast           Print syntax tree\n"
+          "  --emit-typed-ast     Export analyzed AST as JSON schema 1\n"
+          "  --json               Machine-readable check diagnostics (NDJSON)\n"
+          "  --ownership-check    Diagnose direct copies and local resource misuse\n"
+          "  --check              Non-mutating formatter check (fmt only)\n"
+          "  --list / --filter S  List/filter tests by qualified-name substring\n"
+          "  --isolate            Run each test in a separate process\n"
+          "  --explain            Print effective backend/link options\n"
+          "  --gui-backend NAME   headless, x11 (Linux), cocoa (macOS)\n"
+          "  doctor / capabilities  Probe toolchain / describe capabilities\n"
           "  --emit-tokens        Print lexer tokens\n"
           "  --emit-asm           Generate assembler with --cc gcc/clang\n"
           "  --cc PATH            Use an external C compiler instead of libtcc\n"
@@ -25,8 +43,17 @@ static void usage(FILE *f) {
           "  --no-bounds-check    Disable bounds checks (unsafe)\n"
           "  -o PATH              Write generated C, assembler or executable\n"
           "  --home PATH          Set TinyC+ installation root\n"
+          "  --project PATH       Load a native project manifest (default: tiny.project)\n"
+          "  --module-path PATH   Add a TinyC+ module search directory\n"
           "  --version            Print compiler version\n",
           f);
+}
+int tc_json_mode(void) { return json_diagnostics; }
+int test_selected(Context *c, Node *n) {
+    if (n->kind != N_FUNCTION || !(n->flags & NF_TEST)) return 0;
+    if (c->test_function) return c->test_function == n;
+    return !c->test_filter || strstr(n->name, c->test_filter) ||
+        strstr(tc_format(c, "%s.%s", module_name(c, n->loc.file), n->name), c->test_filter);
 }
 int tc_compile(const char *path, const char *output, int mode, int bounds, const char *root,
                int argc, char **argv, const char *cc) {
@@ -37,10 +64,16 @@ int tc_compile(const char *path, const char *output, int mode, int bounds, const
         return 2;
     src = read_file(path);
     if (!src) {
-        fprintf(stderr, "tiny: cannot read '%s' (maximum source size 32 MiB)\n", path);
+        if (json_diagnostics) {
+            fputs("{\"schemaVersion\":1,\"ok\":false,\"diagnostics\":[{\"severity\":\"error\",\"file\":", stdout);
+            tc_json_string(stdout, path);
+            fputs(",\"line\":1,\"column\":1,\"message\":\"cannot read source (maximum size 32 MiB)\"}]}\n", stdout);
+        } else fprintf(stderr, "tiny: cannot read '%s' (maximum source size 32 MiB)\n", path);
         free(c);
         return 1;
     }
+    c->diagnostic_json = json_diagnostics;
+    c->test_filter = test_filter; c->test_isolate = test_isolate; c->explain = explain_build;
     c->bounds = bounds;
     c->test_mode = mode == 8;
     c->repl_mode = mode == 9;
@@ -62,9 +95,34 @@ int tc_compile(const char *path, const char *output, int mode, int bounds, const
             } else {
                 expand_generics(c);
                 analyze(c);
-                if (mode == 1)
+                if (ownership_check) check_local_ownership(c);
+                if (mode == 1) {
+                    if (json_diagnostics) {
+                        fputs("{\"schemaVersion\":1,\"ok\":true,\"file\":", stdout);
+                        tc_json_string(stdout, filename);
+                        fputs(",\"diagnostics\":[]}\n", stdout);
+                    }
                     result = 0;
-                else {
+                } else if (mode == 13) {
+                    FILE *out = output ? fopen(output, "wb") : stdout;
+                    if (out) { dump_typed_ast(c->program, out); result = 0; if (output) fclose(out); }
+                } else if (mode == 8 && test_list) {
+                    Node *test;
+                    int found = 0;
+                    result = 0;
+                    for (test = c->program->body; test; test = test->next)
+                        if (test_selected(c, test)) {
+                            found++;
+                            if (test_list) printf("%s.%s\n", module_name(c, test->loc.file), test->name);
+                            else {
+                                c->test_function = test;
+                                code = generate_c(c);
+                                if (backend(c, code, root, output, 1, 0, argc, argv, cc)) result = 1;
+                                c->test_function = NULL;
+                            }
+                        }
+                    if (!found) { fputs("No @test functions matched.\n", stderr); result = 1; }
+                } else {
                     code = generate_c(c);
                     if (mode == 2) {
                         if (output)
@@ -95,7 +153,9 @@ int tc_compile(const char *path, const char *output, int mode, int bounds, const
     return result;
 }
 int main(int argc, char **argv) {
+    int format_check = 0;
     const char *input = NULL, *output = NULL, *cc = NULL, *root = getenv("TINY_HOME");
+    const char *project = NULL;
     int mode = 6, bounds = 1, i, nargs = 0, batch = 0;
     char **runargs = NULL;
     char homebuf[4096];
@@ -146,6 +206,15 @@ int main(int argc, char **argv) {
         }
         if (!strcmp(a, "run"))
             mode = 5;
+        else if (!strcmp(a, "doctor")) mode = 14;
+        else if (!strcmp(a, "capabilities")) mode = 15;
+        else if (!strcmp(a, "--list")) test_list = 1;
+        else if (!strcmp(a, "--isolate")) test_isolate = 1;
+        else if (!strcmp(a, "--explain")) explain_build = 1;
+        else if (!strcmp(a, "--filter")) {
+            if (++i == argc) { fputs("tiny: --filter requires a value\n", stderr); return 2; }
+            test_filter = argv[i];
+        }
         else if (!strcmp(a, "--batch"))
             batch = 1;
         else if (!strcmp(a, "build"))
@@ -156,6 +225,8 @@ int main(int argc, char **argv) {
             mode = 8;
         else if (!strcmp(a, "fmt"))
             mode = 10;
+        else if (!strcmp(a, "--check"))
+            format_check = 1;
         else if (!strcmp(a, "doc"))
             mode = 11;
         else if (!strcmp(a, "repl"))
@@ -164,6 +235,12 @@ int main(int argc, char **argv) {
             mode = 2;
         else if (!strcmp(a, "--emit-tokens"))
             mode = 3;
+        else if (!strcmp(a, "--ownership-check"))
+            ownership_check = 1;
+        else if (!strcmp(a, "--json"))
+            json_diagnostics = 1;
+        else if (!strcmp(a, "--emit-typed-ast"))
+            mode = 13;
         else if (!strcmp(a, "--emit-ast"))
             mode = 4;
         else if (!strcmp(a, "--emit-asm"))
@@ -180,7 +257,15 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "tiny: %s needs a value (at most 32 per option)\n", a);
                 return 2;
             }
-        } else if (!strcmp(a, "-o") || !strcmp(a, "--cc") || !strcmp(a, "--home")) {
+        } else if (!strcmp(a, "--gui-backend")) {
+            if (++i == argc || backend_gui_backend(argv[i])) return 2;
+        } else if (!strcmp(a, "--module-path")) {
+            if (++i == argc || module_path_option(argv[i])) {
+                fputs("tiny: --module-path needs a value (at most 32 paths)\n", stderr);
+                return 2;
+            }
+        } else if (!strcmp(a, "-o") || !strcmp(a, "--cc") || !strcmp(a, "--home") ||
+                   !strcmp(a, "--project")) {
             if (++i == argc) {
                 fprintf(stderr, "tiny: %s requires an argument\n", a);
                 return 2;
@@ -189,6 +274,8 @@ int main(int argc, char **argv) {
                 output = argv[i];
             else if (!strcmp(a, "--cc"))
                 cc = argv[i];
+            else if (!strcmp(a, "--project"))
+                project = argv[i];
             else
                 root = argv[i];
         } else if (!strcmp(a, "--help") || !strcmp(a, "-h")) {
@@ -207,14 +294,44 @@ int main(int argc, char **argv) {
             return 2;
         }
     }
+    if ((test_list || test_isolate || test_filter) && mode != 8) {
+        fputs("tiny: test options require test\n", stderr); return 2;
+    }
+    if (mode == 14 || mode == 15) {
+        if (input || project) { fputs("tiny: doctor/capabilities take no source\n", stderr); return 2; }
+        if (mode == 15) return backend_capabilities(root, cc);
+        else {
+            Context doctor = {0};
+            int status;
+            doctor.test_isolate = 1; doctor.explain = 1;
+            status = backend(&doctor, "int main(void) { return 0; }\n", root, NULL, 1, 0, 0, NULL, cc);
+            tc_free(&doctor);
+            puts(status ? "doctor: toolchain compile/run failed" : "doctor: toolchain compile/run passed");
+            return status;
+        }
+    }
+    if (project && (input || batch || mode == 10 || mode == 11 || mode == 12)) {
+        fputs("tiny: --project cannot be combined with a source, batch, fmt, doc or repl\n", stderr);
+        return 2;
+    }
+    if (json_diagnostics && mode != 1) {
+        fputs("tiny: --json requires check\n", stderr); return 2;
+    }
+    if (format_check && (mode != 10 || output)) {
+        fputs("tiny: --check requires fmt without -o\n", stderr);
+        return 2;
+    }
     if (mode == 12)
         return tc_repl(root);
+    if (project || (!input && !batch && mode != 10 && mode != 11))
+        return tc_project(project ? project : "tiny.project", output, mode, bounds, root,
+                          nargs, runargs, cc);
     if (!input) {
         fputs("tiny: source file required\n", stderr);
         return 2;
     }
     if (mode == 10)
-        return tc_format_file(input, output ? output : input);
+        return tc_format_file(input, format_check ? NULL : output ? output : input);
     if (mode == 11)
         return tc_document_file(input, output);
     if (batch) {

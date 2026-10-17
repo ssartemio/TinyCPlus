@@ -52,6 +52,24 @@ i64 tc_file_read(void* handle, void* data, u64 length);
 i64 tc_file_write(void* handle, void* data, u64 length);
 ```
 
+## tc_file_last_error
+
+```c
+i32 tc_file_last_error();
+```
+
+## tc_file_atomic_category
+
+```c
+i32 tc_file_atomic_category(i32 error);
+```
+
+## tc_file_transfer
+
+```c
+i64 tc_file_transfer(void* handle, void* data, u64 length, i32 writing, i32 exactly, i32* error);
+```
+
 ## tc_file_close
 
 ```c
@@ -90,10 +108,17 @@ static i32 writeAll(string path, string contents);
 
 ### File.writeAtomic
 
-Writes a sibling temporary file, flushes it, then replaces the destination.
+Atomic replacement after flushing the file. POSIX does not fsync the parent
+directory: this does not promise directory-entry durability after power loss.
 
 ```c
 static i32 writeAtomic(string path, string contents);
+```
+
+### File.writeAtomicResult
+
+```c
+static ErrorInfo writeAtomicResult(string path, string contents);
 ```
 
 ### File.exists
@@ -118,6 +143,30 @@ i64 read(Slice<u8> destination);
 
 ```c
 i64 write(Slice<u8> source);
+```
+
+### File.readSome
+
+```c
+(i64, i32) readSome(Slice<u8> destination);
+```
+
+### File.readExactly
+
+```c
+(i64, i32) readExactly(Slice<u8> destination);
+```
+
+### File.writeSome
+
+```c
+(i64, i32) writeSome(Slice<u8> source);
+```
+
+### File.writeBytes
+
+```c
+(i64, i32) writeBytes(Slice<u8> source);
 ```
 
 ### File.close

@@ -1,3 +1,9 @@
+/*
+ * Terminal ANSI, celdas, eventos, widgets y renderizado incremental.
+ * Admite ejecución headless, replay y snapshots para pruebas reproducibles.
+ * La ventana conserva recursos del terminal y debe destruirse para restaurarlo;
+ * el gap buffer del editor se implementa en gapbuffer.c.
+ */
 #ifndef TC_TUI_IMPLEMENTATION
 #define TC_TUI_IMPLEMENTATION
 #include "gapbuffer.c"
@@ -11,17 +17,7 @@
 #endif
 
 enum { TC_UI_KEY = 1, TC_UI_RESIZE = 2, TC_UI_TIMER = 3, TC_UI_MOUSE = 4, TC_UI_CUSTOM = 5 };
-enum {
-    TC_KEY_LEFT = 1001,
-    TC_KEY_RIGHT,
-    TC_KEY_UP,
-    TC_KEY_DOWN,
-    TC_KEY_HOME,
-    TC_KEY_END,
-    TC_KEY_DELETE,
-    TC_KEY_PAGE_UP,
-    TC_KEY_PAGE_DOWN
-};
+
 enum {
     TC_WIDGET_LABEL = 1,
     TC_WIDGET_BUTTON,
@@ -966,9 +962,9 @@ int32_t tc_ui_dispatch(void *window, int32_t kind, int32_t key, int32_t x, int32
             for (i = 0; i < w->height; i++)
                 tc_gap_vertical(w->buffer, key == TC_KEY_PAGE_UP ? -1 : 1);
         } else if (key == 8 || key == 127)
-            tc_gap_backspace(w->buffer);
+            return tc_gap_backspace(w->buffer);
         else if (key == TC_KEY_DELETE)
-            tc_gap_delete(w->buffer);
+            return tc_gap_delete(w->buffer);
         else if (key == 13 || key == 10) {
             if (w->height > 1)
                 return tc_gap_insert(w->buffer, TC_STRING("\n"));

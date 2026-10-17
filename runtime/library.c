@@ -1,3 +1,9 @@
+/*
+ * Puente C de strings, consola, archivos, procesos y utilidades estándar.
+ * Convierte vistas TinyString a cadenas C cuando la API del host lo requiere.
+ * Las reservas devueltas al lenguaje se liberan mediante sus wrappers,
+ * por ejemplo OwnedString.destroy; una vista no transfiere propiedad.
+ */
 #ifndef TC_LIBRARY_IMPLEMENTATION
 #define TC_LIBRARY_IMPLEMENTATION
 #include "tiny_runtime.h"
@@ -28,11 +34,11 @@ TinyString tc_argument(int32_t index) {
 
 static char *tc_cstring(TinyString s) {
     char *p;
-    if (s.length == SIZE_MAX || (!s.data && s.length) || (s.length && memchr(s.data, 0, s.length)))
-        return NULL;
+    if (s.length == SIZE_MAX || (!s.data && s.length) || (s.length && memchr(s.data, 0, s.length))) {
+        errno = EINVAL; return NULL;
+    }
     p = (char *)malloc(s.length + 1);
-    if (!p)
-        return NULL;
+    if (!p) { errno = ENOMEM; return NULL; }
     if (s.length)
         memcpy(p, s.data, s.length);
     p[s.length] = 0;
@@ -149,6 +155,70 @@ TinyString tc_read_line(void) {
     result.length = length;
     return result;
 }
+#ifdef _WIN32
+/* TinyString paths and process commands are UTF-8 at the public boundary. */
+static int tc_windows_last_error(void) { int error = (int)GetLastError(); return error ? error : EIO; }
+static wchar_t *tc_utf8_wide(const char *text) {
+    int count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text, -1, NULL, 0);
+    wchar_t *wide;
+    if (!count) { errno = EINVAL; return NULL; }
+    wide = (wchar_t *)malloc((size_t)count * sizeof(wchar_t));
+    if (!wide) { errno = ENOMEM; return NULL; }
+    if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text, -1, wide, count)) {
+        free(wide); errno = EINVAL; return NULL;
+    }
+    return wide;
+}
+static FILE *tc_host_fopen(const char *path, const char *mode) {
+    wchar_t *p = tc_utf8_wide(path), *m = tc_utf8_wide(mode);
+    FILE *file = p && m ? _wfopen(p, m) : NULL;
+    free(p); free(m); return file;
+}
+static int tc_host_remove(const char *path) {
+    wchar_t *p = tc_utf8_wide(path);
+    int result = p ? _wremove(p) : -1; free(p); return result;
+}
+static int tc_host_exists(const char *path) {
+    wchar_t *p = tc_utf8_wide(path);
+    int result = p && GetFileAttributesW(p) != INVALID_FILE_ATTRIBUTES;
+    free(p); return result;
+}
+#else
+#define tc_host_fopen fopen
+#define tc_host_remove remove
+static int tc_host_exists(const char *path) { struct stat st; return stat(path, &st) == 0; }
+#endif
+/* Stable error categories; native codes are retained separately by callers. */
+int32_t tc_system_error_category(int32_t error) {
+    if (!error) return 0;
+#ifdef _WIN32
+    if (error == 10013) return 6;
+    if (error == 10022) return 3;
+    if (error == 10060) return 4;
+    if (error == 10055) return 5;
+#endif
+    if (error == ENOENT) return 2;
+    if (error == EINVAL) return 3;
+    if (error == ENOMEM) return 5;
+    if (error == EACCES || error == EPERM) return 6;
+#ifdef ETIMEDOUT
+    if (error == ETIMEDOUT) return 4;
+#endif
+    return 7;
+}
+int32_t tc_file_atomic_category(int32_t error) {
+#ifdef _WIN32
+    if (!error) return 0;
+    if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND) return 2;
+    if (error == ERROR_ACCESS_DENIED) return 6;
+    if (error == ERROR_NOT_ENOUGH_MEMORY || error == ERROR_OUTOFMEMORY) return 5;
+    if (error == ERROR_INVALID_PARAMETER || error == ERROR_NO_UNICODE_TRANSLATION) return 3;
+    return 7;
+#else
+    return tc_system_error_category(error);
+#endif
+}
+int32_t tc_file_last_error(void) { return errno ? errno : EIO; }
 TinyString tc_file_read_all(TinyString path, int32_t *error) {
     TinyString result = {NULL, 0};
     char *name = tc_cstring(path), *data;
@@ -156,28 +226,28 @@ TinyString tc_file_read_all(TinyString path, int32_t *error) {
     long size;
     *error = 0;
     if (!name) {
-        *error = 1;
+        *error = errno ? errno : EIO;
         return result;
     }
-    f = fopen(name, "rb");
+    f = tc_host_fopen(name, "rb");
     free(name);
     if (!f) {
-        *error = errno ? errno : 1;
+        *error = errno ? errno : EIO;
         return result;
     }
     if (fseek(f, 0, SEEK_END) || (size = ftell(f)) < 0 || fseek(f, 0, SEEK_SET)) {
-        *error = 1;
+        *error = errno ? errno : EIO;
         fclose(f);
         return result;
     }
     data = (char *)malloc((size_t)size + 1);
     if (!data) {
-        *error = 2;
+        *error = ENOMEM;
         fclose(f);
         return result;
     }
     if (fread(data, 1, (size_t)size, f) != (size_t)size) {
-        *error = 1;
+        *error = errno ? errno : EIO;
         free(data);
         fclose(f);
         return result;
@@ -192,24 +262,21 @@ int32_t tc_file_write_all(TinyString path, TinyString data) {
     char *name = tc_cstring(path);
     FILE *f;
     int error;
-    if (!name)
-        return 1;
-    f = fopen(name, "wb");
+    if (!name) return errno ? errno : EINVAL;
+    f = tc_host_fopen(name, "wb");
     free(name);
     if (!f)
-        return errno ? errno : 1;
-    error = fwrite(data.data, 1, data.length, f) == data.length ? 0 : 1;
-    if (fclose(f))
-        error = 1;
+        return errno ? errno : EIO;
+    error = fwrite(data.data, 1, data.length, f) == data.length ? 0 : (errno ? errno : EIO);
+    if (fclose(f) && !error) error = errno ? errno : EIO;
     return error;
 }
 int32_t tc_file_exists(TinyString path) {
     char *name = tc_cstring(path);
-    struct stat st;
     int result;
     if (!name)
         return 0;
-    result = stat(name, &st) == 0;
+    result = tc_host_exists(name);
     free(name);
     return result;
 }
@@ -218,15 +285,15 @@ int32_t tc_file_remove(TinyString path) {
     int result;
     if (!name)
         return 1;
-    result = remove(name);
+    result = tc_host_remove(name);
     free(name);
-    return result ? 1 : 0;
+    return result ? (errno ? errno : EIO) : 0;
 }
 void *tc_file_open(TinyString path, TinyString mode) {
     char *p = tc_cstring(path), *m = tc_cstring(mode);
     FILE *f = NULL;
     if (p && m)
-        f = fopen(p, m);
+        f = tc_host_fopen(p, m);
     free(p);
     free(m);
     return f;
@@ -247,60 +314,92 @@ int64_t tc_file_write(void *handle, void *data, uint64_t length) {
     n = fwrite(data, 1, (size_t)length, f);
     return ferror(f) ? -1 : (int64_t)n;
 }
+int64_t tc_file_transfer(void *handle, void *data, uint64_t length, int32_t writing,
+                          int32_t exactly, int32_t *error) {
+    FILE *file = (FILE *)handle;
+    uint64_t offset = 0;
+    *error = 0;
+    if (!file || length > SIZE_MAX || length > INT64_MAX || (!data && length)) {
+        *error = EINVAL; return 0;
+    }
+    while (offset < length) {
+        size_t count = writing ? fwrite((char *)data + offset, 1, (size_t)(length - offset), file)
+                               : fread((char *)data + offset, 1, (size_t)(length - offset), file);
+        offset += count;
+        if (ferror(file)) { *error = errno ? errno : EIO; break; }
+        if (!count || !exactly) break;
+    }
+    return (int64_t)offset;
+}
 int32_t tc_file_close(void *handle) {
-    return handle ? fclose((FILE *)handle) : 1;
+    return handle && fclose((FILE *)handle) ? (errno ? errno : EIO) : 0;
 }
 int32_t tc_file_write_atomic(TinyString path, TinyString contents) {
     char *name = tc_cstring(path), *temporary;
     size_t written = 0;
     int error = 0;
-    if (!name)
-        return 1;
+    if (!name) {
+#ifdef _WIN32
+        return errno == ENOMEM ? ERROR_NOT_ENOUGH_MEMORY : ERROR_INVALID_PARAMETER;
+#else
+        return errno ? errno : EINVAL;
+#endif
+    }
     temporary = (char *)malloc(strlen(name) + 80);
     if (!temporary) {
         free(name);
-        return 8;
+#ifdef _WIN32
+        return ERROR_NOT_ENOUGH_MEMORY;
+#else
+        return ENOMEM;
+#endif
     }
 #ifdef _WIN32
     {
         static LONG counter;
         HANDLE file = INVALID_HANDLE_VALUE;
+        wchar_t *wide_name = tc_utf8_wide(name), *wide_temporary = NULL;
         int attempt;
+        if (!wide_name) { free(name); free(temporary); return ERROR_NO_UNICODE_TRANSLATION; }
         for (attempt = 0; attempt < 32; attempt++) {
             snprintf(temporary, strlen(name) + 80, "%s.tiny-%lu-%ld.tmp", name,
                      (unsigned long)GetCurrentProcessId(), (long)InterlockedIncrement(&counter));
-            file = CreateFileA(temporary, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL,
+            free(wide_temporary);
+            wide_temporary = tc_utf8_wide(temporary);
+            if (!wide_temporary) { error = ERROR_NO_UNICODE_TRANSLATION; break; }
+            file = CreateFileW(wide_temporary, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL,
                                NULL);
             if (file != INVALID_HANDLE_VALUE)
                 break;
             if (GetLastError() != ERROR_FILE_EXISTS) {
-                error = 1;
+                error = tc_windows_last_error();
                 break;
             }
         }
         if (file == INVALID_HANDLE_VALUE)
-            error = 1;
+            error = tc_windows_last_error();
         else {
             while (written < contents.length) {
                 DWORD count = 0, chunk = (DWORD)((contents.length - written) > 1048576
                                                      ? 1048576
                                                      : contents.length - written);
                 if (!WriteFile(file, contents.data + written, chunk, &count, NULL) || !count) {
-                    error = 1;
+                    error = tc_windows_last_error();
                     break;
                 }
                 written += count;
             }
             if (!error && !FlushFileBuffers(file))
-                error = 1;
+                error = tc_windows_last_error();
             if (!CloseHandle(file))
-                error = 1;
+                error = tc_windows_last_error();
             if (!error &&
-                !MoveFileExA(temporary, name, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
-                error = 1;
+                !MoveFileExW(wide_temporary, wide_name, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+                error = tc_windows_last_error();
             if (error)
-                DeleteFileA(temporary);
+                DeleteFileW(wide_temporary);
         }
+        free(wide_name); free(wide_temporary);
     }
 #else
     {
@@ -309,26 +408,26 @@ int32_t tc_file_write_atomic(TinyString path, TinyString contents) {
         snprintf(temporary, strlen(name) + 80, "%s.tiny-XXXXXX", name);
         file = mkstemp(temporary);
         if (file < 0)
-            error = 1;
+            error = errno ? errno : EIO;
         else {
             if (stat(name, &previous) == 0 && fchmod(file, previous.st_mode & 0777))
-                error = 1;
+                error = errno ? errno : EIO;
             while (!error && written < contents.length) {
                 ssize_t n = write(file, contents.data + written, contents.length - written);
                 if (n < 0 && errno == EINTR)
                     continue;
                 if (n <= 0) {
-                    error = 1;
+                    error = errno ? errno : EIO;
                     break;
                 }
                 written += (size_t)n;
             }
             if (!error && fsync(file))
-                error = 1;
+                error = errno ? errno : EIO;
             if (close(file))
-                error = 1;
+                error = errno ? errno : EIO;
             if (!error && rename(temporary, name))
-                error = 1;
+                error = errno ? errno : EIO;
             if (error)
                 unlink(temporary);
         }
@@ -366,6 +465,33 @@ void tc_bytes_copy(char *destination, TinyString source) {
     if (source.length)
         memcpy(destination, source.data, source.length);
 }
+/* Preserve an interior source offset before realloc invalidates borrowed views. */
+int32_t tc_builder_append(char **data, uint64_t *length, uint64_t *capacity, TinyString text) {
+    uintptr_t base = (uintptr_t)*data, source = (uintptr_t)text.data;
+    uint64_t offset = 0, required, next;
+    int aliases = *data && source >= base && source - base <= *length;
+    char *fresh;
+    if (!text.length) return 0;
+    if (!text.data || text.length >= UINT64_MAX - *length ||
+        text.length >= SIZE_MAX - *length) return 3;
+    if (aliases) {
+        offset = (uint64_t)(source - base);
+        if (text.length > *length - offset) return 3;
+    }
+    required = *length + text.length + 1;
+    if (required > *capacity) {
+        next = *capacity <= UINT64_MAX / 2 ? *capacity * 2 : required;
+        if (next < 64) next = 64;
+        if (next < required) next = required;
+        fresh = (char *)realloc(*data, (size_t)next);
+        if (!fresh) return 8;
+        *data = fresh; *capacity = next;
+    }
+    memmove(*data + *length, aliases ? *data + offset : text.data, (size_t)text.length);
+    *length += text.length;
+    (*data)[*length] = 0;
+    return 0;
+}
 /* Shortest %.*g text that reads back as exactly the same double. */
 TinyString tc_format_double(double value) {
     char buffer[40];
@@ -388,12 +514,16 @@ void tc_write_error(TinyString text) {
 }
 #ifdef _WIN32
 static int tc_spawn_quote(char **out, size_t *length, size_t *capacity, const char *s, size_t n) {
-    size_t i, slashes = 0, need = *length + 3 + 2 * n + 1;
+    size_t i, slashes = 0, need;
     char *p = *out;
+    if (*length > SIZE_MAX - 4 || n > (SIZE_MAX - *length - 4) / 2) return 0;
+    need = *length + 4 + 2 * n;
     if (need > *capacity) {
         size_t next = *capacity ? *capacity : 256;
-        while (next < need)
+        while (next < need) {
+            if (next > SIZE_MAX / 2) { next = need; break; }
             next *= 2;
+        }
         p = (char *)realloc(p, next);
         if (!p)
             return 0;
@@ -439,111 +569,12 @@ static int tc_spawn_quote(char **out, size_t *length, size_t *capacity, const ch
  * Returns the exit status (128 + signal on POSIX). *error is 0 on success and
  * non-zero when the program could not be started at all.
  */
+#include "process.c"
 int32_t tc_process_spawn(TinyString *argv, uint64_t count, int32_t *error) {
-    uint64_t i;
-    *error = 0;
-    if (!argv || count == 0) {
-        *error = 1;
-        return -1;
-    }
-    for (i = 0; i < count; i++)
-        if (argv[i].length && memchr(argv[i].data, 0, argv[i].length)) {
-            *error = 1;
-            return -1;
-        }
-    fflush(stdout);
-    fflush(stderr);
-#ifdef _WIN32
-    {
-        char *command = NULL;
-        size_t length = 0, capacity = 0;
-        STARTUPINFOA si;
-        PROCESS_INFORMATION pi;
-        DWORD code = 0;
-        for (i = 0; i < count; i++)
-            if (!tc_spawn_quote(&command, &length, &capacity, argv[i].data, argv[i].length)) {
-                free(command);
-                *error = 1;
-                return -1;
-            }
-        memset(&si, 0, sizeof(si));
-        si.cb = sizeof(si);
-        memset(&pi, 0, sizeof(pi));
-        if (!CreateProcessA(NULL, command, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) {
-            free(command);
-            *error = (int32_t)GetLastError();
-            if (!*error)
-                *error = 1;
-            return -1;
-        }
-        free(command);
-        WaitForSingleObject(pi.hProcess, INFINITE);
-        GetExitCodeProcess(pi.hProcess, &code);
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-        return (int32_t)code;
-    }
-#else
-    {
-        char **args = (char **)calloc((size_t)count + 1, sizeof(char *));
-        int report[2], status = 0, child_errno = 0;
-        ssize_t got;
-        pid_t pid;
-        if (!args) {
-            *error = ENOMEM;
-            return -1;
-        }
-        for (i = 0; i < count; i++) {
-            args[i] = (char *)malloc(argv[i].length + 1);
-            if (!args[i])
-                break;
-            if (argv[i].length)
-                memcpy(args[i], argv[i].data, argv[i].length);
-            args[i][argv[i].length] = 0;
-        }
-        if (i < count || pipe(report) != 0) {
-            *error = errno ? errno : ENOMEM;
-            for (i = 0; i < count; i++)
-                free(args[i]);
-            free(args);
-            return -1;
-        }
-        fcntl(report[1], F_SETFD, FD_CLOEXEC);
-        pid = fork();
-        if (pid == 0) {
-            close(report[0]);
-            execvp(args[0], args);
-            child_errno = errno;
-            if (write(report[1], &child_errno, sizeof(child_errno)) < 0)
-                _exit(127);
-            _exit(127);
-        }
-        close(report[1]);
-        for (i = 0; i < count; i++)
-            free(args[i]);
-        free(args);
-        if (pid < 0) {
-            *error = errno ? errno : 1;
-            close(report[0]);
-            return -1;
-        }
-        do
-            got = read(report[0], &child_errno, sizeof(child_errno));
-        while (got < 0 && errno == EINTR);
-        close(report[0]);
-        while (waitpid(pid, &status, 0) < 0)
-            if (errno != EINTR) {
-                *error = errno;
-                return -1;
-            }
-        if (got == (ssize_t)sizeof(child_errno)) {
-            *error = child_errno ? child_errno : 1;
-            return -1;
-        }
-        if (WIFEXITED(status))
-            return WEXITSTATUS(status);
-        return 128 + WTERMSIG(status);
-    }
-#endif
+    void *process = tc_process_start(argv, count, error);
+    int32_t status;
+    if (!process) return -1;
+    status = tc_process_wait(process, 0, error);
+    tc_process_destroy(process); return status;
 }
 #endif

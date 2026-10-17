@@ -16,7 +16,7 @@ int main(void) {
     listener = tc_tcp_listen(TC_STRING("127.0.0.1"), 0, 4, &error);
     assert(error == 0 && listener >= 0);
     accepting = tc_tcp_accept_async(listener, 2000, NULL);
-    connecting = tc_tcp_connect_async(TC_STRING("127.0.0.1"), tc_socket_port(listener), 2000, NULL);
+    connecting = tc_tcp_connect_async(TC_STRING("localhost"), tc_socket_port(listener), 2000, NULL);
     assert(tc_future_get(connecting, &client) == 0);
     assert(tc_future_get(accepting, &accepted) == 0);
     tc_future_release(connecting);
@@ -49,7 +49,7 @@ int main(void) {
     assert(error == 0);
     udp_b = tc_udp_bind(TC_STRING("127.0.0.1"), 0, &error);
     assert(error == 0);
-    assert(tc_udp_send(udp_a, TC_STRING("127.0.0.1"), tc_socket_port(udp_b), (void *)payload,
+    assert(tc_udp_send(udp_a, TC_STRING("localhost"), tc_socket_port(udp_b), (void *)payload,
                        sizeof(payload)) == sizeof(payload));
     assert(tc_udp_receive(udp_b, received, sizeof(received), NULL, 0, &error) == sizeof(payload));
     assert(memcmp(received, payload, sizeof(payload)) == 0);
@@ -64,7 +64,15 @@ int main(void) {
     timer = tc_timer_after(1);
     assert(tc_future_get(timer, NULL) == 0);
     tc_future_release(timer);
+    listener = tc_tcp_listen(TC_STRING("127.0.0.1"), 0, 4, &error);
+    assert(error == 0);
+    accepting = tc_tcp_accept_async(listener, 0, NULL);
+    start = tc_clock_ms();
     tc_io_shutdown();
+    assert(tc_clock_ms() - start < 2000);
+    assert(tc_future_get(accepting, &count) == 1);
+    tc_future_release(accepting);
+    tc_socket_close(listener);
     tc_scheduler_shutdown();
     puts("Network verified: TCP binary transfer, deadlines, cancellation, EOF, UDP, DNS, file "
          "errors, timer");

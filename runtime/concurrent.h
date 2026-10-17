@@ -1,3 +1,8 @@
+/*
+ * ABI C de hilos, sincronización, pools, futures, canales y scheduler.
+ * Los handles son opacos. Emparejar creación/destrucción y retain/release
+ * según el recurso; los callbacks reciben contexto prestado del llamador.
+ */
 #ifndef TINY_CONCURRENT_H
 #define TINY_CONCURRENT_H
 #include <stdint.h>
@@ -35,12 +40,16 @@ int64_t tc_atomic_add(void *atomic, int64_t value);
 void tc_atomic_destroy(void *atomic);
 void *tc_pool_create(int32_t workers);
 int32_t tc_pool_submit(void *pool, TcAction action, void *argument);
+int32_t tc_pool_limits(void *, uint64_t, uint64_t);
+int32_t tc_pool_submit_sized(void *, TcAction, void *, uint64_t);
 void tc_pool_destroy(void *pool);
 void *tc_future_create(uint64_t size);
 void tc_future_retain(void *future);
 void tc_future_release(void *future);
 int32_t tc_future_complete(void *future, void *value, int32_t error);
 int32_t tc_future_ready(void *future);
+void tc_future_set_native_error(void *, int32_t);
+int32_t tc_future_native_error(void *);
 int32_t tc_future_get(void *future, void *destination);
 int32_t tc_future_then(void *future, void *pool, TcAction continuation, void *argument);
 void *tc_channel_create(uint64_t capacity, uint64_t element_size);

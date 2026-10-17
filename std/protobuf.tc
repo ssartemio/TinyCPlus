@@ -1,3 +1,6 @@
+// Wrappers de lectura y escritura Protobuf. El lector toma una vista prestada;
+// conservar su entrada hasta terminar. Revisar errores y destruir readers/writers.
+// Los bindings de mensajes los genera tools/tiny-protoc.py.
 module std.protobuf;
 import std.string;
 import std.collections;

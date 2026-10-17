@@ -5,19 +5,19 @@ Source: `std/prelude.tc`
 ## malloc
 
 ```c
-void* malloc(u64 size);
+void* malloc(size_t size);
 ```
 
 ## calloc
 
 ```c
-void* calloc(u64 count, u64 size);
+void* calloc(size_t count, size_t size);
 ```
 
 ## realloc
 
 ```c
-void* realloc(void* pointer, u64 size);
+void* realloc(void* pointer, size_t size);
 ```
 
 ## free

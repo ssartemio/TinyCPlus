@@ -1,12 +1,16 @@
+// Argumentos del programa y ejecución de procesos mediante el runtime C.
+// Las vistas de argumentos se usan durante la vida del programa; revisar códigos de salida.
 module std.process;
 import std.collections;
-extern C { int tc_process_spawn(string* arguments, u64 count, int* error); int tc_process_command(string command); string tc_environment(string name); int tc_argument_count(); string tc_argument(int index); }
+extern C { void* tc_process_start(string* arguments, u64 count, Error* error); int tc_process_wait(void* process, u64 timeout, Error* error); Error tc_process_cancel(void* process); void tc_process_destroy(void* process);  int tc_process_spawn(string* arguments, u64 count, int* error); int tc_process_command(string command); string tc_environment(string name); int tc_argument_count(); string tc_argument(int index); }
 class Arguments {
     static int count() { return tc_argument_count(); }
     static string get(int index) { return tc_argument(index); }
 }
 class Process {
     /// Executes a shell command explicitly; return status follows the host C runtime.
+    static int runShell(string command) { return tc_process_command(command); }
+    /// Compatibility alias for runShell. Prefer argv via spawn/start.
     static int run(string command) { return tc_process_command(command); }
     /// Runs arguments[0] with the remaining arguments, without a shell, and
     /// waits for it. Returns (exit status, error): error is 0 when the program
@@ -19,4 +23,19 @@ class Process {
     }
     /// Borrowed environment view; no allocation.
     static string environment(string name) { return tc_environment(name); }
+}
+
+/// Owned child. destroy kills and reaps a running child; wait does not consume it.
+/// Methods require a live handle and must not be called concurrently.
+class ProcessHandle {
+    void* handle;
+    static (ProcessHandle, Error) start(Array<string>* arguments) {
+        Error error; ProcessHandle process;
+        process.handle = tc_process_start(arguments.data, arguments.length, &error);
+        return (process, error);
+    }
+    /// timeout=0 means no deadline; timeout returns (-1, 4) and leaves the child alive.
+    (int, Error) wait(u64 timeout = 0) { Error error; var status = tc_process_wait(handle, timeout, &error); return (status, error); }
+    Error cancel() { return tc_process_cancel(handle); }
+    void destroy() { tc_process_destroy(handle); handle = null; }
 }

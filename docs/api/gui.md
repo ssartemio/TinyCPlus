@@ -1,0 +1,224 @@
+# API reference
+
+Source: `std/gui.tc`
+
+Module: `std.gui`
+
+Status: **experimental post-1.0**.
+
+The GUI layer keeps manual ownership and lowers through ordinary C/FFI calls.
+Surfaces use packed `0xAARRGGBB` pixels.
+
+## Pixel
+
+`Pixel.rgba(red, green, blue, alpha = 255)` creates a packed color value.
+
+## Surface
+
+An owned in-memory pixel surface.
+
+Core operations:
+
+```c
+static (Surface, Error) create(int width, int height);
+int width();
+int height();
+double backingScale();
+void clear(uint color);
+uint getPixel(int x, int y);
+void setPixel(int x, int y, uint color);
+void fillRect(int x, int y, int width, int height, uint color);
+void rect(int x, int y, int width, int height, uint color);
+void line(int x0, int y0, int x1, int y1, uint color);
+void blit(int x, int y, Surface source, int sourceX = 0, int sourceY = 0,
+          int width = -1, int height = -1);
+int textWidth(string text, int scale = 1);
+void text(int x, int y, string text, uint color, int scale = 1);
+u64 checksum();
+void destroy();
+```
+
+Bitmap text is a dependency-free 5x7 first implementation. Lowercase maps to
+uppercase glyphs and unsupported Unicode codepoints render as `?`.
+
+## DoubleBuffer
+
+Owns front/back surfaces. `front()` and `back()` return borrowed surfaces and
+must not be destroyed separately.
+
+```c
+static (DoubleBuffer, Error) create(int width, int height);
+Surface front();
+Surface back();
+int present();
+void destroy();
+```
+
+## GuiRect and GuiLayout
+
+`GuiRect` represents integer pixel geometry and provides `contains()` and
+`inset()`. `GuiLayout.row()` and `GuiLayout.column()` divide an area without
+allocating widget objects.
+
+## GuiDraw
+
+Immediate-mode helpers:
+
+```c
+static void label(Surface surface, GuiRect area, string text, uint color,
+                  int scale = 1, bool centered = false);
+static void button(Surface surface, GuiRect area, string text, bool pressed = false,
+                   uint foreground = 15134195, uint background = 2113632,
+                   uint pressedBackground = 4210752);
+```
+
+## GuiEvent
+
+Event kinds are exposed as `GuiEventKind`:
+
+```text
+None   = 0
+Key    = 1
+Text   = 2
+Mouse  = 3
+Resize = 4
+Close  = 5
+Custom = 6
+Scroll = 7
+```
+
+Mouse buttons use `GuiMouseButton.None/Left/Right/Middle` (0/1/2/3).
+
+## Modifier flags
+
+`GuiEvent.modifiers` is a portable bitmask:
+
+```text
+GuiModifier.Shift    = 1
+GuiModifier.Control  = 2
+GuiModifier.Alt      = 4
+GuiModifier.Super    = 8
+GuiModifier.CapsLock = 16
+```
+
+Use `GuiInput.hasModifier(event, GuiModifier.Control)` instead of testing bits
+directly when application code only needs a predicate. Native key, text, mouse
+and scroll events carry the modifier state captured for that event.
+
+`GuiEventKind.Scroll` carries `double scrollX` and `double scrollY`.
+Positive X scrolls to the right and positive Y scrolls upward. Coordinates
+`x/y` identify the pointer position when the backend provides it. Win32
+normalizes wheel deltas by `WHEEL_DELTA`, X11 maps wheel buttons to ±1 steps,
+and Cocoa preserves native trackpad/wheel precision.
+
+The event kind/button fields remain integers at the C ABI boundary, so the enums
+add readability without changing their layout. Other fields include key/codepoint,
+mouse coordinates/button state, and resize width/height.
+
+## GuiWindow
+
+Owns a double-buffered drawing target and event queue.
+
+```c
+static (GuiWindow, Error) create(int width = 800, int height = 600,
+                                 string title = "TinyC+", bool headless = false);
+int width();
+int height();
+bool isOpen();
+Surface surface();
+int present();
+Error post(GuiEvent event);
+GuiEvent nextEvent(int timeout = 16);
+void close();
+void destroy();
+```
+
+`surface()` returns a borrowed back buffer and must not be destroyed separately.
+
+Headless windows are portable and used throughout CI. Windows uses Win32/GDI.
+Linux can compile the native X11 implementation explicitly:
+
+```sh
+tiny run app.tc --gui-backend x11
+```
+
+Without that option Linux keeps the dependency-free headless implementation.
+The X11 backend uses the same `Surface` and event API, links `libX11` only for
+the selected build, and is exercised under Xvfb with both GCC and libtcc.
+macOS can select the native Cocoa bridge explicitly:
+
+```sh
+tiny run app.tc --gui-backend cocoa
+```
+
+The Cocoa bridge is implemented in pure C by loading the Objective-C runtime,
+AppKit and CoreGraphics dynamically, so it also works with libtcc. Cocoa resize notifications rebuild the TinyC+ framebuffer and emit `GuiEvent.resize`; an explicit HiDPI scaling policy is still future work.
+
+
+## GuiTextBox
+
+Owned single-line editor backed by the same UTF-8 gap buffer used by TinyEdit.
+
+```c
+static GuiTextBox create(string initial = "");
+OwnedString text();
+bool dirty();
+void markClean();
+Error handleEvent(GuiEvent event);
+void draw(Surface surface, GuiRect area, bool focused = false,
+          uint foreground = 15134195, uint background = 1054752,
+          uint border = 8421504);
+void destroy();
+```
+
+`handleEvent()` consumes normalized key/text events. Navigation currently
+covers left/right/home/end/delete/backspace. `text()` transfers ownership of
+the returned copy to the caller.
+
+
+### HiDPI
+
+Window and Surface dimensions are logical units. `backingScale()` reports the
+native logical-to-device scale where available; Cocoa maps it to
+`NSWindow.backingScaleFactor`. The runtime does not implicitly resize the
+framebuffer based on that factor.
+
+
+## GuiCheckbox
+
+Stateful checkbox with borrowed label storage.
+
+```c
+GuiCheckbox(string text, bool checked = false);
+bool handleEvent(GuiEvent event, GuiRect area, bool focused = false);
+void draw(Surface surface, GuiRect area,
+          uint foreground = 15134195, uint background = 1054752,
+          uint accent = 4638894);
+```
+
+Mouse release toggles only after a press began inside the control. Enter/Space
+toggle it when focused.
+
+## GuiProgressBar
+
+Allocation-free integer progress state.
+
+```c
+GuiProgressBar(int maximum);
+void set(int value);
+int percent();
+void draw(Surface surface, GuiRect area,
+          uint foreground = 15134195, uint background = 1054752,
+          uint fill = 4638894);
+```
+
+`set()` clamps to `0..maximum`. A maximum below 1 becomes 1.
+
+## Additional layout helpers
+
+```c
+static GuiRect GuiLayout.pad(GuiRect area, int left, int top, int right, int bottom);
+static GuiRect GuiLayout.center(GuiRect area, int width, int height);
+```
+
+ProgressBar arithmetic widens to i64. GuiFocus handles Shift+Tab. TextBox rendering does not allocate a whole-text snapshot. See [implementation and validation contracts](../FUNCTIONAL_IMPROVEMENTS.md).
