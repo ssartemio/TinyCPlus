@@ -16,7 +16,11 @@ typedef struct TcProcess {
 } TcProcess;
 static uint64_t tc_process_clock(void) {
 #ifdef _WIN32
-    return GetTickCount64();
+    LARGE_INTEGER ticks, frequency;
+    QueryPerformanceCounter(&ticks);
+    QueryPerformanceFrequency(&frequency);
+    return (uint64_t)(ticks.QuadPart / frequency.QuadPart) * 1000 +
+           (uint64_t)(ticks.QuadPart % frequency.QuadPart) * 1000 / (uint64_t)frequency.QuadPart;
 #else
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);

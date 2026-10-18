@@ -55,7 +55,9 @@ def tcc(source):
         (source/'config.h').write_text('#define TCC_VERSION "'+(source/'VERSION').read_text().strip()+'"\n')
         flags = ['-O2','-DTCC_TARGET_PE','-DTCC_TARGET_X86_64']
         run([cc,*flags,'-shared','-DLIBTCC_AS_DLL','../libtcc.c','-o','libtcc.dll'],win)
-        run([cc,*flags,'../tcc.c','-o','tcc.exe'],win)
+        from windows_manifest import write_resource
+        resource = write_resource(source, cc)
+        run([cc,*flags,'../tcc.c',resource,'-static-libgcc','-o','tcc.exe'],win)
         for header in (source/'include').glob('*.h'):
             shutil.copy2(header,win/'include'/header.name)
         shutil.copy2(source/'tcclib.h',win/'include/tcclib.h')
@@ -83,9 +85,21 @@ def tcc(source):
             raise SystemExit('Invalid dependency install directory')
         if dest.exists():
             shutil.rmtree(dest)
+        if sys.platform == 'darwin':
+            from tcc_portability import patch_codesign
+            macho = source / 'tccmacho.c'
+            macho.write_text(patch_codesign(macho.read_text()))
         # The source archive includes configure; invoking sh needs no executable permission.
         run(['sh','configure','--cc='+cc,'--prefix='+str(dest),'--bindir='+str(dest),
              '--libdir='+str(dest),'--tccdir='+str(dest),'--disable-static'],source)
+        # Keep the CLI loader independent of this checkout's absolute install path.
+        makefile = source/'Makefile'
+        text = makefile.read_text()
+        text = text.replace('LINK_LIBTCC += -Wl,-rpath,"$(libdir)"',
+                            "LINK_LIBTCC += -Wl,-rpath,'$$ORIGIN'")
+        text = text.replace('LINK_LIBTCC += -Wl,-rpath,"@executable_path/$(TOP)" -Wl,-rpath,"$(libdir)"',
+                            'LINK_LIBTCC += -Wl,-rpath,"@loader_path"')
+        makefile.write_text(text)
         run(['make','-j2'],source)
         run(['make','install'],source)
     for name in ['COPYING','VERSION','libtcc.h']:

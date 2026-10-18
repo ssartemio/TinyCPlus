@@ -69,7 +69,10 @@ int32_t tc_user_main(void)
 
 int main(int argc, char **argv) {
     tc_program_argc = argc; tc_program_argv = argv;
+    if (tc_arguments_setup()) return 2;
+    argc = tc_program_argc; argv = tc_program_argv;
     int result = tc_user_main();
     if (tc_program_cleanup) tc_program_cleanup();
+    tc_arguments_clear();
     return result;
 }

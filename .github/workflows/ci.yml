@@ -14,6 +14,8 @@ jobs:
             cc: gcc
           - os: macos-15
             cc: clang
+          - os: macos-15-intel
+            cc: clang
           - os: windows-2025
             cc: gcc
     runs-on: ${{ matrix.os }}
@@ -44,6 +46,19 @@ jobs:
       - name: Rebuild frontend with TinyCC
         run: python build.py
       - run: python tests/test_compiler.py --fuzz 1000
+      - name: Build complete native distribution
+        run: python tools/package.py --output-dir build/artifacts
+      - name: Validate shipping archives outside the checkout
+        shell: bash
+        run: |
+          for archive in build/artifacts/*.zip build/artifacts/*.tar.gz; do
+            if [ -f "$archive" ]; then python tests/test_distribution.py --archive "$archive"; fi
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tinycplus-${{ runner.os }}-${{ runner.arch }}
+          path: build/artifacts/*
+          if-no-files-found: error
   sanitizers:
     runs-on: ubuntu-24.04
     steps:

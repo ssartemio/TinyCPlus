@@ -13,7 +13,11 @@ On Linux and macOS, `tools/bootstrap.py` builds TinyCC from the same archive int
 the untracked directory `third_party/tcc/posix/`; the committed Windows package is
 left untouched.
 
-TinyCC's compiler core is unmodified. The Windows package includes its runtime
+TinyCC's original archive is unmodified. macOS builds apply the distributed
+[macos-codesign.patch](third_party/tcc/macos-codesign.patch): codesign receives argv
+instead of interpreting output paths through a shell. `tools/tcc_portability.py`
+checks and applies exactly that adaptation. Build recipes also set relative loader
+paths; the original archive, adaptation and rebuild scripts are shipped together. The Windows package includes its runtime
 support objects, SDK headers and import definitions. The original archive keeps
 the notices associated with those files. libtcc is dynamically loaded and can
 be replaced by rebuilding the included source; the frontend can also use an

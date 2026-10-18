@@ -34,6 +34,9 @@ if os.name != 'nt':
 cmd = [cc, *flags, *map(str, sources), '-o', str(ROOT / 'bin' / ('tiny' + ext))]
 if os.name != 'nt' and sys.platform != 'darwin':
     cmd += ['-ldl']
+if os.name == 'nt':
+    from tools.windows_manifest import write_resource
+    cmd += [str(write_resource(ROOT / 'build' / 'resources', cc)), '-static-libgcc'] if Path(cc).stem.lower() != 'tcc' else [str(write_resource(ROOT / 'build' / 'resources', cc))]
 subprocess.run(cmd, cwd=ROOT, env=env, check=True)
 shutil.copy2(ROOT / 'bin' / ('tiny' + ext), ROOT / 'bin' / ('tinyc' + ext))
 print('Built', ROOT / 'bin' / ('tiny' + ext))

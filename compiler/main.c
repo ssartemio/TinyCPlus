@@ -6,6 +6,7 @@
 #include "tiny.h"
 #ifdef _WIN32
 #include <windows.h>
+#include <shellapi.h>
 #else
 #include <unistd.h>
 #ifdef __APPLE__
@@ -104,7 +105,7 @@ int tc_compile(const char *path, const char *output, int mode, int bounds, const
                     }
                     result = 0;
                 } else if (mode == 13) {
-                    FILE *out = output ? fopen(output, "wb") : stdout;
+                    FILE *out = output ? tc_fopen(output, "wb") : stdout;
                     if (out) { dump_typed_ast(c->program, out); result = 0; if (output) fclose(out); }
                 } else if (mode == 8 && test_list) {
                     Node *test;
@@ -152,7 +153,7 @@ int tc_compile(const char *path, const char *output, int mode, int bounds, const
     free(src);
     return result;
 }
-int main(int argc, char **argv) {
+static int tiny_main(int argc, char **argv) {
     int format_check = 0;
     const char *input = NULL, *output = NULL, *cc = NULL, *root = getenv("TINY_HOME");
     const char *project = NULL;
@@ -161,8 +162,13 @@ int main(int argc, char **argv) {
     char homebuf[4096];
     if (!root) {
 #ifdef _WIN32
-        DWORD n = GetModuleFileNameA(NULL, homebuf, sizeof(homebuf) - 1);
-        homebuf[n] = 0;
+        wchar_t wide[32768];
+        DWORD n = GetModuleFileNameW(NULL, wide, 32768);
+        char *utf8 = n && n < 32768 ? tc_utf8(wide) : NULL;
+        if (!utf8 || strlen(utf8) >= sizeof(homebuf)) {
+            free(utf8); fputs("tiny: installation path is too long or invalid\n", stderr); return 2;
+        }
+        strcpy(homebuf, utf8); free(utf8);
 #else
 #ifdef __APPLE__
         uint32_t capacity = sizeof(homebuf);
@@ -335,7 +341,7 @@ int main(int argc, char **argv) {
     if (mode == 11)
         return tc_document_file(input, output);
     if (batch) {
-        FILE *manifest = fopen(input, "rb");
+        FILE *manifest = tc_fopen(input, "rb");
         char entry[8192];
         int index = 0, failed = 0;
         if (!manifest) {
@@ -365,4 +371,35 @@ int main(int argc, char **argv) {
         return failed;
     }
     return tc_compile(input, output, mode, bounds, root, nargs, runargs, cc);
+}
+
+int main(int argc, char **argv) {
+#ifdef _WIN32
+    int count, i, status;
+    typedef wchar_t **(WINAPI *ArgvFunction)(const wchar_t *, int *);
+    HMODULE shell = LoadLibraryW(L"shell32.dll");
+    FARPROC address = shell ? GetProcAddress(shell, "CommandLineToArgvW") : NULL;
+    ArgvFunction split;
+    wchar_t **wide;
+    memcpy(&split, &address, sizeof(split));
+    wide = split ? split(GetCommandLineW(), &count) : NULL;
+    if (shell) FreeLibrary(shell);
+    char **owned, **arguments;
+    if (!wide) return 2;
+    owned = (char **)calloc((size_t)count + 1, sizeof(char *));
+    arguments = (char **)calloc((size_t)count + 1, sizeof(char *));
+    if (!owned || !arguments) { free(owned); free(arguments); LocalFree(wide); return 2; }
+    for (i = 0; i < count; i++) {
+        owned[i] = arguments[i] = tc_utf8(wide[i]);
+        if (!owned[i]) break;
+    }
+    LocalFree(wide);
+    status = i == count ? tiny_main(count, arguments) : 2;
+    for (i = 0; i < count; i++) free(owned[i]);
+    free(owned); free(arguments);
+    (void)argc; (void)argv;
+    return status;
+#else
+    return tiny_main(argc, argv);
+#endif
 }

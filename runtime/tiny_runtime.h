@@ -31,6 +31,45 @@ typedef struct {
 static int tc_program_argc;
 static char **tc_program_argv;
 static void (*tc_program_cleanup)(void);
+#ifdef _WIN32
+#include <windows.h>
+static char **tc_owned_arguments;
+static void tc_arguments_clear(void) {
+    int i;
+    if (!tc_owned_arguments) return;
+    for (i = 0; tc_owned_arguments[i]; i++) free(tc_owned_arguments[i]);
+    free(tc_owned_arguments); tc_owned_arguments = NULL;
+}
+static int tc_arguments_setup(void) {
+#ifndef TC_UTF8_ARGUMENTS
+    typedef wchar_t **(WINAPI *SplitArguments)(const wchar_t *, int *);
+    HMODULE shell = LoadLibraryW(L"shell32.dll");
+    FARPROC address = shell ? GetProcAddress(shell, "CommandLineToArgvW") : NULL;
+    SplitArguments split;
+    wchar_t **wide;
+    int count, i;
+    memcpy(&split, &address, sizeof(split));
+    wide = split ? split(GetCommandLineW(), &count) : NULL;
+    if (shell) FreeLibrary(shell);
+    if (!wide) return 2;
+    tc_owned_arguments = (char **)calloc((size_t)count + 1, sizeof(char *));
+    if (!tc_owned_arguments) { LocalFree(wide); return 2; }
+    for (i = 0; i < count; i++) {
+        int bytes = WideCharToMultiByte(CP_UTF8, 0, wide[i], -1, NULL, 0, NULL, NULL);
+        if (!bytes || !(tc_owned_arguments[i] = (char *)malloc((size_t)bytes))) break;
+        if (!WideCharToMultiByte(CP_UTF8, 0, wide[i], -1, tc_owned_arguments[i], bytes, NULL, NULL)) break;
+    }
+    LocalFree(wide);
+    if (i != count) { tc_arguments_clear(); return 2; }
+    tc_program_argc = count; tc_program_argv = tc_owned_arguments;
+#endif
+    return 0;
+}
+#else
+static void tc_arguments_clear(void) {}
+static int tc_arguments_setup(void) { return 0; }
+#endif
+
 #define TC_STRING(s) ((TinyString){(s), sizeof(s) - 1})
 /* Stable special-key ABI shared by terminal and graphical input. */
 enum {
@@ -47,6 +86,7 @@ enum {
 static void tc_panic(const char *message, const char *file, int line) {
     if (tc_program_cleanup)
         tc_program_cleanup();
+    tc_arguments_clear();
     fprintf(stderr, "%s:%d: runtime error: %s\n", file, line, message);
     exit(101);
 }

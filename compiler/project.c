@@ -61,7 +61,7 @@ static void parent_directories(Context *c, const char *path, Loc loc) {
             int status;
             *p = 0;
 #ifdef _WIN32
-            status = _mkdir(copy);
+            status = tc_mkdir(copy);
 #else
             status = mkdir(copy, 0777);
 #endif

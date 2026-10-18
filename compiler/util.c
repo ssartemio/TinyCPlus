@@ -249,7 +249,7 @@ void buf_printf(Buffer *b, const char *fmt, ...) {
     va_end(a);
 }
 char *read_file(const char *path) {
-    FILE *f = fopen(path, "rb");
+    FILE *f = tc_fopen(path, "rb");
     long n;
     char *s;
     if (!f)
@@ -274,7 +274,7 @@ char *read_file(const char *path) {
     return s;
 }
 int write_file(const char *path, const char *s) {
-    FILE *f = fopen(path, "wb");
+    FILE *f = tc_fopen(path, "wb");
     size_t n = strlen(s);
     int ok;
     if (!f)

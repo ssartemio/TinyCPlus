@@ -1440,6 +1440,8 @@ char *generate_c(Context *c) {
         line(&g, "int main(int argc, char **argv) {");
         g.indent++;
         line(&g, "tc_program_argc = argc; tc_program_argv = argv;");
+        line(&g, "if (tc_arguments_setup()) return 2;");
+        line(&g, "argc = tc_program_argc; argv = tc_program_argv;");
         if (c->uses_tasks) {
             line(&g, "const char *setting = getenv(\"TINY_WORKERS\"); int workers = setting ? "
                      "atoi(setting) : 4;");
@@ -1506,6 +1508,7 @@ char *generate_c(Context *c) {
         if (c->uses_io)
             line(&g, "tc_io_shutdown();");
         line(&g, "if (tc_program_cleanup) tc_program_cleanup();");
+        line(&g, "tc_arguments_clear();");
         line(&g, "return result;");
         g.indent--;
         line(&g, "}");

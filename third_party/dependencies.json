@@ -6,7 +6,8 @@
     "archive": "third_party/tcc/tinycc-source.zip",
     "source_directory": "tinycc-mob",
     "sha256": "80027b04aa2c02641b3cf2297f425b51c65cfa91ac5326815ad4f93290c60470",
-    "local_core_changes": false
+    "local_core_changes": true,
+    "local_changes": ["macOS codesign via argv instead of shell (macos-codesign.patch)"]
   },
   "nghttp2": {
     "version": "1.70.0",

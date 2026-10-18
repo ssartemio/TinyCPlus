@@ -254,4 +254,11 @@ int test_selected(Context *, Node *);
 void check_local_ownership(Context *);
 
 int tc_json_mode(void);
+FILE *tc_fopen(const char *, const char *);
+int tc_remove(const char *);
+#ifdef _WIN32
+wchar_t *tc_utf16(const char *);
+char *tc_utf8(const wchar_t *);
+int tc_mkdir(const char *);
+#endif
 #endif

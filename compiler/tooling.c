@@ -524,7 +524,7 @@ int tc_repl(const char *root) {
         memset(&input, 0, sizeof(input));
     }
     tc_repl_clear();
-    remove(path);
+    tc_remove(path);
     free(history.data);
     free(input.data);
     return result;

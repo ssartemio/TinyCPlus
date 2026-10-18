@@ -156,3 +156,9 @@ documentos y en las pruebas; los ejemplos de intención de la especificación no
 se presentan como pruebas de funcionalidad.
 
 La [revisión funcional implementada](docs/FUNCTIONAL_IMPROVEMENTS.md) describe namespaces, errores recuperables, I/O, herramientas CLI, GUI y límites de validación.
+
+Para crear, instalar y validar paquetes Windows x64 y macOS Intel/ARM64, consulte
+[Distribución nativa](docs/DISTRIBUTION.md). Los artifacts incluyen TinyEdit recién
+compilado, fuentes/licencias y metadatos de capacidades; macOS usa tar.gz para
+conservar permisos. Las compilaciones de desarrollo no están notarizadas ni
+firmadas con un certificado de editor.

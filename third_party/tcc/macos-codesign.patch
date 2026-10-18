@@ -1,0 +1,36 @@
+--- a/tccmacho.c
++++ b/tccmacho.c
+@@ -16,6 +16,9 @@
+  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+  */
+ #include "tcc.h"
++#ifdef CONFIG_CODESIGN
++#include <sys/wait.h>
++#endif
+ 
+ /* In order to make life easy for us we are generating Mach-O files which
+    don't make use of some modern features, but which aren't entirely classic
+@@ -2236,13 +2239,16 @@
+     fclose(fp);
+ #ifdef CONFIG_CODESIGN
+     if (!ret) {
+-	char command[1024];
+-	int retval;
+-
+-	snprintf(command, sizeof(command), "codesign -f -s - %s", filename);
+-	retval = system (command);
+-	if (retval == -1 || !(WIFEXITED(retval) && WEXITSTATUS(retval) == 0))
+-	    tcc_error ("command failed '%s'", command);
++        int status = 0;
++        pid_t child = fork(), waited;
++        if (child == 0) {
++            execl("/usr/bin/codesign", "codesign", "-f", "-s", "-", filename, (char *)NULL);
++            _exit(127);
++        }
++        if (child < 0) tcc_error("cannot start codesign");
++        do { waited = waitpid(child, &status, 0); } while (waited < 0 && errno == EINTR);
++        if (waited < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0)
++            tcc_error("codesign failed for '%s'", filename);
+     }
+ #endif
+     return ret;

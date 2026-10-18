@@ -21,7 +21,7 @@ int module_path_option(const char *path) {
     return 0;
 }
 static int module_exists(const char *path) {
-    FILE *file = fopen(path, "rb");
+    FILE *file = tc_fopen(path, "rb");
     if (!file)
         return 0;
     fclose(file);
@@ -38,11 +38,17 @@ const char *module_name(Context *c, const char *file) {
 static const char *canonical_path(Context *c, const char *path) {
     char canonical[32768], *p;
 #ifdef _WIN32
-    DWORD n = GetFullPathNameA(path, sizeof(canonical), canonical, NULL);
-    if (!n || n >= sizeof(canonical)) {
+    wchar_t wide[32768], *input = tc_utf16(path);
+    DWORD n = input ? GetFullPathNameW(input, 32768, wide, NULL) : 0;
+    char *utf8;
+    free(input);
+    utf8 = n && n < 32768 ? tc_utf8(wide) : NULL;
+    if (!utf8 || strlen(utf8) >= sizeof(canonical)) {
+        free(utf8);
         Loc l = {path, 1, 1};
         tc_error(c, l, "module path is too long or invalid");
     }
+    strcpy(canonical, utf8); free(utf8);
 #else
     if (!realpath(path, canonical)) {
         Loc l = {path, 1, 1};

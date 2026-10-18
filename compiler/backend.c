@@ -173,7 +173,7 @@ static void win_arg(Buffer *b, const char *s) {
 int tc_process(char **args) {
 #ifdef _WIN32
     Buffer command = {0};
-    STARTUPINFOA si;
+    STARTUPINFOW si;
     PROCESS_INFORMATION pi;
     DWORD code;
     int i;
@@ -185,11 +185,16 @@ int tc_process(char **args) {
             buf_add(&command, " ");
         win_arg(&command, args[i]);
     }
-    if (!CreateProcessA(NULL, command.data, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) {
+    {
+    wchar_t *wide = tc_utf16(command.data);
+    int started = wide && CreateProcessW(NULL, wide, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi);
+    free(wide);
+    if (!started) {
         fprintf(stderr, "tiny: cannot start '%s' (Windows error %lu)\n", args[0],
                 (unsigned long)GetLastError());
         free(command.data);
         return 127;
+    }
     }
     free(command.data);
     WaitForSingleObject(pi.hProcess, INFINITE);
@@ -217,7 +222,7 @@ static int load_tcc(Context *c, const char *root, TccApi *api, void **handle) {
 #ifdef _WIN32
     HMODULE h;
     path = tc_format(c, "%s/third_party/tcc/libtcc.dll", root);
-    h = LoadLibraryA(path);
+    { wchar_t *wide = tc_utf16(path); h = wide ? LoadLibraryW(wide) : NULL; free(wide); }
     if (!h)
         return 0;
 #define TC_LOAD(field, name)                                                                       \
@@ -299,10 +304,13 @@ void tc_repl_clear(void) {
 }
 static const char *temporary(Context *c) {
 #ifdef _WIN32
-    char dir[MAX_PATH + 1], file[MAX_PATH + 1];
-    if (!GetTempPathA(MAX_PATH, dir) || !GetTempFileNameA(dir, "tcp", 0, file))
-        return NULL;
-    return tc_str(c, file);
+    wchar_t dir[MAX_PATH + 1], file[MAX_PATH + 1];
+    char *utf8;
+    const char *result;
+    if (!GetTempPathW(MAX_PATH, dir) || !GetTempFileNameW(dir, L"tcp", 0, file)) return NULL;
+    utf8 = tc_utf8(file);
+    if (!utf8) return NULL;
+    result = tc_str(c, utf8); free(utf8); return result;
 #else
     char path[] = "/tmp/tinycplus-XXXXXX";
     int fd = mkstemp(path);
@@ -312,6 +320,21 @@ static const char *temporary(Context *c) {
     return tc_str(c, path);
 #endif
 }
+#ifdef __APPLE__
+static const char *macos_sdk(Context *c) {
+    const char *override = getenv("SDKROOT");
+    char sdk[4096];
+    FILE *command;
+    size_t length;
+    if (override && *override && strcmp(override, "/")) return override;
+    command = popen("/usr/bin/xcrun --show-sdk-path", "r");
+    if (!command) return NULL;
+    if (!fgets(sdk, sizeof(sdk), command)) { pclose(command); return NULL; }
+    if (pclose(command)) return NULL;
+    length = strcspn(sdk, "\r\n"); sdk[length] = 0;
+    return length ? tc_str(c, sdk) : NULL;
+}
+#endif
 int backend(Context *c, const char *code, const char *root, const char *output, int run,
             int assembly, int argc, char **argv, const char *cc) {
     TccApi api;
@@ -371,6 +394,9 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
         }
         api.lib_path(s, libroot);
         api.error_func(s, NULL, tcc_error);
+#ifdef _WIN32
+        if (run && !c->test_isolate) api.options(s, "-DTC_UTF8_ARGUMENTS");
+#endif
 #ifndef _WIN32
         api.options(s, "-D_POSIX_C_SOURCE=200809L");
 #endif
@@ -381,6 +407,17 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
 #ifdef __APPLE__
         if (c->uses_gui && gui_backend == TC_GUI_BACKEND_COCOA)
             api.options(s, "-DTC_GUI_COCOA_BACKEND");
+#endif
+#ifdef __APPLE__
+        {
+            const char *sdk = macos_sdk(c);
+            if (!sdk) {
+                fputs("tiny: macOS compilation requires Xcode Command Line Tools; run xcode-select --install\n", stderr);
+                api.destroy(s); unload_tcc(handle); return 1;
+            }
+            api.include_path(s, tc_format(c, "%s/usr/include", sdk));
+            api.library_path(s, tc_format(c, "%s/usr/lib", sdk));
+        }
 #endif
         api.include_path(s, tc_format(c, "%s/runtime", root));
         for (j = 0; j < extra_counts[1]; j++)
@@ -440,7 +477,7 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
                     char *child[] = {(char *)executable, NULL};
                     result = api.output_file(s, executable);
                     if (!result) result = tc_process(child);
-                    remove(executable); remove(base);
+                    tc_remove(executable); tc_remove(base);
                 }
             } else result = run ? api.run(s, argc ? argc : 1, argc ? argv : default_args)
                                 : api.output_file(s, output);
@@ -475,7 +512,7 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
             return 1;
         }
         if (!write_file(tmp, code)) {
-            remove(tmp);
+            tc_remove(tmp);
             return 1;
         }
 #ifdef _WIN32
@@ -488,12 +525,17 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
                 fputs("tiny: --emit-asm requires --cc gcc or --cc clang; libtcc emits machine code "
                       "directly\n",
                       stderr);
-                remove(tmp);
+                tc_remove(tmp);
                 return 1;
             }
             cc = getenv("CC");
-            if (!cc)
+            if (!cc) {
+#ifdef _WIN32
+                cc = tc_format(c, "%s/third_party/tcc/tcc.exe", root);
+#else
                 cc = "cc";
+#endif
+            }
         }
         args[k++] = (char *)cc;
         args[k++] = "-x";
@@ -532,7 +574,7 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
                 fputs("tiny: gRPC assembly output requires compiling emitted C and nghttp2 "
                       "separately\n",
                       stderr);
-                remove(tmp);
+                tc_remove(tmp);
                 return 1;
             }
             args[k++] = "-DNGHTTP2_STATICLIB";
@@ -570,7 +612,7 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
             fputc('\n', stderr);
         }
         result = tc_process(args);
-        remove(tmp);
+        tc_remove(tmp);
         if (result == 0 && run) {
             char **runargs = (char **)tc_alloc(c, (size_t)(argc + 2) * sizeof(char *));
             int i;
@@ -579,7 +621,7 @@ int backend(Context *c, const char *code, const char *root, const char *output, 
                 runargs[i] = argv[i];
             runargs[argc ? argc : 1] = NULL;
             result = tc_process(runargs);
-            remove(exe);
+            tc_remove(exe);
         }
     }
     return result;
