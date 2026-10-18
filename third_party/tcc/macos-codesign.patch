@@ -1,19 +1,10 @@
 --- a/tccmacho.c
 +++ b/tccmacho.c
-@@ -16,6 +16,9 @@
-  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-  */
- #include "tcc.h"
+@@ -18,0 +19,3 @@
 +#ifdef CONFIG_CODESIGN
 +#include <sys/wait.h>
 +#endif
- 
- /* In order to make life easy for us we are generating Mach-O files which
-    don't make use of some modern features, but which aren't entirely classic
-@@ -2236,13 +2239,16 @@
-     fclose(fp);
- #ifdef CONFIG_CODESIGN
-     if (!ret) {
+@@ -2239,7 +2242,10 @@
 -	char command[1024];
 -	int retval;
 -
@@ -31,6 +22,3 @@
 +        do { waited = waitpid(child, &status, 0); } while (waited < 0 && errno == EINTR);
 +        if (waited < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0)
 +            tcc_error("codesign failed for '%s'", filename);
-     }
- #endif
-     return ret;
